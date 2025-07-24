@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"workflow-engine/internal/storage"
+	"github.com/nuumz/f1ow/internal/storage"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"

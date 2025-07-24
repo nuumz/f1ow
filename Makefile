@@ -2,7 +2,7 @@
 
 VERSION ?= latest
 REGISTRY ?= your-registry.io
-IMAGE_PREFIX = ${REGISTRY}/workflow-engine
+IMAGE_PREFIX = ${REGISTRY}/f1ow
 
 all: test build
 
@@ -64,14 +64,14 @@ run: build
 	./bin/server
 
 run-postgres: build
-	@export DATABASE_URL="postgres://user:password@localhost:5432/workflow_engine?sslmode=disable" && \
+	@export DATABASE_URL="postgres://user:password@localhost:5432/f1ow?sslmode=disable" && \
 	export REDIS_URL="redis://localhost:6379" && \
 	export PORT="8080" && \
 	export DEBUG="true" && \
 	./bin/server
 
 run-mysql: build
-	@export DATABASE_URL="mysql://user:password@tcp(localhost:3306)/workflow_engine?parseTime=true" && \
+	@export DATABASE_URL="mysql://user:password@tcp(localhost:3306)/f1ow?parseTime=true" && \
 	export REDIS_URL="redis://localhost:6379" && \
 	export PORT="8080" && \
 	export DEBUG="true" && \
@@ -93,7 +93,7 @@ migrate-down:
 	migrate -path ./migrations -database "$${DATABASE_URL}" down
 
 migrate-up-mysql:
-	migrate -path ./migrations/mysql -database "mysql://user:password@tcp(localhost:3306)/workflow_engine" up
+	migrate -path ./migrations/mysql -database "mysql://user:password@tcp(localhost:3306)/f1ow" up
 
 migrate-down-mysql:
-	migrate -path ./migrations/mysql -database "mysql://user:password@tcp(localhost:3306)/workflow_engine" down
+	migrate -path ./migrations/mysql -database "mysql://user:password@tcp(localhost:3306)/f1ow" down

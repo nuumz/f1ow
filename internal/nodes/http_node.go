@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"workflow-engine/internal/engine"
+	"github.com/nuumz/f1ow/internal/engine"
 )
 
 // HTTPNode implements HTTP request functionality

@@ -8,9 +8,9 @@ import (
 	"syscall"
 	"time"
 
-	"workflow-engine/internal/engine"
-	"workflow-engine/internal/nodes"
-	"workflow-engine/internal/storage"
+	"github.com/nuumz/f1ow/internal/engine"
+	"github.com/nuumz/f1ow/internal/nodes"
+	"github.com/nuumz/f1ow/internal/storage"
 )
 
 func getEnv(key, defaultValue string) string {

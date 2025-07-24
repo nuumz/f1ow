@@ -1,6 +1,6 @@
-# 🚀 Quick Start Guide - Workflow Engine with MySQL
+# 🚀 Quick Start Guide - f1ow with MySQL
 
-This guide gets you up and running with the Workflow Engine using MySQL in under 5 minutes.
+This guide gets you up and running with f1ow using MySQL in under 5 minutes.
 
 ## Prerequisites
 
@@ -17,7 +17,7 @@ This guide gets you up and running with the Workflow Engine using MySQL in under
 
 This script will:
 - Set up MySQL + Redis environment
-- Build and start the workflow engine
+- Build and start f1ow
 - Create and execute sample workflows
 - Show you all access points and examples
 
@@ -146,7 +146,7 @@ Run comprehensive tests:
 - Server: `mysql`
 - Username: `user`
 - Password: `password`
-- Database: `workflow_engine`
+- Database: `f1ow`
 
 ### API Endpoints
 - Health Check: http://localhost:8080/health
@@ -157,7 +157,7 @@ Run comprehensive tests:
 
 ### Connect to MySQL directly:
 ```bash
-docker exec -it workflow-mysql mysql -u user -ppassword workflow_engine
+docker exec -it workflow-mysql mysql -u user -ppassword f1ow
 ```
 
 ### Useful SQL queries:
@@ -220,7 +220,7 @@ docker logs workflow-mysql
 ### Reset everything
 ```bash
 make dev-down
-docker volume rm workflow-engine_mysql_data
+docker volume rm f1ow_mysql_data
 make dev-up-mysql
 make migrate-up-mysql
 ```

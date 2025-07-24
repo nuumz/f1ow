@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"workflow-engine/internal/engine"
+	"github.com/nuumz/f1ow/internal/engine"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

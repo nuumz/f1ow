@@ -7,7 +7,7 @@ set -e
 API_BASE="http://localhost:8080/api"
 EXAMPLES_DIR="/Users/phumin.k/appl/POC/workflow-engine/examples"
 
-echo "🧪 Workflow Engine MySQL Testing Suite"
+echo "🧪 f1ow MySQL Testing Suite"
 echo "======================================"
 
 # Check if server is running
@@ -138,12 +138,12 @@ echo ""
 echo "📋 Test 7: Verifying MySQL database content..."
 
 # Check if we can access MySQL
-if docker exec -it workflow-mysql mysql -u user -ppassword workflow_engine -e "SELECT COUNT(*) as workflow_count FROM workflows;" 2>/dev/null; then
+if docker exec -it workflow-mysql mysql -u user -ppassword f1ow -e "SELECT COUNT(*) as workflow_count FROM workflows;" 2>/dev/null; then
     echo "✅ MySQL database access verified"
     
     echo ""
     echo "📊 Database Statistics:"
-    docker exec -it workflow-mysql mysql -u user -ppassword workflow_engine -e "
+    docker exec -it workflow-mysql mysql -u user -ppassword f1ow -e "
         SELECT 'Workflows' as table_name, COUNT(*) as count FROM workflows
         UNION ALL
         SELECT 'Executions' as table_name, COUNT(*) as count FROM executions;

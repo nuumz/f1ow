@@ -1,6 +1,8 @@
-# Workflow Engine
+# f1ow
 
 A high-performance, open-source workflow automation platform with AI capabilities, built with Go and React.
+
+🌐 [f1ow.io](https://f1ow.io)
 
 ## ✨ Features
 
@@ -29,8 +31,8 @@ A high-performance, open-source workflow automation platform with AI capabilitie
 
 ```bash
 # Clone and setup
-git clone https://github.com/yourusername/workflow-engine.git
-cd workflow-engine
+git clone https://github.com/nuumz/f1ow.git
+cd f1ow
 
 # Start MySQL environment
 make dev-up-mysql
@@ -111,10 +113,10 @@ make run-with-env
 #### Connection Formats
 ```bash
 # PostgreSQL
-DATABASE_URL="postgres://user:password@localhost:5432/workflow_engine?sslmode=disable"
+DATABASE_URL="postgres://user:password@localhost:5432/f1ow?sslmode=disable"
 
 # MySQL  
-DATABASE_URL="mysql://user:password@tcp(localhost:3306)/workflow_engine?parseTime=true"
+DATABASE_URL="mysql://user:password@tcp(localhost:3306)/f1ow?parseTime=true"
 ```
 
 See [MySQL Setup Guide](docs/MYSQL_SETUP.md) for detailed MySQL configuration.
@@ -123,8 +125,8 @@ See [MySQL Setup Guide](docs/MYSQL_SETUP.md) for detailed MySQL configuration.
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/workflow-engine.git
-cd workflow-engine
+git clone https://github.com/nuumz/f1ow.git
+cd f1ow
 
 # Copy environment variables
 cp .env.example .env
@@ -210,10 +212,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-- 📚 [Documentation](https://docs.workflow-engine.io)
-- 💬 [Discord Community](https://discord.gg/workflow-engine)
-- 🐛 [Issue Tracker](https://github.com/yourusername/workflow-engine/issues)
+- 📚 [Documentation](https://docs.f1ow.io)
+- 💬 [Discord Community](https://discord.gg/f1ow)
+- 🐛 [Issue Tracker](https://github.com/nuumz/f1ow/issues)
 
 ---
 
-Built with ❤️ by the Workflow Engine Team
+Built with ❤️ by the f1ow Team

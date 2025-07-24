@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"workflow-engine/internal/nodes"
+	"github.com/nuumz/f1ow/internal/nodes"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

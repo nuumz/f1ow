@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"workflow-engine/internal/engine"
+	"github.com/nuumz/f1ow/internal/engine"
 )
 
 // LoopNode implements iteration over arrays

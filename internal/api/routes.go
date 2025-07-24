@@ -3,9 +3,9 @@ package api
 import (
 	"strconv"
 
-	"workflow-engine/internal/engine"
-	"workflow-engine/internal/models"
-	"workflow-engine/internal/storage"
+	"github.com/nuumz/f1ow/internal/engine"
+	"github.com/nuumz/f1ow/internal/models"
+	"github.com/nuumz/f1ow/internal/storage"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

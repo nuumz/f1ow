@@ -1,0 +1,61 @@
+{
+  "name": "Simple Data Pipeline",
+  "description": "Basic data processing pipeline for testing MySQL functionality",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start",
+      "config": {}
+    },
+    {
+      "id": "fetch-data",
+      "type": "http",
+      "config": {
+        "url": "https://jsonplaceholder.typicode.com/users",
+        "method": "GET",
+        "headers": {
+          "Accept": "application/json"
+        },
+        "description": "Fetch user data from external API"
+      }
+    },
+    {
+      "id": "process-first-user",
+      "type": "http",
+      "config": {
+        "url": "https://jsonplaceholder.typicode.com/users/1",
+        "method": "GET",
+        "headers": {
+          "Accept": "application/json"
+        },
+        "description": "Get detailed information for first user"
+      }
+    },
+    {
+      "id": "end",
+      "type": "end",
+      "config": {}
+    }
+  ],
+  "edges": [
+    {
+      "from": "start",
+      "to": "fetch-data"
+    },
+    {
+      "from": "fetch-data",
+      "to": "process-first-user"
+    },
+    {
+      "from": "process-first-user",
+      "to": "end"
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "author": "Workflow Engine",
+    "tags": ["simple", "data-pipeline", "mysql", "test"],
+    "estimated_duration": "5-10 seconds",
+    "complexity": "low"
+  }
+}

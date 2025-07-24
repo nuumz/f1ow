@@ -1,0 +1,160 @@
+{
+  "name": "Demo E-commerce Order Processing",
+  "description": "Complete e-commerce order processing workflow with MySQL backend",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start",
+      "config": {
+        "description": "Workflow starts when order is received"
+      }
+    },
+    {
+      "id": "validate-order",
+      "type": "http",
+      "config": {
+        "url": "https://jsonplaceholder.typicode.com/posts",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "title": "Order Validation",
+          "body": "Validating order details and inventory",
+          "userId": 1
+        },
+        "description": "Validate order details and check inventory"
+      }
+    },
+    {
+      "id": "check-payment",
+      "type": "http",
+      "config": {
+        "url": "https://jsonplaceholder.typicode.com/posts/1",
+        "method": "GET",
+        "headers": {
+          "Accept": "application/json"
+        },
+        "description": "Verify payment processing status"
+      }
+    },
+    {
+      "id": "update-inventory",
+      "type": "http",
+      "config": {
+        "url": "https://jsonplaceholder.typicode.com/posts/1",
+        "method": "PUT",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "title": "Inventory Update",
+          "body": "Reducing inventory count for ordered items",
+          "userId": 1
+        },
+        "description": "Update inventory after successful payment"
+      }
+    },
+    {
+      "id": "send-confirmation",
+      "type": "http",
+      "config": {
+        "url": "https://jsonplaceholder.typicode.com/posts",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "title": "Order Confirmation",
+          "body": "Sending order confirmation email to customer",
+          "userId": 1
+        },
+        "description": "Send order confirmation to customer"
+      }
+    },
+    {
+      "id": "schedule-fulfillment",
+      "type": "http",
+      "config": {
+        "url": "https://jsonplaceholder.typicode.com/posts",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "title": "Fulfillment Scheduling",
+          "body": "Scheduling order for warehouse fulfillment",
+          "userId": 1
+        },
+        "description": "Schedule order for warehouse processing"
+      }
+    },
+    {
+      "id": "success",
+      "type": "end",
+      "config": {
+        "description": "Order processing completed successfully"
+      }
+    },
+    {
+      "id": "error",
+      "type": "end",
+      "config": {
+        "description": "Order processing failed - manual intervention required"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "start",
+      "to": "validate-order",
+      "description": "Begin order validation"
+    },
+    {
+      "from": "validate-order",
+      "to": "check-payment",
+      "condition": "success",
+      "description": "Proceed to payment verification if order is valid"
+    },
+    {
+      "from": "validate-order",
+      "to": "error",
+      "condition": "error",
+      "description": "End workflow if order validation fails"
+    },
+    {
+      "from": "check-payment",
+      "to": "update-inventory",
+      "condition": "success",
+      "description": "Update inventory if payment is confirmed"
+    },
+    {
+      "from": "check-payment",
+      "to": "error",
+      "condition": "error",
+      "description": "End workflow if payment verification fails"
+    },
+    {
+      "from": "update-inventory",
+      "to": "send-confirmation",
+      "description": "Send confirmation after inventory update"
+    },
+    {
+      "from": "send-confirmation",
+      "to": "schedule-fulfillment",
+      "description": "Schedule fulfillment after sending confirmation"
+    },
+    {
+      "from": "schedule-fulfillment",
+      "to": "success",
+      "description": "Complete workflow after scheduling fulfillment"
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "author": "Workflow Engine Demo",
+    "tags": ["ecommerce", "order-processing", "mysql", "demo"],
+    "estimated_duration": "30-60 seconds",
+    "complexity": "medium"
+  }
+}

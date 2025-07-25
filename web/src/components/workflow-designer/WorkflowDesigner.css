@@ -283,14 +283,18 @@
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
 }
 
-/* Connection preview */
+/* Connection preview - ปรับปรุงให้เส้นสีฟ้าเด่นชัดขึ้น */
 .connection-preview {
   pointer-events: none;
-  opacity: 0.7;
-  animation: dash 1s linear infinite;
+  opacity: 0.8;
+  animation: dash 1.5s linear infinite;
+  filter: drop-shadow(0 2px 4px rgba(33, 150, 243, 0.3));
 }
 
 @keyframes dash {
+  from {
+    stroke-dashoffset: 0;
+  }
   to {
     stroke-dashoffset: -10;
   }

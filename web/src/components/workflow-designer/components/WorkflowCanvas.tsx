@@ -43,6 +43,15 @@ export interface WorkflowCanvasProps {
   onCanvasClick: () => void
   onCanvasMouseMove: (x: number, y: number) => void
   
+  // Drag & Drop handlers
+  onPortDragStart: (nodeId: string, portId: string, portType: 'input' | 'output') => void
+  onPortDrag: (x: number, y: number) => void
+  onPortDragEnd: (targetNodeId?: string, targetPortId?: string) => void
+  
+  // Drop validation
+  canDropOnPort: (targetNodeId: string, targetPortId: string) => boolean
+  canDropOnNode: (targetNodeId: string) => boolean
+  
   // Canvas transform
   onTransformChange: (transform: d3.ZoomTransform) => void
 }
@@ -66,6 +75,11 @@ export default function WorkflowCanvas({
   onPortClick,
   onCanvasClick,
   onCanvasMouseMove,
+  onPortDragStart,
+  onPortDrag,
+  onPortDragEnd,
+  canDropOnPort,
+  canDropOnNode,
   onTransformChange
 }: WorkflowCanvasProps) {
 
@@ -300,10 +314,10 @@ export default function WorkflowCanvas({
           .attr('marker-end', isSelected ? 'url(#arrowhead-selected)' : 'url(#arrowhead)')
       })
 
-    // Render connection preview
-    if (isConnecting && connectionStart && connectionPreview) {
+    // Render connection preview - ปรับเงื่อนไขให้ flexible มากขึ้น
+    if (isConnecting && connectionStart) {
       const sourceNode = nodes.find(n => n.id === connectionStart.nodeId)
-      if (sourceNode) {
+      if (sourceNode && connectionPreview) {
         const sourcePort = sourceNode.outputs.find(p => p.id === connectionStart.portId)
         if (sourcePort) {
           const sourceIndex = sourceNode.outputs.indexOf(sourcePort)
@@ -344,6 +358,7 @@ export default function WorkflowCanvas({
     const nodeEnter = nodeSelection.enter()
       .append('g')
       .attr('class', 'node')
+      .attr('data-node-id', d => d.id)
       .attr('transform', d => `translate(${d.x}, ${d.y})`)
       .style('cursor', 'move')
       .call(d3.drag<any, WorkflowNode>()
@@ -464,24 +479,35 @@ export default function WorkflowCanvas({
       const inputPorts = nodeGroup.selectAll('.input-port circle')
       
       inputPorts
-        .attr('fill', () => getPortColor('any'))
-        .attr('stroke', () => {
-          if (isConnecting && connectionStart) {
-            if (connectionStart.type === 'output' && nodeData.id !== connectionStart.nodeId) {
-              return '#4CAF50'
-            }
+        .attr('fill', (portData: any) => {
+          if (isConnecting && connectionStart && connectionStart.type === 'output') {
+            const canDrop = canDropOnPort(nodeData.id, portData.id)
+            return canDrop ? '#4CAF50' : getPortColor('any')
+          }
+          return getPortColor('any')
+        })
+        .attr('stroke', (portData: any) => {
+          if (isConnecting && connectionStart && connectionStart.type === 'output') {
+            const canDrop = canDropOnPort(nodeData.id, portData.id)
+            return canDrop ? '#4CAF50' : '#ff5722' // Green for valid, red for invalid
           }
           return '#333'
         })
-        .attr('stroke-width', () => {
-          if (isConnecting && connectionStart && connectionStart.type === 'output' && nodeData.id !== connectionStart.nodeId) {
-            return 3
+        .attr('stroke-width', (portData: any) => {
+          if (isConnecting && connectionStart && connectionStart.type === 'output') {
+            const canDrop = canDropOnPort(nodeData.id, portData.id)
+            return canDrop ? 4 : 2 // Thicker border for valid drops
           }
           return 2
         })
-        .style('filter', () => {
-          if (isConnecting && connectionStart && connectionStart.type === 'output' && nodeData.id !== connectionStart.nodeId) {
-            return 'drop-shadow(0 0 4px rgba(76, 175, 80, 0.6))'
+        .style('filter', (portData: any) => {
+          if (isConnecting && connectionStart && connectionStart.type === 'output') {
+            const canDrop = canDropOnPort(nodeData.id, portData.id)
+            if (canDrop) {
+              return 'drop-shadow(0 0 6px rgba(76, 175, 80, 0.8))'
+            } else if (nodeData.id !== connectionStart.nodeId) {
+              return 'drop-shadow(0 0 4px rgba(255, 87, 34, 0.6))'
+            }
           }
           return 'none'
         })
@@ -514,10 +540,53 @@ export default function WorkflowCanvas({
       .attr('class', 'output-port')
       .style('cursor', 'crosshair')
       .style('pointer-events', 'all')
-      .on('click', (event, d: any) => {
-        event.stopPropagation()
-        onPortClick(d.nodeId, d.id, 'output')
-      })
+      .call(d3.drag<any, any>()
+        .on('start', (event, d: any) => {
+          event.sourceEvent.stopPropagation()
+          event.sourceEvent.preventDefault()
+          onPortDragStart(d.nodeId, d.id, 'output')
+          
+          // ทันทีที่เริ่ม drag ให้ set initial position สำหรับ preview
+          const [x, y] = d3.pointer(event.sourceEvent, svgRef.current!)
+          const transform = d3.zoomTransform(svgRef.current!)
+          const [canvasX, canvasY] = transform.invert([x, y])
+          onPortDrag(canvasX, canvasY)
+        })
+        .on('drag', (event) => {
+          // Get mouse position in canvas coordinates
+          const [x, y] = d3.pointer(event.sourceEvent, svgRef.current!)
+          const transform = d3.zoomTransform(svgRef.current!)
+          const [canvasX, canvasY] = transform.invert([x, y])
+          onPortDrag(canvasX, canvasY)
+        })
+        .on('end', (event, d: any) => {
+          // Find what we dropped on
+          const elementsUnderMouse = document.elementsFromPoint(
+            event.sourceEvent.clientX,
+            event.sourceEvent.clientY
+          )
+          
+          let targetNodeId: string | undefined
+          let targetPortId: string | undefined
+          
+          // Look for input port under mouse
+          for (const element of elementsUnderMouse) {
+            if (element.closest('.input-port')) {
+              const inputPortGroup = element.closest('.input-port')
+              const nodeGroup = inputPortGroup?.closest('g[data-node-id]')
+              if (nodeGroup && inputPortGroup) {
+                targetNodeId = nodeGroup.getAttribute('data-node-id') || undefined
+                // Get port data from D3
+                const portData = d3.select(inputPortGroup).datum() as any
+                targetPortId = portData?.id
+                break
+              }
+            }
+          }
+          
+          onPortDragEnd(targetNodeId, targetPortId)
+        })
+      )
 
     nodeGroups.selectAll('.output-port')
       .data((d: any) => d.outputs.map((output: any) => ({ ...output, nodeId: d.id })))
@@ -609,6 +678,11 @@ export default function WorkflowCanvas({
     onPortClick,
     onCanvasClick,
     onCanvasMouseMove,
+    onPortDragStart,
+    onPortDrag,
+    onPortDragEnd,
+    canDropOnPort,
+    canDropOnNode,
     onTransformChange,
     isNodeSelected,
     createGrid

@@ -226,6 +226,19 @@ export default function WorkflowDesigner() {
     }
   }, [connections])
 
+  // Drag & Drop handlers for connections
+  const handlePortDragStart = useCallback((nodeId: string, portId: string, portType: 'input' | 'output') => {
+    connections.startDragConnection(nodeId, portId, portType)
+  }, [connections])
+
+  const handlePortDrag = useCallback((x: number, y: number) => {
+    connections.updateConnectionPreview(x, y)
+  }, [connections])
+
+  const handlePortDragEnd = useCallback((targetNodeId?: string, targetPortId?: string) => {
+    connections.finishDragConnection(targetNodeId, targetPortId)
+  }, [connections])
+
   const handleCanvasClickInternal = useCallback(() => {
     if (connections.isConnecting) {
       connections.clearConnectionState()
@@ -487,6 +500,11 @@ export default function WorkflowDesigner() {
             onPortClick={handlePortClick}
             onCanvasClick={handleCanvasClickInternal}
             onCanvasMouseMove={handleCanvasMouseMove}
+            onPortDragStart={handlePortDragStart}
+            onPortDrag={handlePortDrag}
+            onPortDragEnd={handlePortDragEnd}
+            canDropOnPort={connections.canDropOnPort}
+            canDropOnNode={connections.canDropOnNode}
             onTransformChange={handleTransformChange}
           />
 

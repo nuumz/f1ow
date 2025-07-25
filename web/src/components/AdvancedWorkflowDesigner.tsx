@@ -95,7 +95,6 @@ const NodeTypes = {
 const NODE_WIDTH = 200
 const NODE_MIN_HEIGHT = 80
 const PORT_RADIUS = 6
-const GRID_SIZE = 20
 
 export default function AdvancedWorkflowDesigner() {
   // Core state
@@ -156,8 +155,9 @@ export default function AdvancedWorkflowDesigner() {
     localStorage.setItem(`workflow-canvas-transform-${workflowName}`, JSON.stringify(transform))
   }, [workflowName])
   
-  // Grid update function ref ที่จะใช้ระหว่าง useEffects
-  const gridUpdateRef = useRef<(() => void) | null>(null) // Ref to avoid useEffect dependency
+  // Grid update function ref ที่จะใช้ระหว่าง useEffects  
+  const gridUpdateRef = useRef<(() => void) | null>(null)
+  
   
   // WebSocket status
   const [wsStatus, setWsStatus] = useState<'connected' | 'connecting' | 'disconnected'>('disconnected')
@@ -648,30 +648,91 @@ export default function AdvancedWorkflowDesigner() {
 
   // Zoom controls
   const zoomIn = useCallback(() => {
+    console.log('🔍 Zoom In clicked')
     if (!svgRef.current) return
+    
     const svg = d3.select(svgRef.current)
-    const currentTransform = d3.zoomTransform(svg.node() as any)
+    // Use our ref instead of d3.zoomTransform for current state
+    const currentTransform = canvasTransformRef.current
     const newScale = Math.min(currentTransform.k * 1.2, 3)
     
-    svg.transition().duration(200).call(
-      d3.zoom<SVGSVGElement, unknown>().transform,
-      d3.zoomIdentity.translate(currentTransform.x, currentTransform.y).scale(newScale)
-    )
-  }, [])
+    // Calculate zoom around viewport center
+    const rect = svgRef.current.getBoundingClientRect()
+    const centerX = rect.width / 2
+    const centerY = rect.height / 2
+    
+    // Convert center to world coordinates using current transform
+    const worldCenterX = (centerX - currentTransform.x) / currentTransform.k
+    const worldCenterY = (centerY - currentTransform.y) / currentTransform.k
+    
+    // Calculate new position to keep center point stable
+    const newX = centerX - worldCenterX * newScale
+    const newY = centerY - worldCenterY * newScale
+    
+    const newTransform = d3.zoomIdentity.translate(newX, newY).scale(newScale)
+    
+    // Update state immediately for instant feedback
+    const transformObj = {
+      x: newTransform.x,
+      y: newTransform.y,
+      k: newTransform.k
+    }
+    
+    canvasTransformRef.current = transformObj
+    saveCanvasTransform(transformObj)
+    setZoomLevel(newTransform.k)
+    zoomLevelRef.current = newTransform.k
+    
+    // Apply transform with transition
+    svg.transition()
+      .duration(200)
+      .call(d3.zoom<SVGSVGElement, unknown>().transform, newTransform)
+  }, [saveCanvasTransform])
 
   const zoomOut = useCallback(() => {
+    console.log('🔍 Zoom Out clicked')
     if (!svgRef.current) return
+    
     const svg = d3.select(svgRef.current)
-    const currentTransform = d3.zoomTransform(svg.node() as any)
+    // Use our ref instead of d3.zoomTransform for current state
+    const currentTransform = canvasTransformRef.current
     const newScale = Math.max(currentTransform.k / 1.2, 0.2)
     
-    svg.transition().duration(200).call(
-      d3.zoom<SVGSVGElement, unknown>().transform,
-      d3.zoomIdentity.translate(currentTransform.x, currentTransform.y).scale(newScale)
-    )
-  }, [])
+    // Calculate zoom around viewport center
+    const rect = svgRef.current.getBoundingClientRect()
+    const centerX = rect.width / 2
+    const centerY = rect.height / 2
+    
+    // Convert center to world coordinates using current transform
+    const worldCenterX = (centerX - currentTransform.x) / currentTransform.k
+    const worldCenterY = (centerY - currentTransform.y) / currentTransform.k
+    
+    // Calculate new position to keep center point stable
+    const newX = centerX - worldCenterX * newScale
+    const newY = centerY - worldCenterY * newScale
+    
+    const newTransform = d3.zoomIdentity.translate(newX, newY).scale(newScale)
+    
+    // Update state immediately for instant feedback
+    const transformObj = {
+      x: newTransform.x,
+      y: newTransform.y,
+      k: newTransform.k
+    }
+    
+    canvasTransformRef.current = transformObj
+    saveCanvasTransform(transformObj)
+    setZoomLevel(newTransform.k)
+    zoomLevelRef.current = newTransform.k
+    
+    // Apply transform with transition
+    svg.transition()
+      .duration(200)
+      .call(d3.zoom<SVGSVGElement, unknown>().transform, newTransform)
+  }, [saveCanvasTransform])
 
   const fitToScreen = useCallback(() => {
+    console.log('🖼️ Fit to Screen clicked')
     if (!svgRef.current || nodes.length === 0) return
     
     const svg = d3.select(svgRef.current)
@@ -690,27 +751,68 @@ export default function AdvancedWorkflowDesigner() {
     const scale = Math.min(width / boundsWidth, height / boundsHeight) * 0.9
     const translateX = width / 2 - (bounds.minX + boundsWidth / 2) * scale
     const translateY = height / 2 - (bounds.minY + boundsHeight / 2) * scale
+    const newTransform = d3.zoomIdentity.translate(translateX, translateY).scale(scale)
     
-    svg.transition().duration(500).call(
-      d3.zoom<SVGSVGElement, unknown>().transform,
-      d3.zoomIdentity.translate(translateX, translateY).scale(scale)
-    )
-  }, [nodes])
+    // 🚀 IMMEDIATE REAL-TIME UPDATE: Update state and refs instantly
+    canvasTransformRef.current = {
+      x: newTransform.x,
+      y: newTransform.y,
+      k: newTransform.k
+    }
+    saveCanvasTransform({
+      x: newTransform.x,
+      y: newTransform.y,
+      k: newTransform.k
+    })
+    setZoomLevel(newTransform.k)
+    zoomLevelRef.current = newTransform.k
+    
+    // 🔥 INSTANT GRID UPDATE: Update grid immediately before transition
+    if (gridUpdateRef.current) {
+      gridUpdateRef.current() // Immediate update for instant feedback
+    }
+    
+    svg.transition()
+      .duration(500)
+      .ease(d3.easeQuadOut)
+      .call(d3.zoom<SVGSVGElement, unknown>().transform, newTransform)
+      .on("end", () => {
+        // 🚀 POST-TRANSITION UPDATE: Ensure grid is perfect after animation
+        if (gridUpdateRef.current) {
+          gridUpdateRef.current()
+        }
+      })
+  }, [nodes, saveCanvasTransform])
 
   // Reset canvas to center (0,0) position
   const resetCanvasPosition = useCallback(() => {
+    console.log('🔄 Reset Canvas clicked')
     if (!svgRef.current) return
     
     const svg = d3.select(svgRef.current)
     const transform = d3.zoomIdentity.translate(0, 0).scale(1)
     
-    // Update ref และ localStorage
+    // 🚀 IMMEDIATE REAL-TIME UPDATE: Update state and refs instantly
+    canvasTransformRef.current = { x: 0, y: 0, k: 1 }
     saveCanvasTransform({ x: 0, y: 0, k: 1 })
+    setZoomLevel(1)
+    zoomLevelRef.current = 1
     
-    svg.transition().duration(300).call(
-      d3.zoom<SVGSVGElement, unknown>().transform,
-      transform
-    )
+    // 🔥 INSTANT GRID UPDATE: Update grid immediately before transition
+    if (gridUpdateRef.current) {
+      gridUpdateRef.current() // Immediate update for instant feedback
+    }
+    
+    svg.transition()
+      .duration(300)
+      .ease(d3.easeQuadOut)
+      .call(d3.zoom<SVGSVGElement, unknown>().transform, transform)
+      .on("end", () => {
+        // 🚀 POST-TRANSITION UPDATE: Ensure grid is perfect after animation
+        if (gridUpdateRef.current) {
+          gridUpdateRef.current()
+        }
+      })
   }, [saveCanvasTransform])
 
   // WebSocket integration
@@ -789,7 +891,7 @@ export default function AdvancedWorkflowDesigner() {
     const g = svg.append("g")
 
     // 🚀 LAYER HIERARCHY: สร้าง layers แยกชั้นกันชัดเจน เพื่อป้องกัน grid ทับ nodes
-    const gridLayer = g.append("g").attr("class", "grid-layer")
+    const gridLayer = g.append("g").attr("class", "grid-layer").style("pointer-events", "none")
     const connectionLayer = g.append("g").attr("class", "connection-layer") 
     const nodeLayer = g.append("g").attr("class", "node-layer")
     const uiLayer = g.append("g").attr("class", "ui-layer") // สำหรับ selection box, etc.
@@ -808,19 +910,25 @@ export default function AdvancedWorkflowDesigner() {
       }
       
       // Remove existing grid
-      if (gridGroup) gridGroup.remove()
+      if (gridGroup) {
+        gridGroup.remove()
+        gridGroup = null
+      }
       
-      // 🚀 Create grid ใน gridLayer (ชั้นล่างสุด) แทน main g
+      // Clean up any existing grid-group elements
+      gridLayer.selectAll(".grid-group").remove()
+      
+      // Create grid in gridLayer
       gridGroup = gridLayer.append("g")
         .attr("class", "grid-group")
-        .style("pointer-events", "none") // Grid ไม่รับ mouse events
+        .style("pointer-events", "none")
       
       // Get current viewport size and transform
       const svgElement = svgRef.current
       if (!svgElement) return
       
       const rect = svgElement.getBoundingClientRect()
-      const currentTransform = d3.zoomTransform(svgElement)
+      const currentTransform = canvasTransformRef.current
       
       // Calculate visible area in canvas coordinates  
       const scale = currentTransform.k
@@ -833,10 +941,11 @@ export default function AdvancedWorkflowDesigner() {
       const strokeWidth = Math.max(0.5, 1 / scale)
       const opacity = Math.min(1, Math.max(0.1, scale * 0.6 + 0.2))
       
-      // Skip grid if too zoomed out to avoid performance issues
+      // Skip grid if too zoomed out
       if (scale < 0.3) return
       
       // Create vertical grid lines
+      const GRID_SIZE = 50
       const startX = Math.floor(leftBound / GRID_SIZE) * GRID_SIZE
       const endX = Math.ceil(rightBound / GRID_SIZE) * GRID_SIZE
       
@@ -867,10 +976,10 @@ export default function AdvancedWorkflowDesigner() {
       }
     }
     
-    // Store createGrid function ใน ref เพื่อให้ useEffect อื่นเรียกใช้ได้
+    // Store createGrid function in ref
     gridUpdateRef.current = createGrid
     
-    // Throttled grid update function
+    // 🚀 ENHANCED REAL-TIME GRID UPDATE: Improved responsiveness for manual controls
     const updateGridThrottled = () => {
       if (gridUpdateTimeout) {
         clearTimeout(gridUpdateTimeout)
@@ -878,32 +987,57 @@ export default function AdvancedWorkflowDesigner() {
       gridUpdateTimeout = setTimeout(() => {
         createGrid()
         gridUpdateTimeout = null
-      }, 16) // ~60fps
+      }, 4) // Reduced to ~250fps for ultra-smooth manual zoom
     }
+
+    // 🔥 INSTANT GRID UPDATE: Zero-delay update for manual controls  
+    const updateGridImmediate = () => {
+      if (gridUpdateTimeout) {
+        clearTimeout(gridUpdateTimeout)
+        gridUpdateTimeout = null
+      }
+      // Use requestAnimationFrame for smoother rendering
+      requestAnimationFrame(() => {
+        createGrid()
+      })
+    }
+    
+    // Store immediate update function in ref for zoom controls
+    gridUpdateRef.current = updateGridImmediate
+
 
     // Add zoom behavior
     const zoom = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.2, 3])
       .on("zoom", (event) => {
-        const { transform } = event
+        const { transform, sourceEvent } = event
         // Update the visual transform
         g.attr("transform", transform.toString())
         
         // 🚀 บันทึก canvas transform state เมื่อมีการเปลี่ยนแปลง
+        canvasTransformRef.current = {
+          x: transform.x,
+          y: transform.y,
+          k: transform.k
+        }
         saveCanvasTransform({
           x: transform.x,
           y: transform.y,
           k: transform.k
         })
         
-        // Update zoom level for display (throttled to avoid too many updates)
+        // 🔥 REAL-TIME ZOOM LEVEL UPDATE: Update immediately for responsive feedback
         zoomLevelRef.current = transform.k
-        if (Math.abs(transform.k - zoomLevel) > 0.05) {
-          setZoomLevel(transform.k)
-        }
+        setZoomLevel(transform.k)
         
-        // 🚀 Update grid on zoom/pan changes with throttling
-        updateGridThrottled()
+        // 🚀 SMART GRID UPDATE: Different strategies based on interaction type
+        if (sourceEvent && (sourceEvent.type === 'wheel' || sourceEvent.type === 'touchmove')) {
+          // For mouse wheel and touch: use throttled updates for performance
+          updateGridThrottled()
+        } else {
+          // For programmatic zoom (our buttons): use immediate updates for responsiveness
+          updateGridImmediate()
+        }
       })
 
     svg.call(zoom)
@@ -914,8 +1048,9 @@ export default function AdvancedWorkflowDesigner() {
       .scale(canvasTransformRef.current.k)
     svg.call(zoom.transform, initialTransform)
     
-    // 🚀 Create initial grid หลังจากสร้าง layers และ setup zoom แล้ว
+    // Create initial grid
     createGrid()
+    
 
     // Generate connection path function - ปรับปรุงให้ลูกศรหมุนตามทิศทางได้ดี
     const generateConnectionPathLocal = (connection: Connection): string => {
@@ -1327,49 +1462,13 @@ export default function AdvancedWorkflowDesigner() {
           delete node.initialY
         })
         
-        // Snap to grid if enabled for all selected nodes
-        if (showGrid) {
-          const snappedNodes = selectedNodesList.map(node => ({
-            ...node,
-            x: Math.round(node.x / GRID_SIZE) * GRID_SIZE,
-            y: Math.round(node.y / GRID_SIZE) * GRID_SIZE
-          }))
-          
-          // Update all nodes at once
-          setNodes(prev => prev.map(node => {
-            const snapped = snappedNodes.find(s => s.id === node.id)
-            return snapped || node
-          }))
-          
-          // Animate all selected nodes to grid positions
-          nodeLayer.selectAll('.node')
-            .filter((nodeData: any) => isNodeSelected(nodeData.id))
-            .transition()
-            .duration(200)
-            .ease(d3.easeBackOut.overshoot(0.2))
-            .attr("transform", (nodeData: any) => {
-              const snapped = snappedNodes.find(s => s.id === nodeData.id)
-              if (snapped) {
-                nodeData.x = snapped.x
-                nodeData.y = snapped.y
-                return `translate(${snapped.x}, ${snapped.y})`
-              }
-              return `translate(${nodeData.x}, ${nodeData.y})`
-            })
-            .on('end', () => {
-              // Update connections after grid snap animation
-              connectionLayer.selectAll('.connection path')
-                .attr('d', (conn: any) => generateConnectionPathLocal(conn))
-            })
-        }
         
         // Reset group drag state
         setIsGroupDragging(false)
         setDragOffset(new Map())
         
         console.log('🟢 Group Drag End:', {
-          selectedCount: selectedNodesList.length,
-          snappedToGrid: showGrid
+          selectedCount: selectedNodesList.length
         })
       } else {
         // 🔄 SINGLE DRAG END: Normal cleanup
@@ -1381,27 +1480,6 @@ export default function AdvancedWorkflowDesigner() {
         let finalX = d.x
         let finalY = d.y
         
-        // Snap to grid if enabled
-        if (showGrid) {
-          finalX = Math.round(d.x / GRID_SIZE) * GRID_SIZE
-          finalY = Math.round(d.y / GRID_SIZE) * GRID_SIZE
-          
-          // Update d3 data immediately
-          d.x = finalX
-          d.y = finalY
-          
-          // Animate to grid position
-          draggedElement
-            .transition()
-            .duration(200)
-            .ease(d3.easeBackOut.overshoot(0.2))
-            .attr("transform", `translate(${finalX}, ${finalY})`)
-            .on('end', () => {
-              // Update connections after grid snap animation
-              connectionLayer.selectAll('.connection path')
-                .attr('d', (conn: any) => generateConnectionPathLocal(conn))
-            })
-        }
         
         // Final state update
         setNodes(prev => prev.map(n => 
@@ -1410,8 +1488,7 @@ export default function AdvancedWorkflowDesigner() {
         
         console.log('🟢 Single Drag End:', {
           nodeId: d.id,
-          finalPosition: [finalX, finalY],
-          snappedToGrid: showGrid
+          finalPosition: [finalX, finalY]
         })
       }
       
@@ -1857,73 +1934,8 @@ export default function AdvancedWorkflowDesigner() {
       window.removeEventListener('keyup', handleKeyUp)
     }
 
-  }, [nodes, connections, selectedNode, selectedNodes, selectedConnection, showGrid, isConnecting, connectionStart, connectionPreview, clearSelection, removeConnection, deleteNode, toggleNodeSelection, isNodeSelected, getSelectedNodesList, isGroupDragging, dragOffset, updateGroupPositions, calculateGroupDragOffsets, selectNodesInArea])
+  }, [nodes, connections, selectedNode, selectedNodes, selectedConnection, isConnecting, connectionStart, connectionPreview, clearSelection, removeConnection, deleteNode, toggleNodeSelection, isNodeSelected, getSelectedNodesList, isGroupDragging, dragOffset, updateGroupPositions, calculateGroupDragOffsets, selectNodesInArea, showGrid, saveCanvasTransform])
 
-  // 🚀 Grid toggle effect - update grid when showGrid changes
-  useEffect(() => {
-    if (!svgRef.current) return
-    
-    // Find and update grid
-    const svg = d3.select(svgRef.current)
-    const mainGroup = svg.select('g')
-    
-    if (mainGroup.empty()) return
-    
-    // Remove existing grid
-    mainGroup.select('.grid-group').remove()
-    
-    // Recreate grid if enabled
-    if (showGrid) {
-      const gridGroup = mainGroup.append("g")
-        .attr("class", "grid-group")
-        .style("pointer-events", "none")
-      
-      const svgElement = svgRef.current
-      const rect = svgElement.getBoundingClientRect()
-      const currentTransform = d3.zoomTransform(svgElement)
-      
-      const scale = currentTransform.k
-      const leftBound = -currentTransform.x / scale - 500
-      const rightBound = (rect.width - currentTransform.x) / scale + 500
-      const topBound = -currentTransform.y / scale - 500
-      const bottomBound = (rect.height - currentTransform.y) / scale + 500
-      
-      const strokeWidth = Math.max(0.5, 1 / scale)
-      const opacity = Math.min(1, Math.max(0.1, scale * 0.6 + 0.2))
-      
-      if (scale >= 0.3) {
-        // Create vertical grid lines
-        const startX = Math.floor(leftBound / GRID_SIZE) * GRID_SIZE
-        const endX = Math.ceil(rightBound / GRID_SIZE) * GRID_SIZE
-        
-        for (let x = startX; x <= endX; x += GRID_SIZE) {
-          gridGroup.append("line")
-            .attr("x1", x)
-            .attr("y1", topBound)
-            .attr("x2", x)
-            .attr("y2", bottomBound)
-            .attr("stroke", "#e0e0e0")
-            .attr("stroke-width", strokeWidth)
-            .attr("opacity", opacity)
-        }
-        
-        // Create horizontal grid lines
-        const startY = Math.floor(topBound / GRID_SIZE) * GRID_SIZE
-        const endY = Math.ceil(bottomBound / GRID_SIZE) * GRID_SIZE
-        
-        for (let y = startY; y <= endY; y += GRID_SIZE) {
-          gridGroup.append("line")
-            .attr("x1", leftBound)
-            .attr("y1", y)
-            .attr("x2", rightBound)
-            .attr("y2", y)
-            .attr("stroke", "#e0e0e0")
-            .attr("stroke-width", strokeWidth)
-            .attr("opacity", opacity)
-        }
-      }
-    }
-  }, [showGrid])
 
   // ✅ Update connection styles เมื่อ selectedConnection เปลี่ยน
   useEffect(() => {
@@ -1941,13 +1953,6 @@ export default function AdvancedWorkflowDesigner() {
       
   }, [selectedConnection])
 
-  // ✅ Update grid เมื่อ showGrid state เปลี่ยน
-  useEffect(() => {
-    // เรียกใช้ createGrid function จาก main useEffect
-    if (gridUpdateRef.current) {
-      gridUpdateRef.current()
-    }
-  }, [showGrid])
 
   return (
     <div className="advanced-workflow-designer">
@@ -2039,32 +2044,29 @@ export default function AdvancedWorkflowDesigner() {
           onDrop={handleDrop}
           onDragOver={(e) => e.preventDefault()}
         >
-          {/* Enhanced Toolbar */}
+          {/* Canvas Toolbar */}
           <div className="canvas-toolbar">
-            <button onClick={zoomIn} className="toolbar-btn" title="Zoom In">
-              <ZoomIn size={16} />
-            </button>
-            <button onClick={zoomOut} className="toolbar-btn" title="Zoom Out">
-              <ZoomOut size={16} />
-            </button>
-            <button onClick={fitToScreen} className="toolbar-btn" title="Fit to Screen">
-              <Maximize2 size={16} />
-            </button>
-            <button onClick={resetCanvasPosition} className="toolbar-btn" title="Reset View">
-              <RotateCcw size={16} />
-            </button>
-            <span className="zoom-level">{Math.round(zoomLevel * 100)}%</span>
-            <div className="toolbar-separator" />
-            <button 
-              onClick={() => setShowGrid(!showGrid)} 
-              className={`toolbar-btn ${showGrid ? 'active' : ''}`}
-              title="Toggle Grid"
-            >
-              {showGrid ? <Eye size={16} /> : <EyeOff size={16} />}
-            </button>
+            <div className="zoom-controls">
+              <button onClick={zoomIn} className="zoom-btn" title="Zoom In">
+                <ZoomIn size={18} />
+              </button>
+              <button onClick={zoomOut} className="zoom-btn" title="Zoom Out">
+                <ZoomOut size={18} />
+              </button>
+              <span className="zoom-display">{Math.round(zoomLevel * 100)}%</span>
+            </div>
+            
+            <div className="view-controls">
+              <button onClick={fitToScreen} className="control-btn" title="Fit to Screen">
+                <Maximize2 size={18} />
+              </button>
+              <button onClick={resetCanvasPosition} className="control-btn" title="Reset View">
+                <RotateCcw size={18} />
+              </button>
+            </div>
+            
             {(selectedNode || selectedConnection) && (
-              <>
-                <div className="toolbar-separator" />
+              <div className="selection-controls">
                 <button 
                   onClick={() => {
                     if (selectedConnection) {
@@ -2074,12 +2076,12 @@ export default function AdvancedWorkflowDesigner() {
                       deleteNode(selectedNode.id)
                     }
                   }} 
-                  className="toolbar-btn danger"
+                  className="delete-btn"
                   title="Delete Selected"
                 >
-                  <Trash2 size={16} />
+                  <Trash2 size={18} />
                 </button>
-              </>
+              </div>
             )}
           </div>
           
@@ -2300,56 +2302,112 @@ export default function AdvancedWorkflowDesigner() {
 
         .canvas-toolbar {
           position: absolute;
-          top: 1rem;
-          left: 1rem;
-          background: white;
-          border: 1px solid #e0e0e0;
-          border-radius: 8px;
-          padding: 0.5rem;
+          top: 16px;
+          left: 16px;
           display: flex;
           align-items: center;
-          gap: 0.25rem;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-          z-index: 10;
+          gap: 12px;
+          background: white;
+          border: 1px solid #e1e5e9;
+          border-radius: 12px;
+          padding: 8px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          z-index: 100;
         }
 
-        .toolbar-btn {
+        .zoom-controls {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .zoom-btn {
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 0.25rem;
-          padding: 0.5rem;
+          width: 36px;
+          height: 36px;
           background: transparent;
           border: none;
-          border-radius: 4px;
+          border-radius: 8px;
           cursor: pointer;
-          transition: all 0.2s;
-          font-size: 0.75rem;
-          color: #666;
+          transition: all 0.2s ease;
+          color: #64748b;
         }
 
-        .toolbar-btn:hover {
-          background: #f5f5f5;
-          color: #333;
+        .zoom-btn:hover {
+          background: #f1f5f9;
+          color: #334155;
         }
 
-        .toolbar-btn.active {
-          background: #e3f2fd;
-          color: #2196F3;
-        }
-
-        .toolbar-btn.danger:hover {
-          background: #ffebee;
-          color: #f44336;
-        }
-
-        .zoom-level {
-          padding: 0 0.5rem;
-          font-size: 0.75rem;
-          color: #666;
-          min-width: 40px;
+        .zoom-display {
+          font-size: 13px;
+          font-weight: 500;
+          color: #475569;
+          min-width: 48px;
           text-align: center;
+          padding: 0 8px;
         }
+
+        .view-controls {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          padding-left: 12px;
+          border-left: 1px solid #e1e5e9;
+        }
+
+        .control-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 36px;
+          height: 36px;
+          background: transparent;
+          border: none;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          color: #64748b;
+        }
+
+        .control-btn:hover {
+          background: #f1f5f9;
+          color: #334155;
+        }
+
+        .selection-controls {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          padding-left: 12px;
+          border-left: 1px solid #e1e5e9;
+        }
+
+        .delete-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 36px;
+          height: 36px;
+          background: transparent;
+          border: none;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          color: #ef4444;
+        }
+
+        .delete-btn:hover {
+          background: #fef2f2;
+          color: #dc2626;
+        }
+
+
+
+
+
+
 
         .toolbar-separator {
           width: 1px;

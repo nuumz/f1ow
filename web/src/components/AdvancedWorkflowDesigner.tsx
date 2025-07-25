@@ -109,6 +109,7 @@ export default function AdvancedWorkflowDesigner() {
   const [workflowName, setWorkflowName] = useState('New Workflow')
   
   // Multi-select and group drag states
+  const [reRenderCanvas, setReRenderCanvas] = useState(false)
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false)
   const [isGroupDragging, setIsGroupDragging] = useState(false)
   const [dragOffset, setDragOffset] = useState<Map<string, {x: number, y: number}>>(new Map())
@@ -474,7 +475,6 @@ export default function AdvancedWorkflowDesigner() {
     setSelectedNode(nodeData)
     setSelectedConnection(null)
     setShowNodeEditor(true) // Show panel on double click
-    console.log('Double-clicked node:', nodeData.label)
   }, [])
 
   // Node operations
@@ -648,7 +648,6 @@ export default function AdvancedWorkflowDesigner() {
 
   // Zoom controls
   const zoomIn = useCallback(() => {
-    console.log('🔍 Zoom In clicked')
     if (!svgRef.current) return
     
     const svg = d3.select(svgRef.current)
@@ -687,10 +686,13 @@ export default function AdvancedWorkflowDesigner() {
     svg.transition()
       .duration(200)
       .call(d3.zoom<SVGSVGElement, unknown>().transform, newTransform)
+
+    // 🚀 FORCE RE-RENDER: Trigger D3 useEffect to re-render nodes with correct scale
+    setReRenderCanvas(true) // Toggle state to trigger re-render
+    setTimeout(() => setReRenderCanvas(false), 10) // Reset after brief delay
   }, [saveCanvasTransform])
 
   const zoomOut = useCallback(() => {
-    console.log('🔍 Zoom Out clicked')
     if (!svgRef.current) return
     
     const svg = d3.select(svgRef.current)
@@ -729,10 +731,13 @@ export default function AdvancedWorkflowDesigner() {
     svg.transition()
       .duration(200)
       .call(d3.zoom<SVGSVGElement, unknown>().transform, newTransform)
+
+    // 🚀 FORCE RE-RENDER: Trigger D3 useEffect to re-render nodes with correct scale
+    setReRenderCanvas(true) // Toggle state to trigger re-render
+    setTimeout(() => setReRenderCanvas(false), 10) // Reset after brief delay
   }, [saveCanvasTransform])
 
   const fitToScreen = useCallback(() => {
-    console.log('🖼️ Fit to Screen clicked')
     if (!svgRef.current || nodes.length === 0) return
     
     const svg = d3.select(svgRef.current)
@@ -782,38 +787,95 @@ export default function AdvancedWorkflowDesigner() {
           gridUpdateRef.current()
         }
       })
+
+      // 🚀 FORCE RE-RENDER: Trigger D3 useEffect to re-render nodes with correct scale
+      setReRenderCanvas(true) // Toggle state to trigger re-render
+      setTimeout(() => setReRenderCanvas(false), 10) // Reset after brief delay
   }, [nodes, saveCanvasTransform])
 
   // Reset canvas to center (0,0) position
   const resetCanvasPosition = useCallback(() => {
-    console.log('🔄 Reset Canvas clicked')
     if (!svgRef.current) return
     
     const svg = d3.select(svgRef.current)
-    const transform = d3.zoomIdentity.translate(0, 0).scale(1)
     
-    // 🚀 IMMEDIATE REAL-TIME UPDATE: Update state and refs instantly
-    canvasTransformRef.current = { x: 0, y: 0, k: 1 }
-    saveCanvasTransform({ x: 0, y: 0, k: 1 })
-    setZoomLevel(1)
-    zoomLevelRef.current = 1
-    
-    // 🔥 INSTANT GRID UPDATE: Update grid immediately before transition
-    if (gridUpdateRef.current) {
-      gridUpdateRef.current() // Immediate update for instant feedback
+    // 🚀 SMART RESET: Center around leftmost node with 100% zoom
+    if (nodes.length > 0) {
+      // Find the leftmost node (smallest x coordinate)
+      const leftmostNode = nodes.reduce((leftmost, node) => 
+        node.x < leftmost.x ? node : leftmost
+      )
+      
+      // Calculate canvas dimensions
+      const width = svgRef.current.clientWidth
+      const height = svgRef.current.clientHeight
+      
+      // 🎯 ใช้จุดกึ่งกลางของ leftmost node เป็นจุดอ้างอิง
+      const nodeCenterX = leftmostNode.x
+      const nodeCenterY = leftmostNode.y + getNodeHeight(leftmostNode) / 2
+      
+      // Position node center at center of screen with 100% zoom
+      const translateX = width / 2 - nodeCenterX
+      const translateY = height / 2 - nodeCenterY
+      
+      const transform = d3.zoomIdentity.translate(translateX, translateY).scale(1)
+      
+      // 🚀 IMMEDIATE REAL-TIME UPDATE: Update state and refs instantly
+      canvasTransformRef.current = { x: translateX, y: translateY, k: 1 }
+      saveCanvasTransform({ x: translateX, y: translateY, k: 1 })
+      setZoomLevel(1)
+      zoomLevelRef.current = 1
+      
+      // 🔥 INSTANT GRID UPDATE: Update grid immediately before transition
+      if (gridUpdateRef.current) {
+        gridUpdateRef.current() // Immediate update for instant feedback
+      }
+      
+      svg.transition()
+        .duration(300)
+        .ease(d3.easeQuadOut)
+        .call(d3.zoom<SVGSVGElement, unknown>().transform, transform)
+        .on("end", () => {
+          // 🚀 POST-TRANSITION UPDATE: Ensure grid is perfect after animation
+          if (gridUpdateRef.current) {
+            gridUpdateRef.current()
+          }
+        })
+
+        // 🚀 FORCE RE-RENDER: Trigger D3 useEffect to re-render nodes with correct scale
+        setReRenderCanvas(true) // Toggle state to trigger re-render
+        setTimeout(() => setReRenderCanvas(false), 10) // Reset after brief delay
+    } else {
+      // Fallback: No nodes, just reset to origin
+      const transform = d3.zoomIdentity.translate(0, 0).scale(1)
+      
+      // 🚀 IMMEDIATE REAL-TIME UPDATE: Update state and refs instantly
+      canvasTransformRef.current = { x: 0, y: 0, k: 1 }
+      saveCanvasTransform({ x: 0, y: 0, k: 1 })
+      setZoomLevel(1)
+      zoomLevelRef.current = 1
+      
+      // 🔥 INSTANT GRID UPDATE: Update grid immediately before transition
+      if (gridUpdateRef.current) {
+        gridUpdateRef.current() // Immediate update for instant feedback
+      }
+      
+      svg.transition()
+        .duration(300)
+        .ease(d3.easeQuadOut)
+        .call(d3.zoom<SVGSVGElement, unknown>().transform, transform)
+        .on("end", () => {
+          // 🚀 POST-TRANSITION UPDATE: Ensure grid is perfect after animation
+          if (gridUpdateRef.current) {
+            gridUpdateRef.current()
+          }
+        })
+
+        // 🚀 FORCE RE-RENDER: Trigger D3 useEffect to re-render nodes with correct scale
+        setReRenderCanvas(true) // Toggle state to trigger re-render
+        setTimeout(() => setReRenderCanvas(false), 10) // Reset after brief delay
     }
-    
-    svg.transition()
-      .duration(300)
-      .ease(d3.easeQuadOut)
-      .call(d3.zoom<SVGSVGElement, unknown>().transform, transform)
-      .on("end", () => {
-        // 🚀 POST-TRANSITION UPDATE: Ensure grid is perfect after animation
-        if (gridUpdateRef.current) {
-          gridUpdateRef.current()
-        }
-      })
-  }, [saveCanvasTransform])
+  }, [saveCanvasTransform, nodes])
 
   // WebSocket integration
   useEffect(() => {
@@ -1167,7 +1229,6 @@ export default function AdvancedWorkflowDesigner() {
     // Port event handlers defined here to avoid useEffect dependencies
     const handlePortClick = (event: any, portData: any) => {
       event.stopPropagation()
-      console.log('Port clicked:', portData)
       
       if (isConnecting && connectionStart) {
         // Complete connection - only allow output -> input connections
@@ -1209,9 +1270,6 @@ export default function AdvancedWorkflowDesigner() {
               }
 
               setConnections(prev => [...prev, newConnection])
-              console.log('Connection created:', newConnection)
-            } else {
-              console.log('Connection already exists')
             }
           }
         }
@@ -1226,7 +1284,6 @@ export default function AdvancedWorkflowDesigner() {
           portId: portData.id,
           type: portData.type
         })
-        console.log('Connection started from:', portData)
       }
     }
 
@@ -1242,7 +1299,6 @@ export default function AdvancedWorkflowDesigner() {
           portId: portData.id,
           type: portData.type
         })
-        console.log('Connection started with mouse down:', portData)
       }
     }
 
@@ -1330,12 +1386,6 @@ export default function AdvancedWorkflowDesigner() {
           node.initialY = node.y
         })
         
-        console.log('🟢 Group Drag Start:', {
-          primaryNode: d.id,
-          selectedCount: selectedNodesList.length,
-          canvasPos: [canvasX, canvasY],
-          transform: transform.toString()
-        })
       } else {
         // SINGLE DRAG: Normal single node drag
         setIsGroupDragging(false)
@@ -1346,12 +1396,6 @@ export default function AdvancedWorkflowDesigner() {
         d.initialX = d.x
         d.initialY = d.y
         
-        console.log('🟢 Single Drag Start:', {
-          nodeId: d.id,
-          canvasPos: [canvasX, canvasY],
-          nodePos: [d.x, d.y],
-          transform: transform.toString()
-        })
       }
       
       // Bring the dragged node to the front and add dragging class
@@ -1397,15 +1441,6 @@ export default function AdvancedWorkflowDesigner() {
           .filter((nodeData: any) => isNodeSelected(nodeData.id))
           .attr("transform", (nodeData: any) => `translate(${nodeData.x}, ${nodeData.y})`)
         
-        // Debug logging (throttled)
-        if (Math.random() < 0.05) { // Log only 5% of group drag events
-          console.log('🔄 Group Dragging:', {
-            primaryNode: d.id,
-            delta: [deltaX, deltaY],
-            selectedCount: getSelectedNodesList().length,
-            newPosition: [newX, newY]
-          })
-        }
       } else {
         // 🔄 SINGLE DRAG: Normal single node drag
         d.x = newX
@@ -1414,15 +1449,6 @@ export default function AdvancedWorkflowDesigner() {
         // Update visual position immediately
         draggedElement.attr("transform", `translate(${d.x}, ${d.y})`)
         
-        // Debug logging (throttled)
-        if (Math.random() < 0.1) { // Log only 10% of drag events to avoid spam
-          console.log('🔄 Single Dragging:', {
-            nodeId: d.id,
-            delta: [deltaX, deltaY],
-            newNodePos: [d.x, d.y],
-            canvasPos: [currentCanvasX, currentCanvasY]
-          })
-        }
       }
       
       // Update connections in real-time during drag
@@ -1467,9 +1493,6 @@ export default function AdvancedWorkflowDesigner() {
         setIsGroupDragging(false)
         setDragOffset(new Map())
         
-        console.log('🟢 Group Drag End:', {
-          selectedCount: selectedNodesList.length
-        })
       } else {
         // 🔄 SINGLE DRAG END: Normal cleanup
         delete d.dragStartX
@@ -1486,10 +1509,6 @@ export default function AdvancedWorkflowDesigner() {
           n.id === d.id ? {...n, x: finalX, y: finalY} : n
         ))
         
-        console.log('🟢 Single Drag End:', {
-          nodeId: d.id,
-          finalPosition: [finalX, finalY]
-        })
       }
       
       // Remove dragging class and reset cursor
@@ -1934,7 +1953,7 @@ export default function AdvancedWorkflowDesigner() {
       window.removeEventListener('keyup', handleKeyUp)
     }
 
-  }, [nodes, connections, selectedNode, selectedNodes, selectedConnection, isConnecting, connectionStart, connectionPreview, clearSelection, removeConnection, deleteNode, toggleNodeSelection, isNodeSelected, getSelectedNodesList, isGroupDragging, dragOffset, updateGroupPositions, calculateGroupDragOffsets, selectNodesInArea, showGrid, saveCanvasTransform])
+  }, [nodes, connections, selectedNode, selectedNodes, selectedConnection, isConnecting, connectionStart, connectionPreview, clearSelection, removeConnection, deleteNode, toggleNodeSelection, isNodeSelected, getSelectedNodesList, isGroupDragging, dragOffset, updateGroupPositions, calculateGroupDragOffsets, selectNodesInArea, showGrid, saveCanvasTransform, isMultiSelectMode, reRenderCanvas])
 
 
   // ✅ Update connection styles เมื่อ selectedConnection เปลี่ยน
@@ -2048,20 +2067,20 @@ export default function AdvancedWorkflowDesigner() {
           <div className="canvas-toolbar">
             <div className="zoom-controls">
               <button onClick={zoomIn} className="zoom-btn" title="Zoom In">
-                <ZoomIn size={18} />
+                <ZoomIn size={16} />
               </button>
               <button onClick={zoomOut} className="zoom-btn" title="Zoom Out">
-                <ZoomOut size={18} />
+                <ZoomOut size={16} />
               </button>
               <span className="zoom-display">{Math.round(zoomLevel * 100)}%</span>
             </div>
             
             <div className="view-controls">
               <button onClick={fitToScreen} className="control-btn" title="Fit to Screen">
-                <Maximize2 size={18} />
+                <Maximize2 size={14} />
               </button>
               <button onClick={resetCanvasPosition} className="control-btn" title="Reset View">
-                <RotateCcw size={18} />
+                <RotateCcw size={14} />
               </button>
             </div>
             
@@ -2079,7 +2098,7 @@ export default function AdvancedWorkflowDesigner() {
                   className="delete-btn"
                   title="Delete Selected"
                 >
-                  <Trash2 size={18} />
+                  <Trash2 size={16} />
                 </button>
               </div>
             )}
@@ -2325,8 +2344,8 @@ export default function AdvancedWorkflowDesigner() {
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 36px;
-          height: 36px;
+          width: 24px;
+          height: 24px;
           background: transparent;
           border: none;
           border-radius: 8px;
@@ -2361,8 +2380,8 @@ export default function AdvancedWorkflowDesigner() {
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 36px;
-          height: 36px;
+          width: 24px;
+          height: 24px;
           background: transparent;
           border: none;
           border-radius: 8px;
@@ -2388,8 +2407,8 @@ export default function AdvancedWorkflowDesigner() {
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 36px;
-          height: 36px;
+          width: 24px;
+          height: 24px;
           background: transparent;
           border: none;
           border-radius: 8px;

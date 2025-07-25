@@ -25,6 +25,9 @@ export default function WorkflowDesigner() {
   const [edges, setEdges] = useState<Edge[]>([])
   const [selectedNode, setSelectedNode] = useState<Node | null>(null)
   const [workflowName, setWorkflowName] = useState('New Workflow')
+  const [isConnecting, setIsConnecting] = useState(false)
+  const [connectionStart, setConnectionStart] = useState<string | null>(null)
+  const [showGrid, setShowGrid] = useState(true)
 
   useEffect(() => {
     if (!svgRef.current) return
@@ -36,8 +39,39 @@ export default function WorkflowDesigner() {
     // Clear previous content
     svg.selectAll("*").remove()
 
+    // Add grid pattern
+    if (showGrid) {
+      const defs = svg.append("defs")
+      const pattern = defs.append("pattern")
+        .attr("id", "grid")
+        .attr("width", 20)
+        .attr("height", 20)
+        .attr("patternUnits", "userSpaceOnUse")
+      
+      pattern.append("path")
+        .attr("d", "M 20 0 L 0 0 0 20")
+        .attr("fill", "none")
+        .attr("stroke", "#e0e0e0")
+        .attr("stroke-width", 1)
+      
+      svg.append("rect")
+        .attr("width", "100%")
+        .attr("height", "100%")
+        .attr("fill", "url(#grid)")
+    }
+
     // Add container
     const g = svg.append("g")
+    
+    // Add click handler to canvas for deselecting
+    svg.on("click", () => {
+      if (isConnecting) {
+        setIsConnecting(false)
+        setConnectionStart(null)
+      } else {
+        setSelectedNode(null)
+      }
+    })
 
     // Add zoom behavior
     const zoom = d3.zoom()
@@ -78,7 +112,26 @@ export default function WorkflowDesigner() {
       .attr("fill", "#ffffff")
       .attr("stroke", d => getNodeColor(d.type))
       .attr("stroke-width", 2)
-      .on("click", (event, d) => setSelectedNode(d))
+      .attr("class", d => selectedNode?.id === d.id ? 'selected' : '')
+      .on("click", (event, d) => {
+        event.stopPropagation()
+        if (isConnecting && connectionStart && connectionStart !== d.id) {
+          // Create connection
+          const newEdge = { source: connectionStart, target: d.id }
+          setEdges([...edges, newEdge])
+          setIsConnecting(false)
+          setConnectionStart(null)
+        } else {
+          setSelectedNode(d)
+        }
+      })
+      .on("contextmenu", (event, d) => {
+        event.preventDefault()
+        if (!isConnecting) {
+          setIsConnecting(true)
+          setConnectionStart(d.id)
+        }
+      })
 
     // Add icons
     node.append("text")
@@ -198,7 +251,41 @@ export default function WorkflowDesigner() {
   }
 
   const executeWorkflow = async () => {
-    alert('Executing workflow...')
+    if (nodes.length === 0) {
+      alert('Please add nodes to the workflow before executing')
+      return
+    }
+    
+    try {
+      const workflow = {
+        name: workflowName,
+        definition: { nodes, edges }
+      }
+      
+      const result = await WorkflowService.execute('temp', workflow)
+      alert(`Workflow executed successfully! Execution ID: ${result.executionId}`)
+    } catch (error) {
+      console.error('Execution failed:', error)
+      alert('Failed to execute workflow')
+    }
+  }
+  
+  const clearCanvas = () => {
+    if (window.confirm('Are you sure you want to clear the canvas?')) {
+      setNodes([])
+      setEdges([])
+      setSelectedNode(null)
+    }
+  }
+  
+  const duplicateNode = (node: Node) => {
+    const newNode: Node = {
+      ...node,
+      id: `node-${Date.now()}`,
+      x: node.x + 50,
+      y: node.y + 50
+    }
+    setNodes([...nodes, newNode])
   }
 
   return (
@@ -211,6 +298,15 @@ export default function WorkflowDesigner() {
           className="workflow-name-input"
         />
         <div className="designer-actions">
+          <button 
+            onClick={() => setShowGrid(!showGrid)} 
+            className={`btn btn-secondary ${showGrid ? 'active' : ''}`}
+          >
+            Grid
+          </button>
+          <button onClick={clearCanvas} className="btn btn-warning">
+            Clear
+          </button>
           <button onClick={saveWorkflow} className="btn btn-primary">
             <Save size={16} /> Save
           </button>
@@ -224,6 +320,11 @@ export default function WorkflowDesigner() {
         <NodePalette onAddNode={addNode} />
         
         <div className="canvas-container">
+          {isConnecting && (
+            <div className="connection-indicator">
+              🔗 Click on a target node to create connection
+            </div>
+          )}
           <svg ref={svgRef} width="100%" height="600">
             <defs>
               <marker
@@ -238,20 +339,28 @@ export default function WorkflowDesigner() {
               </marker>
             </defs>
           </svg>
+          <div className="canvas-help">
+            <p>💡 Right-click on a node to start connecting</p>
+            <p>🖱️ Drag nodes to reposition them</p>
+            <p>📝 Click on a node to configure it</p>
+          </div>
         </div>
 
         {selectedNode && (
-          <NodeEditor
-            node={selectedNode}
-            onUpdate={(config) => {
-              setNodes(nodes.map(n => 
-                n.id === selectedNode.id 
-                  ? { ...n, config } 
-                  : n
-              ))
-            }}
-            onDelete={() => deleteNode(selectedNode.id)}
-          />
+          <div className="node-editor-panel">
+            <NodeEditor
+              node={selectedNode}
+              onUpdate={(config) => {
+                setNodes(nodes.map(n => 
+                  n.id === selectedNode.id 
+                    ? { ...n, config } 
+                    : n
+                ))
+              }}
+              onDelete={() => deleteNode(selectedNode.id)}
+              onDuplicate={() => duplicateNode(selectedNode)}
+            />
+          </div>
         )}
       </div>
     </div>

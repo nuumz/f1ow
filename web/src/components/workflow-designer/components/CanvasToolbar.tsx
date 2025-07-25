@@ -1,6 +1,9 @@
 import { ZoomIn, ZoomOut, Maximize2, Eye, EyeOff, RotateCcw, Play, Save } from 'lucide-react'
 import './CanvasToolbar.css'
 
+// Import types
+import type { NodeVariant } from './nodes/NodeRenderer'
+
 export interface CanvasToolbarProps {
   // Zoom state
   zoomLevel: number
@@ -8,6 +11,10 @@ export interface CanvasToolbarProps {
   // Grid state
   showGrid: boolean
   onToggleGrid: () => void
+  
+  // Node rendering configuration
+  nodeVariant?: NodeVariant
+  onVariantChange?: (variant: NodeVariant) => void
   
   // Zoom operations
   onZoomIn: () => void
@@ -30,6 +37,8 @@ export default function CanvasToolbar({
   zoomLevel,
   showGrid,
   onToggleGrid,
+  nodeVariant = 'standard',
+  onVariantChange,
   onZoomIn,
   onZoomOut,
   onFitToScreen,
@@ -90,6 +99,25 @@ export default function CanvasToolbar({
           </button>
         </div>
       </div>
+
+      {/* Node Display Controls */}
+      {onVariantChange && (
+        <div className="toolbar-section">
+          <div className="node-display-controls">
+            <div className="control-group">
+              <label>Style:</label>
+              <select 
+                value={nodeVariant} 
+                onChange={(e) => onVariantChange(e.target.value as NodeVariant)}
+                className="control-select"
+              >
+                <option value="compact">Compact</option>
+                <option value="standard">Standard</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Selection Info */}
       {selectedNodeCount > 0 && (

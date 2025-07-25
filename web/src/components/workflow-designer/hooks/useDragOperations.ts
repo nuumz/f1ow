@@ -33,7 +33,7 @@ export interface UseDragOperationsReturn {
 export function useDragOperations({
   nodes,
   setNodes,
-  selectedNodes,
+  // selectedNodes,
   isNodeSelected,
   getSelectedNodesList
 }: UseDragOperationsProps): UseDragOperationsReturn {

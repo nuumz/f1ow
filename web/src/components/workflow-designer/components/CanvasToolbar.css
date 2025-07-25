@@ -27,7 +27,8 @@
 
 .zoom-controls,
 .view-controls,
-.workflow-controls {
+.workflow-controls,
+.node-display-controls {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -124,6 +125,47 @@
   color: #1565c0;
   font-weight: 500;
   white-space: nowrap;
+}
+
+/* Node Display Controls */
+.node-display-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.control-group label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.control-select {
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: #374151;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.control-select:hover {
+  border-color: #9ca3af;
+}
+
+.control-select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
 }
 
 .selected-count {

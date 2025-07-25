@@ -31,7 +31,7 @@ class WebSocketService {
     }
 
     this.isConnecting = true
-    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws'
+    const wsUrl = (import.meta as any).env.VITE_WS_URL || 'ws://localhost:8080/ws'
     
     try {
       this.ws = new WebSocket(wsUrl)

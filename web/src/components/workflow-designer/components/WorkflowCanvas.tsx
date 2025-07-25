@@ -2,15 +2,15 @@ import React, { useEffect, useRef, useCallback } from 'react'
 import * as d3 from 'd3'
 import type { WorkflowNode } from '../hooks/useNodeSelection'
 import type { Connection } from '../hooks/useConnections'
-import { generateWorkflowConnectionPath, getVisibleCanvasBounds } from '../utils/canvas-utils'
+import { getVisibleCanvasBounds } from '../utils/canvas-utils'
 import { 
   getNodeColor, 
   getPortColor, 
-  getNodeIcon, 
-  getNodeHeight, 
-  NODE_WIDTH, 
-  PORT_RADIUS 
+  getNodeIcon,
+  NodeTypes
 } from '../utils/node-utils'
+import { type NodeVariant, getNodeDimensions } from './nodes/NodeRenderer'
+import { generateVariantAwareConnectionPath, calculateConnectionPreviewPath } from '../utils/connection-utils'
 
 export interface WorkflowCanvasProps {
   // SVG ref
@@ -23,6 +23,9 @@ export interface WorkflowCanvasProps {
   // Canvas state
   showGrid: boolean
   canvasTransform: { x: number; y: number; k: number }
+  
+  // Node rendering configuration
+  nodeVariant?: NodeVariant
   
   // Selection state
   selectedNodes: Set<string>
@@ -54,6 +57,16 @@ export interface WorkflowCanvasProps {
   
   // Canvas transform
   onTransformChange: (transform: d3.ZoomTransform) => void
+  onZoomLevel?: (zoomLevel: number) => void
+  
+  // Toolbar controls
+  onToggleGrid: () => void
+  onVariantChange?: (variant: NodeVariant) => void
+  onZoomIn: () => void
+  onZoomOut: () => void
+  onFitToScreen: () => void
+  onResetPosition: () => void
+  executionStatus?: 'idle' | 'running' | 'completed' | 'error'
 }
 
 export default function WorkflowCanvas({
@@ -62,6 +75,7 @@ export default function WorkflowCanvas({
   connections,
   showGrid,
   canvasTransform,
+  nodeVariant = 'standard',
   selectedNodes,
   selectedConnection,
   isNodeSelected,
@@ -80,7 +94,15 @@ export default function WorkflowCanvas({
   onPortDragEnd,
   canDropOnPort,
   canDropOnNode,
-  onTransformChange
+  onTransformChange,
+  onZoomLevel,
+  onToggleGrid,
+  onVariantChange,
+  onZoomIn,
+  onZoomOut,
+  onFitToScreen,
+  onResetPosition,
+  executionStatus = 'idle'
 }: WorkflowCanvasProps) {
 
   const draggedElementRef = useRef<d3.Selection<any, any, any, any> | null>(null)
@@ -92,55 +114,54 @@ export default function WorkflowCanvas({
     viewportWidth: number,
     viewportHeight: number
   ) => {
-    if (!showGrid) {
-      gridLayer.selectAll('*').remove()
-      return
-    }
-
-    const GRID_SIZE = 50
-    const bounds = getVisibleCanvasBounds(transform, viewportWidth, viewportHeight, 500)
-    
-    // Calculate stroke width and opacity based on zoom
-    const strokeWidth = Math.max(0.5, 1 / transform.k)
-    const opacity = Math.min(1, Math.max(0.1, transform.k * 0.6 + 0.2))
-    
-    // Skip grid if too zoomed out
-    if (transform.k < 0.3) {
-      gridLayer.selectAll('*').remove()
-      return
-    }
+    if (!showGrid) return
 
     gridLayer.selectAll('*').remove()
 
-    // Create vertical grid lines
-    const startX = Math.floor(bounds.minX / GRID_SIZE) * GRID_SIZE
-    const endX = Math.ceil(bounds.maxX / GRID_SIZE) * GRID_SIZE
+    const gridSize = 20 * transform.k
+    if (gridSize < 5) return
+
+    const bounds = getVisibleCanvasBounds(transform, viewportWidth, viewportHeight)
     
-    for (let x = startX; x <= endX; x += GRID_SIZE) {
-      gridLayer.append('line')
-        .attr('x1', x)
-        .attr('y1', bounds.minY)
-        .attr('x2', x)
-        .attr('y2', bounds.maxY)
-        .attr('stroke', '#f5f5f5')
-        .attr('stroke-width', strokeWidth)
-        .attr('opacity', opacity)
+    const startX = Math.floor(bounds.minX / gridSize) * gridSize
+    const endX = Math.ceil(bounds.maxX / gridSize) * gridSize
+    const startY = Math.floor(bounds.minY / gridSize) * gridSize
+    const endY = Math.ceil(bounds.maxY / gridSize) * gridSize
+
+    const verticalLines = []
+    const horizontalLines = []
+
+    for (let x = startX; x <= endX; x += gridSize) {
+      verticalLines.push({ x1: x, y1: bounds.minY, x2: x, y2: bounds.maxY })
     }
-    
-    // Create horizontal grid lines
-    const startY = Math.floor(bounds.minY / GRID_SIZE) * GRID_SIZE
-    const endY = Math.ceil(bounds.maxY / GRID_SIZE) * GRID_SIZE
-    
-    for (let y = startY; y <= endY; y += GRID_SIZE) {
-      gridLayer.append('line')
-        .attr('x1', bounds.minX)
-        .attr('y1', y)
-        .attr('x2', bounds.maxX)
-        .attr('y2', y)
-        .attr('stroke', '#f5f5f5')
-        .attr('stroke-width', strokeWidth)
-        .attr('opacity', opacity)
+
+    for (let y = startY; y <= endY; y += gridSize) {
+      horizontalLines.push({ x1: bounds.minX, y1: y, x2: bounds.maxX, y2: y })
     }
+
+    gridLayer.selectAll('.grid-line-v')
+      .data(verticalLines)
+      .enter()
+      .append('line')
+      .attr('class', 'grid-line-v')
+      .attr('x1', d => d.x1)
+      .attr('y1', d => d.y1)
+      .attr('x2', d => d.x2)
+      .attr('y2', d => d.y2)
+      .attr('stroke', '#e0e0e0')
+      .attr('stroke-width', 0.5)
+
+    gridLayer.selectAll('.grid-line-h')
+      .data(horizontalLines)
+      .enter()
+      .append('line')
+      .attr('class', 'grid-line-h')
+      .attr('x1', d => d.x1)
+      .attr('y1', d => d.y1)
+      .attr('x2', d => d.x2)
+      .attr('y2', d => d.y2)
+      .attr('stroke', '#e0e0e0')
+      .attr('stroke-width', 0.5)
   }, [showGrid])
 
   // D3 rendering effect
@@ -185,60 +206,184 @@ export default function WorkflowCanvas({
     const gridLayer = g.append('g').attr('class', 'grid-layer').style('pointer-events', 'none')
     const connectionLayer = g.append('g').attr('class', 'connection-layer')
     const nodeLayer = g.append('g').attr('class', 'node-layer')
-    // UI layer for future use
-    g.append('g').attr('class', 'ui-layer')
+    
+    // Add toolbar layer (fixed positioning, not affected by zoom/pan)
+    const toolbarLayer = svg.append('g').attr('class', 'toolbar-layer').style('pointer-events', 'all')
 
     // Create initial grid
     const rect = svgRef.current.getBoundingClientRect()
     createGrid(gridLayer, canvasTransform, rect.width, rect.height)
 
-    // Setup zoom behavior
+    // Render canvas toolbar function (defined before zoom behavior)
+    const renderCanvasToolbar = () => {
+      const rect = svgRef.current?.getBoundingClientRect()
+      if (!rect) return
+      
+      // Get current transform
+      const currentTransform = svgRef.current ? d3.zoomTransform(svgRef.current) : null
+      const currentZoom = currentTransform ? currentTransform.k : canvasTransform.k
+      
+      toolbarLayer.selectAll('*').remove()
+      
+      // Toolbar background
+      toolbarLayer.append('rect')
+        .attr('x', 10)
+        .attr('y', 10)
+        .attr('width', 320)
+        .attr('height', 50)
+        .attr('rx', 8)
+        .attr('fill', 'rgba(255, 255, 255, 0.95)')
+        .attr('stroke', '#e0e0e0')
+        .attr('stroke-width', 1)
+        .style('filter', 'drop-shadow(0 2px 8px rgba(0, 0, 0, 0.1))')
+        .style('backdrop-filter', 'blur(8px)')
+      
+      let xOffset = 20
+      
+      // Zoom controls
+      const createToolbarButton = (x: number, y: number, width: number, height: number, text: string, onClick: () => void, disabled = false) => {
+        const btn = toolbarLayer.append('g')
+          .style('cursor', disabled ? 'not-allowed' : 'pointer')
+          .style('opacity', disabled ? 0.5 : 1)
+        
+        if (!disabled) {
+          btn.on('click', onClick)
+        }
+        
+        btn.append('rect')
+          .attr('x', x)
+          .attr('y', y)
+          .attr('width', width)
+          .attr('height', height)
+          .attr('rx', 4)
+          .attr('fill', disabled ? '#f5f5f5' : '#ffffff')
+          .attr('stroke', '#ddd')
+          .attr('stroke-width', 1)
+        
+        btn.append('text')
+          .attr('x', x + width / 2)
+          .attr('y', y + height / 2)
+          .attr('text-anchor', 'middle')
+          .attr('dominant-baseline', 'middle')
+          .attr('font-size', '12px')
+          .attr('fill', disabled ? '#999' : '#333')
+          .text(text)
+        
+        return btn
+      }
+      
+      // Zoom In button
+      createToolbarButton(xOffset, 25, 30, 20, '+', onZoomIn, currentZoom >= 3)
+      xOffset += 35
+      
+      // Zoom Out button
+      createToolbarButton(xOffset, 25, 30, 20, '−', onZoomOut, currentZoom <= 0.2)
+      xOffset += 35
+      
+      // Zoom level display
+      toolbarLayer.append('text')
+        .attr('x', xOffset + 15)
+        .attr('y', 35)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'middle')
+        .attr('font-size', '11px')
+        .attr('fill', '#666')
+        .text(`${Math.round(currentZoom * 100)}%`)
+      xOffset += 40
+      
+      // Fit to Screen button
+      createToolbarButton(xOffset, 25, 30, 20, '⌂', onFitToScreen)
+      xOffset += 35
+      
+      // Reset Position button
+      createToolbarButton(xOffset, 25, 30, 20, '↻', onResetPosition)
+      xOffset += 35
+      
+      // Grid Toggle button
+      const gridBtn = createToolbarButton(xOffset, 25, 30, 20, showGrid ? '⊞' : '⊡', onToggleGrid)
+      if (showGrid) {
+        gridBtn.select('rect').attr('fill', '#e3f2fd').attr('stroke', '#2196F3')
+      }
+      xOffset += 35
+      
+      // Node variant selector (if available)
+      if (onVariantChange) {
+        const variantGroup = toolbarLayer.append('g')
+        
+        variantGroup.append('rect')
+          .attr('x', xOffset)
+          .attr('y', 25)
+          .attr('width', 60)
+          .attr('height', 20)
+          .attr('rx', 4)
+          .attr('fill', '#ffffff')
+          .attr('stroke', '#ddd')
+          .attr('stroke-width', 1)
+        
+        variantGroup.append('text')
+          .attr('x', xOffset + 30)
+          .attr('y', 35)
+          .attr('text-anchor', 'middle')
+          .attr('dominant-baseline', 'middle')
+          .attr('font-size', '10px')
+          .attr('fill', '#333')
+          .text(nodeVariant === 'compact' ? 'Compact' : 'Standard')
+        
+        variantGroup
+          .style('cursor', 'pointer')
+          .on('click', () => {
+            const newVariant = nodeVariant === 'compact' ? 'standard' : 'compact'
+            onVariantChange(newVariant as NodeVariant)
+          })
+      }
+    }
+
+    // Zoom behavior
     const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.2, 3])
+      .scaleExtent([0.2, 4])
       .on('zoom', (event) => {
-        const { transform } = event
+        const transform = event.transform
         g.attr('transform', transform.toString())
-        
-        // Update grid
-        const rect = svgRef.current!.getBoundingClientRect()
+        !!onZoomLevel && onZoomLevel(transform.k)
         createGrid(gridLayer, transform, rect.width, rect.height)
-        
         onTransformChange(transform)
+        // Update toolbar when zoom changes
+        renderCanvasToolbar()
       })
 
     svg.call(zoom)
 
-    // Set initial transform
-    const initialTransform = d3.zoomIdentity
+    // Set initial transform (not in dependencies to avoid infinite loop)
+    svg.call(zoom.transform, d3.zoomIdentity
       .translate(canvasTransform.x, canvasTransform.y)
-      .scale(canvasTransform.k)
-    svg.call(zoom.transform, initialTransform)
+      .scale(canvasTransform.k))
 
-    // Drag handlers
+    // Drag functions
     function dragStarted(this: any, event: any, d: WorkflowNode) {
-      draggedElementRef.current = d3.select(this)
+      // Small delay to allow double-click to be processed first
+      setTimeout(() => {
+        if (!d3.select(this).classed('dragging')) {
+          d3.select(this).classed('dragging', true)
+          draggedElementRef.current = d3.select(this)
+        }
+      }, 10)
       
+      const dragData = d as any
       const svgElement = svgRef.current!
-      const sourceEvent = event.sourceEvent || event
-      const [mouseX, mouseY] = d3.pointer(sourceEvent, svgElement)
+      const [mouseX, mouseY] = d3.pointer(event.sourceEvent, svgElement)
       const transform = d3.zoomTransform(svgElement)
       const [canvasX, canvasY] = transform.invert([mouseX, mouseY])
-
-      // Store drag start position
-      ;(d as any).dragStartX = canvasX
-      ;(d as any).dragStartY = canvasY
-      ;(d as any).initialX = d.x
-      ;(d as any).initialY = d.y
-
-      draggedElementRef.current
-        .raise()
-        .classed('dragging', true)
-        .style('cursor', 'grabbing')
+      
+      dragData.dragStartX = canvasX
+      dragData.dragStartY = canvasY
+      dragData.initialX = d.x
+      dragData.initialY = d.y
+      dragData.hasDragged = false
+      dragData.dragStartTime = Date.now()
     }
 
     function dragged(this: any, event: any, d: WorkflowNode) {
       const dragData = d as any
-      if (!draggedElementRef.current || dragData.dragStartX === undefined || dragData.dragStartY === undefined) return
       if (dragData.initialX === undefined || dragData.initialY === undefined) return
 
       const svgElement = svgRef.current!
@@ -250,35 +395,61 @@ export default function WorkflowCanvas({
       const deltaX = currentCanvasX - dragData.dragStartX
       const deltaY = currentCanvasY - dragData.dragStartY
 
+      // Mark as dragged if movement is significant (threshold to distinguish from click)
+      if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
+        dragData.hasDragged = true
+      }
+
       const newX = dragData.initialX + deltaX
       const newY = dragData.initialY + deltaY
 
       // Update visual position immediately
-      draggedElementRef.current.attr('transform', `translate(${newX}, ${newY})`)
+      if (draggedElementRef.current) {
+        draggedElementRef.current.attr('transform', `translate(${newX}, ${newY})`)
+      }
 
       // Update connections in real-time
       connectionLayer.selectAll('.connection path')
-        .attr('d', (conn: any) => generateWorkflowConnectionPath(conn, nodes, NODE_WIDTH))
+        .attr('d', (conn: any) => {
+          const sourceNode = nodes.find(n => n.id === conn.sourceNodeId)
+          const targetNode = nodes.find(n => n.id === conn.targetNodeId)
+          if (!sourceNode || !targetNode) return ''
+          return generateVariantAwareConnectionPath(
+            sourceNode, 
+            conn.sourcePortId, 
+            targetNode, 
+            conn.targetPortId,
+            nodeVariant
+          )
+        })
 
       // Notify parent component
       onNodeDrag(d.id, newX, newY)
     }
 
-    function dragEnded(this: any, _event: any, d: WorkflowNode) {
-      if (!draggedElementRef.current) return
+    function dragEnded(this: any, event: any, d: WorkflowNode) {
+      const dragData = d as any
+      const hasDragged = dragData.hasDragged
+      const dragDuration = Date.now() - (dragData.dragStartTime || 0)
 
       // Clean up drag state
-      const dragData = d as any
       delete dragData.dragStartX
       delete dragData.dragStartY
       delete dragData.initialX
       delete dragData.initialY
+      delete dragData.hasDragged
+      delete dragData.dragStartTime
 
-      draggedElementRef.current
-        .classed('dragging', false)
-        .style('cursor', 'move')
+      d3.select(this).classed('dragging', false)
+      if (draggedElementRef.current) {
+        draggedElementRef.current = null
+      }
 
-      draggedElementRef.current = null
+      // If no significant drag occurred and duration was short (not a double-click), treat as click
+      if (!hasDragged && event.sourceEvent && dragDuration > 200) { // Avoid conflicting with double-click
+        const ctrlKey = event.sourceEvent.ctrlKey || event.sourceEvent.metaKey
+        onNodeClick(d, ctrlKey)
+      }
     }
 
     // Render connections
@@ -289,7 +460,18 @@ export default function WorkflowCanvas({
       .attr('class', 'connection')
 
     connectionPaths.append('path')
-      .attr('d', d => generateWorkflowConnectionPath(d, nodes, NODE_WIDTH))
+      .attr('d', d => {
+        const sourceNode = nodes.find(n => n.id === d.sourceNodeId)
+        const targetNode = nodes.find(n => n.id === d.targetNodeId)
+        if (!sourceNode || !targetNode) return ''
+        return generateVariantAwareConnectionPath(
+          sourceNode, 
+          d.sourcePortId, 
+          targetNode, 
+          d.targetPortId,
+          nodeVariant
+        )
+      })
       .attr('stroke', d => selectedConnection?.id === d.id ? '#2196F3' : '#666')
       .attr('stroke-width', d => selectedConnection?.id === d.id ? 3 : 2)
       .attr('fill', 'none')
@@ -314,38 +496,27 @@ export default function WorkflowCanvas({
           .attr('marker-end', isSelected ? 'url(#arrowhead-selected)' : 'url(#arrowhead)')
       })
 
-    // Render connection preview - ปรับเงื่อนไขให้ flexible มากขึ้น
+    // Render connection preview
     if (isConnecting && connectionStart) {
       const sourceNode = nodes.find(n => n.id === connectionStart.nodeId)
       if (sourceNode && connectionPreview) {
-        const sourcePort = sourceNode.outputs.find(p => p.id === connectionStart.portId)
-        if (sourcePort) {
-          const sourceIndex = sourceNode.outputs.indexOf(sourcePort)
-          const startX = sourceNode.x + NODE_WIDTH / 2
-          const startY = sourceNode.y + 40 + sourceIndex * 30
-          
-          const dx = connectionPreview.x - startX
-          const dy = connectionPreview.y - startY
-          const controlOffset = Math.max(Math.abs(dx) / 2.5, 60)
-          
-          const cp1x = startX + controlOffset
-          const cp1y = startY + dy * 0.1
-          const cp2x = connectionPreview.x - controlOffset  
-          const cp2y = connectionPreview.y - dy * 0.1
-          
-          const previewPath = `M ${startX} ${startY} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${connectionPreview.x} ${connectionPreview.y}`
-          
-          g.append('path')
-            .attr('class', 'connection-preview')
-            .attr('d', previewPath)
-            .attr('stroke', '#2196F3')
-            .attr('stroke-width', 2)
-            .attr('stroke-dasharray', '5,5')
-            .attr('fill', 'none')
-            .attr('marker-end', 'url(#arrowhead)')
-            .attr('pointer-events', 'none')
-            .style('opacity', 0.7)
-        }
+        const previewPath = calculateConnectionPreviewPath(
+          sourceNode,
+          connectionStart.portId,
+          connectionPreview,
+          nodeVariant
+        )
+        
+        g.append('path')
+          .attr('class', 'connection-preview')
+          .attr('d', previewPath)
+          .attr('stroke', '#2196F3')
+          .attr('stroke-width', 2)
+          .attr('stroke-dasharray', '5,5')
+          .attr('fill', 'none')
+          .attr('marker-end', 'url(#arrowhead)')
+          .attr('pointer-events', 'none')
+          .style('opacity', 0.7)
       }
     }
 
@@ -358,11 +529,12 @@ export default function WorkflowCanvas({
     const nodeEnter = nodeSelection.enter()
       .append('g')
       .attr('class', 'node')
-      .attr('data-node-id', d => d.id)
-      .attr('transform', d => `translate(${d.x}, ${d.y})`)
+      .attr('data-node-id', (d: any) => d.id)
+      .attr('transform', (d: any) => `translate(${d.x}, ${d.y})`)
       .style('cursor', 'move')
       .call(d3.drag<any, WorkflowNode>()
         .container(g.node() as any)
+        .clickDistance(5) // Allow clicks within 5px movement
         .on('start', dragStarted)
         .on('drag', dragged)
         .on('end', dragEnded) as any)
@@ -374,193 +546,192 @@ export default function WorkflowCanvas({
       .filter(function() {
         return !d3.select(this).classed('dragging')
       })
-      .attr('transform', d => `translate(${d.x}, ${d.y})`)
+      .attr('transform', (d: any) => `translate(${d.x}, ${d.y})`)
+
+    // Get configurable dimensions based on variant
+    const getConfigurableDimensions = (node: WorkflowNode) => {
+      const dimensions = getNodeDimensions(node)
+      
+      // Adjust dimensions based on variant
+      switch (nodeVariant) {
+        case 'compact':
+          return {
+            ...dimensions,
+            width: dimensions.width * 0.8,
+            height: dimensions.height * 0.8
+          }
+        default: // standard
+          return dimensions
+      }
+    }
 
     // Node background
     nodeEnter.append('rect')
       .attr('class', 'node-background')
-      .attr('width', NODE_WIDTH)
-      .attr('x', -NODE_WIDTH / 2)
-      .attr('y', -20)
-      .attr('rx', 12)
-      .attr('fill', '#ffffff')
-      .on('click', (event, d) => {
-        const ctrlKey = event.ctrlKey || event.metaKey
-        onNodeClick(d, ctrlKey)
+      .on('click', (event: any, d: any) => {
+        // Only handle click if not dragging
+        if (!d3.select(event.currentTarget.parentNode).classed('dragging')) {
+          event.stopPropagation()
+          const ctrlKey = event.ctrlKey || event.metaKey
+          onNodeClick(d, ctrlKey)
+        }
       })
-      .on('dblclick', (_event, d) => {
+      .on('dblclick', (event: any, d: any) => {
+        // Always handle double-click immediately to prevent drag interference
+        event.stopPropagation()
+        event.preventDefault()
         onNodeDoubleClick(d)
       })
-    
+      
+    // Update node background attributes
     nodeGroups.select('.node-background')
-      .attr('height', d => getNodeHeight(d))
-      .attr('stroke', d => getNodeColor(d.type, d.status))
-      .attr('stroke-width', d => isNodeSelected(d.id) ? 3 : 2)
-      .style('filter', d => {
+      .attr('width', (d: any) => getConfigurableDimensions(d).width)
+      .attr('height', (d: any) => getConfigurableDimensions(d).height)
+      .attr('x', (d: any) => -getConfigurableDimensions(d).width / 2)
+      .attr('y', (d: any) => -getConfigurableDimensions(d).height / 2)
+      .attr('rx', 8)
+      .attr('fill', '#ffffff')
+      .attr('stroke', (d: any) => getNodeColor(d.type, d.status))
+      .attr('stroke-width', (d: any) => isNodeSelected(d.id) ? 3 : 2)
+      .style('filter', (d: any) => {
         if (d.status === 'running') return 'drop-shadow(0 0 8px rgba(255, 167, 38, 0.6))'
         if (isNodeSelected(d.id)) return 'drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))'
         return 'none'
       })
 
-    // Node status indicator
-    nodeEnter.append('circle')
-      .attr('class', 'node-status')
-      .attr('cx', NODE_WIDTH / 2 - 15)
-      .attr('cy', -15)
-      .attr('r', 4)
-    
-    nodeGroups.select('.node-status')
-      .attr('fill', d => {
-        switch (d.status) {
-          case 'running': return '#FFA726'
-          case 'completed': return '#66BB6A'
-          case 'error': return '#EF5350'
-          case 'warning': return '#FFCA28'
-          default: return '#9E9E9E'
-        }
-      })
-      .style('display', d => d.status && d.status !== 'idle' ? 'block' : 'none')
-
     // Node icon
     nodeEnter.append('text')
       .attr('class', 'node-icon')
-      .attr('x', -NODE_WIDTH / 2 + 15)
-      .attr('y', 5)
-      .attr('font-size', '20px')
+      .style('pointer-events', 'all')
+      .style('cursor', 'pointer')
+      .on('click', (event: any, d: any) => {
+        // Only handle click if not dragging
+        if (!d3.select(event.currentTarget.parentNode).classed('dragging')) {
+          event.stopPropagation()
+          const ctrlKey = event.ctrlKey || event.metaKey
+          onNodeClick(d, ctrlKey)
+        }
+      })
+      .on('dblclick', (event: any, d: any) => {
+        // Always handle double-click immediately to prevent drag interference
+        event.stopPropagation()
+        event.preventDefault()
+        onNodeDoubleClick(d)
+      })
     
     nodeGroups.select('.node-icon')
-      .text(d => getNodeIcon(d.type))
-
-    // Node title
-    nodeEnter.append('text')
-      .attr('class', 'node-title')
-      .attr('x', -NODE_WIDTH / 2 + 45)
-      .attr('y', -5)
-      .attr('font-weight', '600')
-      .attr('font-size', '14px')
+      .attr('x', 0)
+      .attr('y', -8)
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'middle')
+      .attr('font-size', (d: any) => getConfigurableDimensions(d).iconSize)
       .attr('fill', '#333')
-    
-    nodeGroups.select('.node-title')
-      .text(d => d.label)
+      .text((d: any) => getNodeIcon(d.type))
 
-    // Node type
+    // Node label
     nodeEnter.append('text')
-      .attr('class', 'node-type')
-      .attr('x', -NODE_WIDTH / 2 + 45)
-      .attr('y', 15)
-      .attr('font-size', '12px')
-      .attr('fill', '#666')
+      .attr('class', 'node-label')
+      .style('pointer-events', 'all')
+      .style('cursor', 'pointer')
+      .on('click', (event: any, d: any) => {
+        // Only handle click if not dragging
+        if (!d3.select(event.currentTarget.parentNode).classed('dragging')) {
+          event.stopPropagation()
+          const ctrlKey = event.ctrlKey || event.metaKey
+          onNodeClick(d, ctrlKey)
+        }
+      })
+      .on('dblclick', (event: any, d: any) => {
+        // Always handle double-click immediately to prevent drag interference
+        event.stopPropagation()
+        event.preventDefault()
+        onNodeDoubleClick(d)
+      })
     
-    nodeGroups.select('.node-type')
-      .text(d => d.type)
+    nodeGroups.select('.node-label')
+      .attr('x', 0)
+      .attr('y', 15)
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'middle')
+      .attr('font-size', (d: any) => getConfigurableDimensions(d).fontSize - 1)
+      .attr('font-weight', 'bold')
+      .attr('fill', '#333')
+      .text((d: any) => {
+        // Use the proper label from NodeTypes based on type, fallback to d.label
+        const nodeTypeInfo = NodeTypes[d.type as keyof typeof NodeTypes]
+        return nodeTypeInfo?.label || d.label || d.type
+      })
 
+    // Render simple ports for both variants
     // Input ports
-    const inputPortGroups = nodeEnter.selectAll('.input-port')
-      .data(d => d.inputs.map(input => ({ ...input, nodeId: d.id })))
-      .enter()
-      .append('g')
-      .attr('class', 'input-port')
+    const inputPortGroups = nodeGroups.selectAll('.input-port-group')
+      .data((d: any) => d.inputs.map((input: any) => ({ ...input, nodeId: d.id, nodeData: d })))
+      .join('g')
+      .attr('class', 'input-port-group')
       .style('cursor', 'crosshair')
       .style('pointer-events', 'all')
-      .on('click', (event, d: any) => {
+      .on('click', (event: any, d: any) => {
         event.stopPropagation()
         onPortClick(d.nodeId, d.id, 'input')
       })
 
-    nodeGroups.selectAll('.input-port')
-      .data((d: any) => d.inputs.map((input: any) => ({ ...input, nodeId: d.id })))
-      .attr('transform', (_d, i) => `translate(${-NODE_WIDTH / 2}, ${40 + i * 30})`)
-
+    inputPortGroups.selectAll('circle').remove()
     inputPortGroups.append('circle')
-      .attr('r', PORT_RADIUS)
-    
-    nodeGroups.each(function(nodeData: any) {
-      const nodeGroup = d3.select(this)
-      const inputPorts = nodeGroup.selectAll('.input-port circle')
-      
-      inputPorts
-        .attr('fill', (portData: any) => {
-          if (isConnecting && connectionStart && connectionStart.type === 'output') {
-            const canDrop = canDropOnPort(nodeData.id, portData.id)
-            return canDrop ? '#4CAF50' : getPortColor('any')
-          }
-          return getPortColor('any')
-        })
-        .attr('stroke', (portData: any) => {
-          if (isConnecting && connectionStart && connectionStart.type === 'output') {
-            const canDrop = canDropOnPort(nodeData.id, portData.id)
-            return canDrop ? '#4CAF50' : '#ff5722' // Green for valid, red for invalid
-          }
-          return '#333'
-        })
-        .attr('stroke-width', (portData: any) => {
-          if (isConnecting && connectionStart && connectionStart.type === 'output') {
-            const canDrop = canDropOnPort(nodeData.id, portData.id)
-            return canDrop ? 4 : 2 // Thicker border for valid drops
-          }
-          return 2
-        })
-        .style('filter', (portData: any) => {
-          if (isConnecting && connectionStart && connectionStart.type === 'output') {
-            const canDrop = canDropOnPort(nodeData.id, portData.id)
-            if (canDrop) {
-              return 'drop-shadow(0 0 6px rgba(76, 175, 80, 0.8))'
-            } else if (nodeData.id !== connectionStart.nodeId) {
-              return 'drop-shadow(0 0 4px rgba(255, 87, 34, 0.6))'
-            }
-          }
-          return 'none'
-        })
-    })
-
-    inputPortGroups.append('text')
-      .attr('x', -15)
-      .attr('y', 0)
-      .attr('dy', '0.35em')
-      .attr('text-anchor', 'end')
-      .attr('font-size', '10px')
-      .attr('fill', '#666')
-    
-    nodeGroups.each(function(nodeData: any) {
-      const nodeGroup = d3.select(this)
-      const inputTexts = nodeGroup.selectAll('.input-port text')
-      
-      inputTexts.each(function(_d, i) {
-        if (nodeData.inputs && nodeData.inputs[i]) {
-          d3.select(this).text(nodeData.inputs[i].label)
-        }
+      .attr('class', 'input-port-circle')
+      .attr('cx', (d: any) => {
+        const dimensions = getConfigurableDimensions(d.nodeData)
+        return -dimensions.width / 2
       })
-    })
+      .attr('cy', (_d: any, i: number) => {
+        const startY = nodeVariant === 'compact' ? -10 : 10
+        return startY + i * 25
+      })
+      .attr('r', (d: any) => getConfigurableDimensions(d.nodeData).portRadius)
+      .attr('fill', (d: any) => {
+        if (isConnecting && connectionStart && connectionStart.type === 'output') {
+          const canDrop = canDropOnPort(d.nodeId, d.id)
+          return canDrop ? '#4CAF50' : getPortColor('any')
+        }
+        return getPortColor('any')
+      })
+      .attr('stroke', (d: any) => {
+        if (isConnecting && connectionStart && connectionStart.type === 'output') {
+          const canDrop = canDropOnPort(d.nodeId, d.id)
+          return canDrop ? '#4CAF50' : '#ff5722'
+        }
+        return '#333'
+      })
+      .attr('stroke-width', 2)
 
     // Output ports
-    const outputPortGroups = nodeEnter.selectAll('.output-port')
-      .data(d => d.outputs.map(output => ({ ...output, nodeId: d.id })))
-      .enter()
-      .append('g')
-      .attr('class', 'output-port')
+    const outputPortGroups = nodeGroups.selectAll('.output-port-group')
+      .data((d: any) => d.outputs.map((output: any) => ({ ...output, nodeId: d.id, nodeData: d })))
+      .join('g')
+      .attr('class', 'output-port-group')
       .style('cursor', 'crosshair')
       .style('pointer-events', 'all')
+      .on('click', (event: any, d: any) => {
+        event.stopPropagation()
+        onPortClick(d.nodeId, d.id, 'output')
+      })
       .call(d3.drag<any, any>()
-        .on('start', (event, d: any) => {
+        .on('start', (event: any, d: any) => {
           event.sourceEvent.stopPropagation()
           event.sourceEvent.preventDefault()
           onPortDragStart(d.nodeId, d.id, 'output')
           
-          // ทันทีที่เริ่ม drag ให้ set initial position สำหรับ preview
-          const [x, y] = d3.pointer(event.sourceEvent, svgRef.current!)
-          const transform = d3.zoomTransform(svgRef.current!)
+          const [x, y] = d3.pointer(event.sourceEvent, event.sourceEvent.target.ownerSVGElement)
+          const transform = d3.zoomTransform(event.sourceEvent.target.ownerSVGElement)
           const [canvasX, canvasY] = transform.invert([x, y])
           onPortDrag(canvasX, canvasY)
         })
-        .on('drag', (event) => {
-          // Get mouse position in canvas coordinates
-          const [x, y] = d3.pointer(event.sourceEvent, svgRef.current!)
-          const transform = d3.zoomTransform(svgRef.current!)
+        .on('drag', (event: any) => {
+          const [x, y] = d3.pointer(event.sourceEvent, event.sourceEvent.target.ownerSVGElement)
+          const transform = d3.zoomTransform(event.sourceEvent.target.ownerSVGElement)
           const [canvasX, canvasY] = transform.invert([x, y])
           onPortDrag(canvasX, canvasY)
         })
-        .on('end', (event, d: any) => {
-          // Find what we dropped on
+        .on('end', (event: any) => {
           const elementsUnderMouse = document.elementsFromPoint(
             event.sourceEvent.clientX,
             event.sourceEvent.clientY
@@ -569,14 +740,12 @@ export default function WorkflowCanvas({
           let targetNodeId: string | undefined
           let targetPortId: string | undefined
           
-          // Look for input port under mouse
           for (const element of elementsUnderMouse) {
-            if (element.closest('.input-port')) {
-              const inputPortGroup = element.closest('.input-port')
+            if (element.closest('.input-port-group')) {
+              const inputPortGroup = element.closest('.input-port-group')
               const nodeGroup = inputPortGroup?.closest('g[data-node-id]')
               if (nodeGroup && inputPortGroup) {
                 targetNodeId = nodeGroup.getAttribute('data-node-id') || undefined
-                // Get port data from D3
                 const portData = d3.select(inputPortGroup).datum() as any
                 targetPortId = portData?.id
                 break
@@ -588,73 +757,36 @@ export default function WorkflowCanvas({
         })
       )
 
-    nodeGroups.selectAll('.output-port')
-      .data((d: any) => d.outputs.map((output: any) => ({ ...output, nodeId: d.id })))
-      .attr('transform', (_d, i) => `translate(${NODE_WIDTH / 2}, ${40 + i * 30})`)
-
+    outputPortGroups.selectAll('circle').remove()
     outputPortGroups.append('circle')
-      .attr('r', PORT_RADIUS)
-    
-    nodeGroups.each(function(nodeData: any) {
-      const nodeGroup = d3.select(this)
-      const outputPorts = nodeGroup.selectAll('.output-port circle')
-      
-      outputPorts
-        .attr('fill', () => getPortColor('any'))
-        .attr('stroke', () => {
-          if (isConnecting && connectionStart && connectionStart.nodeId === nodeData.id) {
-            return '#2196F3'
-          }
-          return '#333'
-        })
-        .attr('stroke-width', () => {
-          if (isConnecting && connectionStart && connectionStart.nodeId === nodeData.id) {
-            return 3
-          }
-          return 2
-        })
-        .style('filter', () => {
-          if (isConnecting && connectionStart && connectionStart.nodeId === nodeData.id) {
-            return 'drop-shadow(0 0 4px rgba(33, 150, 243, 0.6))'
-          }
-          return 'none'
-        })
-    })
-
-    outputPortGroups.append('text')
-      .attr('x', 15)
-      .attr('y', 0)
-      .attr('dy', '0.35em')
-      .attr('text-anchor', 'start')
-      .attr('font-size', '10px')
-      .attr('fill', '#666')
-    
-    nodeGroups.each(function(nodeData: any) {
-      const nodeGroup = d3.select(this)
-      const outputTexts = nodeGroup.selectAll('.output-port text')
-      
-      outputTexts.each(function(_d, i) {
-        if (nodeData.outputs && nodeData.outputs[i]) {
-          d3.select(this).text(nodeData.outputs[i].label)
-        }
+      .attr('class', 'output-port-circle')
+      .attr('cx', (d: any) => {
+        const dimensions = getConfigurableDimensions(d.nodeData)
+        return dimensions.width / 2
       })
-    })
+      .attr('cy', (_d: any, i: number) => {
+        const startY = nodeVariant === 'compact' ? -10 : 10
+        return startY + i * 25
+      })
+      .attr('r', (d: any) => getConfigurableDimensions(d.nodeData).portRadius)
+      .attr('fill', () => getPortColor('any'))
+      .attr('stroke', '#333')
+      .attr('stroke-width', 2)
 
-    // Canvas click handler
+    // Canvas event handlers
     svg.on('click', () => {
       onCanvasClick()
     })
 
-    // Mouse move handler for connection preview
     svg.on('mousemove', (event) => {
-      if (isConnecting && connectionStart) {
-        const svgElement = svgRef.current!
-        const [mouseX, mouseY] = d3.pointer(event, svgElement)
-        const transform = d3.zoomTransform(svgElement)
-        const [x, y] = transform.invert([mouseX, mouseY])
-        onCanvasMouseMove(x, y)
-      }
+      const [x, y] = d3.pointer(event, svg.node())
+      const transform = d3.zoomTransform(svg.node() as any)
+      const [canvasX, canvasY] = transform.invert([x, y])
+      onCanvasMouseMove(canvasX, canvasY)
     })
+
+    // Initial toolbar render
+    renderCanvasToolbar()
 
     // Cleanup function
     return () => {
@@ -663,9 +795,9 @@ export default function WorkflowCanvas({
 
   }, [
     nodes, 
-    connections, 
+    connections,
     showGrid, 
-    canvasTransform, 
+    nodeVariant,
     selectedNodes, 
     selectedConnection, 
     isConnecting, 
@@ -684,8 +816,17 @@ export default function WorkflowCanvas({
     canDropOnPort,
     canDropOnNode,
     onTransformChange,
+    onZoomLevel,
     isNodeSelected,
-    createGrid
+    createGrid,
+    canvasTransform.k,
+    onToggleGrid,
+    onVariantChange,
+    onZoomIn,
+    onZoomOut,
+    onFitToScreen,
+    onResetPosition,
+    executionStatus
   ])
 
   return null // This component only manages D3 rendering

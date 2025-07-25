@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react'
-import { Search, Star, Download, Eye, Clock, Tag } from 'lucide-react'
-import { WorkflowService } from '../services/workflow.service'
+import { useState } from 'react'
+import { Download, Search, Star, Clock, Tag, Eye } from 'lucide-react'
+// import { WorkflowService } from '../services/workflow.service'
 
 interface WorkflowTemplate {
   id: string
@@ -111,7 +111,7 @@ const mockTemplates: WorkflowTemplate[] = [
 const categories = Array.from(new Set(mockTemplates.map(t => t.category)))
 
 export default function WorkflowTemplates({ onUseTemplate }: WorkflowTemplatesProps) {
-  const [templates, setTemplates] = useState<WorkflowTemplate[]>(mockTemplates)
+  const [templates] = useState<WorkflowTemplate[]>(mockTemplates)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<'downloads' | 'rating' | 'recent'>('downloads')

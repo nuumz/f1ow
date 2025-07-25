@@ -12,16 +12,19 @@ import { useConnections } from './hooks/useConnections'
 // import { useDragOperations } from './hooks/useDragOperations' // Available for future use
 
 // Import components
-import CanvasToolbar from './components/CanvasToolbar'
 import WorkflowCanvas from './components/WorkflowCanvas'
 import NodePalette from '../NodePalette'
 import NodeEditor from '../NodeEditor'
+
+// Import node renderer types
+import type { NodeVariant } from './components/nodes/NodeRenderer'
 
 // Import utilities
 import { createNode, getNodeHeight } from './utils/node-utils'
 
 // Types
 import type { WorkflowNode } from './hooks/useNodeSelection'
+import CanvasToolbar from './components/CanvasToolbar'
 
 interface ExecutionState {
   status: 'idle' | 'running' | 'completed' | 'error' | 'paused'
@@ -48,6 +51,9 @@ export default function WorkflowDesigner() {
   const [showGrid, setShowGrid] = useState(true)
   const [showNodeEditor, setShowNodeEditor] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
+  
+  // Node rendering configuration
+  const [nodeVariant, setNodeVariant] = useState<NodeVariant>('standard')
   
   // Execution state
   const [executionState, setExecutionState] = useState<ExecutionState>({ 
@@ -480,13 +486,14 @@ export default function WorkflowDesigner() {
             height="100%"
           />
 
-          {/* Workflow Canvas with D3 Integration */}
+          {/* Workflow Canvas with D3 Integration and Embedded Toolbar */}
           <WorkflowCanvas
             svgRef={svgRef}
             nodes={nodes}
             connections={connections.connections}
             showGrid={showGrid}
             canvasTransform={canvasTransform.canvasTransformRef.current || { x: 0, y: 0, k: 1 }}
+            nodeVariant={nodeVariant}
             selectedNodes={nodeSelection.selectedNodes}
             selectedConnection={connections.selectedConnection}
             isNodeSelected={nodeSelection.isNodeSelected}
@@ -506,20 +513,29 @@ export default function WorkflowDesigner() {
             canDropOnPort={connections.canDropOnPort}
             canDropOnNode={connections.canDropOnNode}
             onTransformChange={handleTransformChange}
+            onToggleGrid={() => setShowGrid(!showGrid)}
+            onVariantChange={setNodeVariant}
+            onZoomIn={canvasTransform.zoomIn}
+            onZoomOut={canvasTransform.zoomOut}
+            onFitToScreen={() => canvasTransform.fitToScreen(nodes)}
+            onResetPosition={() => canvasTransform.resetCanvasPosition(nodes, getNodeHeight)}
+            executionStatus={executionState.status === 'paused' ? 'idle' : executionState.status}
           />
 
           {/* Canvas Toolbar */}
-          <CanvasToolbar
-            zoomLevel={canvasTransform.zoomLevel}
+          {/* <CanvasToolbar
+            zoomLevel={canvasTransform.canvasTransformRef.current?.k || 1}
             showGrid={showGrid}
             onToggleGrid={() => setShowGrid(!showGrid)}
+            nodeVariant={nodeVariant}
+            onVariantChange={setNodeVariant}
             onZoomIn={canvasTransform.zoomIn}
             onZoomOut={canvasTransform.zoomOut}
             onFitToScreen={() => canvasTransform.fitToScreen(nodes)}
             onResetPosition={() => canvasTransform.resetCanvasPosition(nodes, getNodeHeight)}
             executionStatus={executionState.status === 'paused' ? 'idle' : executionState.status}
             selectedNodeCount={nodeSelection.selectedNodes.size}
-          />
+          /> */}
         </div>
 
         {/* Right Sidebar - Node Editor */}

@@ -21,55 +21,55 @@ export const NODE_WIDTH = 200
 export const NODE_MIN_HEIGHT = 80
 export const PORT_RADIUS = 6
 
-// Enhanced node type definitions with comprehensive n8n compatibility
+// Enhanced node type definitions with SVG-compatible icons
 export const NodeTypes = {
   // Core/Control Flow nodes
-  start: { icon: '▶️', color: '#4CAF50', label: 'Start' },
-  if: { icon: '❓', color: '#FF9800', label: 'IF' },
-  switch: { icon: '🔀', color: '#9C27B0', label: 'Switch' },
-  merge: { icon: '🔗', color: '#607D8B', label: 'Merge' },
-  split: { icon: '✂️', color: '#795548', label: 'Split In Batches' },
-  loop: { icon: '🔁', color: '#00BCD4', label: 'Loop Over Items' },
-  wait: { icon: '⏳', color: '#FFEB3B', label: 'Wait' },
-  stop: { icon: '🛑', color: '#F44336', label: 'Stop and Error' },
+  start: { icon: '▶', color: '#4CAF50', label: 'Start' },
+  if: { icon: '?', color: '#FF9800', label: 'IF' },
+  switch: { icon: '⋔', color: '#9C27B0', label: 'Switch' },
+  merge: { icon: '⋈', color: '#607D8B', label: 'Merge' },
+  split: { icon: '✂', color: '#795548', label: 'Split In Batches' },
+  loop: { icon: '↻', color: '#00BCD4', label: 'Loop Over Items' },
+  wait: { icon: '⏸', color: '#FFEB3B', label: 'Wait' },
+  stop: { icon: '■', color: '#F44336', label: 'Stop and Error' },
   
   // Data Processing nodes
-  set: { icon: '📝', color: '#2196F3', label: 'Set' },
-  edit: { icon: '✏️', color: '#3F51B5', label: 'Edit Fields' },
-  code: { icon: '💻', color: '#4CAF50', label: 'Code' },
-  function: { icon: '⚙️', color: '#9E9E9E', label: 'Function' },
-  filter: { icon: '🔍', color: '#FF5722', label: 'Filter' },
-  sort: { icon: '🔢', color: '#673AB7', label: 'Sort' },
-  limit: { icon: '📏', color: '#009688', label: 'Limit' },
-  aggregate: { icon: '📊', color: '#E91E63', label: 'Aggregate' },
+  set: { icon: '≔', color: '#2196F3', label: 'Set' },
+  edit: { icon: '✎', color: '#3F51B5', label: 'Edit Fields' },
+  code: { icon: '</>', color: '#4CAF50', label: 'Code' },
+  function: { icon: 'ƒ', color: '#9E9E9E', label: 'Function' },
+  filter: { icon: '⊍', color: '#FF5722', label: 'Filter' },
+  sort: { icon: '⇅', color: '#673AB7', label: 'Sort' },
+  limit: { icon: '⊤', color: '#009688', label: 'Limit' },
+  aggregate: { icon: '∑', color: '#E91E63', label: 'Aggregate' },
   
   // Network nodes
-  http: { icon: '🌐', color: '#2196F3', label: 'HTTP Request' },
-  webhook: { icon: '🔗', color: '#607D8B', label: 'Webhook' },
+  http: { icon: '⌘', color: '#2196F3', label: 'HTTP Request' },
+  webhook: { icon: '⚡', color: '#607D8B', label: 'Webhook' },
   
   // Database nodes
-  mysql: { icon: '🐬', color: '#00758F', label: 'MySQL' },
-  postgres: { icon: '🐘', color: '#336791', label: 'PostgreSQL' },
-  mongodb: { icon: '🍃', color: '#47A248', label: 'MongoDB' },
-  redis: { icon: '🔴', color: '#DC382D', label: 'Redis' },
+  mysql: { icon: 'DB', color: '#00758F', label: 'MySQL' },
+  postgres: { icon: 'PG', color: '#336791', label: 'PostgreSQL' },
+  mongodb: { icon: 'MG', color: '#47A248', label: 'MongoDB' },
+  redis: { icon: 'RD', color: '#DC382D', label: 'Redis' },
   
   // Communication nodes
-  email: { icon: '📧', color: '#EA4335', label: 'Email Send' },
-  gmail: { icon: '📮', color: '#EA4335', label: 'Gmail' },
-  slack: { icon: '💬', color: '#4A154B', label: 'Slack' },
-  discord: { icon: '🎮', color: '#5865F2', label: 'Discord' },
-  telegram: { icon: '📱', color: '#0088CC', label: 'Telegram' },
+  email: { icon: '✉', color: '#EA4335', label: 'Email Send' },
+  gmail: { icon: 'GM', color: '#EA4335', label: 'Gmail' },
+  slack: { icon: 'SL', color: '#4A154B', label: 'Slack' },
+  discord: { icon: 'DC', color: '#5865F2', label: 'Discord' },
+  telegram: { icon: 'TG', color: '#0088CC', label: 'Telegram' },
   
   // File Operations nodes
-  readfile: { icon: '📁', color: '#FFC107', label: 'Read Binary File' },
+  readfile: { icon: '📖', color: '#FFC107', label: 'Read Binary File' },
   writefile: { icon: '💾', color: '#FF9800', label: 'Write Binary File' },
-  ftp: { icon: '🌐', color: '#795548', label: 'FTP' },
-  sftp: { icon: '🔒', color: '#607D8B', label: 'SFTP' },
+  ftp: { icon: 'FTP', color: '#795548', label: 'FTP' },
+  sftp: { icon: 'SFTP', color: '#607D8B', label: 'SFTP' },
   
   // Cloud Services nodes
-  aws: { icon: '☁️', color: '#FF9900', label: 'AWS' },
-  gcloud: { icon: '🌤️', color: '#4285F4', label: 'Google Cloud' },
-  azure: { icon: '⛅', color: '#0078D4', label: 'Microsoft Azure' },
+  aws: { icon: 'AWS', color: '#FF9900', label: 'AWS' },
+  gcloud: { icon: 'GCP', color: '#4285F4', label: 'Google Cloud' },
+  azure: { icon: 'AZ', color: '#0078D4', label: 'Microsoft Azure' },
   
   // Triggers nodes
   schedule: { icon: '⏰', color: '#FFC107', label: 'Schedule Trigger' },

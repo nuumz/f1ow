@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import { Plus, Play, Edit, Trash2, Search, Filter, Calendar } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Plus, Play, Edit, Trash2, Search, Calendar } from 'lucide-react'
 import { WorkflowService, Workflow } from '../services/workflow.service'
 
 export default function WorkflowList() {

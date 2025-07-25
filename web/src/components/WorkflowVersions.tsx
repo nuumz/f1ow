@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { GitBranch, Clock, User, Tag, Download, Eye, Plus, RotateCcw, AlertCircle } from 'lucide-react'
 
 interface WorkflowVersion {
@@ -26,8 +26,8 @@ export default function WorkflowVersions({ workflowId, onVersionSelect, onCreate
   const [versions, setVersions] = useState<WorkflowVersion[]>([])
   const [selectedVersion, setSelectedVersion] = useState<WorkflowVersion | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [showDiffModal, setShowDiffModal] = useState(false)
-  const [compareVersions, setCompareVersions] = useState<[WorkflowVersion, WorkflowVersion] | null>(null)
+  // const [showDiffModal, setShowDiffModal] = useState(false)
+  // const [compareVersions, setCompareVersions] = useState<[WorkflowVersion, WorkflowVersion] | null>(null)
   const [newVersionData, setNewVersionData] = useState({ name: '', description: '' })
 
   // Mock data for demonstration
@@ -145,10 +145,10 @@ export default function WorkflowVersions({ workflowId, onVersionSelect, onCreate
     }
   }
 
-  const handleCompareVersions = (v1: WorkflowVersion, v2: WorkflowVersion) => {
-    setCompareVersions([v1, v2])
-    setShowDiffModal(true)
-  }
+  // const handleCompareVersions = (v1: WorkflowVersion, v2: WorkflowVersion) => {
+  //   setCompareVersions([v1, v2])
+  //   setShowDiffModal(true)
+  // }
 
   return (
     <div className="workflow-versions">
@@ -271,33 +271,33 @@ export default function WorkflowVersions({ workflowId, onVersionSelect, onCreate
               <div className="version-detail-grid">
                 <div className="detail-item">
                   <label>Name:</label>
-                  <value>{selectedVersion.name}</value>
+                  <span>{selectedVersion.name}</span>
                 </div>
                 <div className="detail-item">
                   <label>Version:</label>
-                  <value>{selectedVersion.version}</value>
+                  <span>{selectedVersion.version}</span>
                 </div>
                 <div className="detail-item">
                   <label>Status:</label>
-                  <value style={{ color: getStatusColor(selectedVersion.status) }}>
+                  <span style={{ color: getStatusColor(selectedVersion.status) }}>
                     {selectedVersion.status.toUpperCase()}
-                  </value>
+                  </span>
                 </div>
                 <div className="detail-item">
                   <label>Author:</label>
-                  <value>{selectedVersion.author}</value>
+                  <span>{selectedVersion.author}</span>
                 </div>
                 <div className="detail-item">
                   <label>Created:</label>
-                  <value>{formatDate(selectedVersion.createdAt)}</value>
+                  <span>{formatDate(selectedVersion.createdAt)}</span>
                 </div>
                 <div className="detail-item">
                   <label>Nodes:</label>
-                  <value>{selectedVersion.nodeCount}</value>
+                  <span>{selectedVersion.nodeCount}</span>
                 </div>
                 <div className="detail-item">
                   <label>Executions:</label>
-                  <value>{selectedVersion.executionCount}</value>
+                  <span>{selectedVersion.executionCount}</span>
                 </div>
               </div>
               

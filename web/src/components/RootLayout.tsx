@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
 import { Home, Workflow, Play, BarChart3, Shield, GitBranch, Code, ChevronDown, Settings } from 'lucide-react'
 

@@ -1,9 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import * as d3 from 'd3'
-import { Plus, Save, Play, Trash2 } from 'lucide-react'
+import { Save, Play } from 'lucide-react'
 import NodePalette from './NodePalette'
 import NodeEditor from './NodeEditor'
+import CanvasToolbar from './workflow-designer/components/CanvasToolbar'
 import { WorkflowService } from '../services/workflow.service'
+import './workflow-designer/WorkflowDesigner.css'
 
 interface Node {
   id: string
@@ -28,13 +30,62 @@ export default function WorkflowDesigner() {
   const [isConnecting, setIsConnecting] = useState(false)
   const [connectionStart, setConnectionStart] = useState<string | null>(null)
   const [showGrid, setShowGrid] = useState(true)
+  const [zoomLevel] = useState(1)
+
+  // Zoom functions for CanvasToolbar
+  const handleZoomIn = () => {
+    if (svgRef.current) {
+      const svg = d3.select(svgRef.current)
+      const zoom = d3.zoom<SVGSVGElement, unknown>().scaleExtent([0.1, 5])
+      zoom.scaleBy(svg as any, 1.2)
+    }
+  }
+
+  const handleZoomOut = () => {
+    if (svgRef.current) {
+      const svg = d3.select(svgRef.current)
+      const zoom = d3.zoom<SVGSVGElement, unknown>().scaleExtent([0.1, 5])
+      zoom.scaleBy(svg as any, 0.8)
+    }
+  }
+
+  const handleFitToScreen = () => {
+    if (svgRef.current && nodes.length > 0) {
+      const svg = d3.select(svgRef.current)
+      const zoom = d3.zoom<SVGSVGElement, unknown>()
+      
+      // Calculate bounds of all nodes
+      const bounds = {
+        minX: Math.min(...nodes.map(n => n.x)),
+        maxX: Math.max(...nodes.map(n => n.x)),
+        minY: Math.min(...nodes.map(n => n.y)),
+        maxY: Math.max(...nodes.map(n => n.y))
+      }
+      
+      const width = bounds.maxX - bounds.minX + 200
+      const height = bounds.maxY - bounds.minY + 200
+      const scale = Math.min(800 / width, 600 / height, 1)
+      
+      const transform = d3.zoomIdentity
+        .translate(400 - (bounds.minX + bounds.maxX) * scale / 2, 300 - (bounds.minY + bounds.maxY) * scale / 2)
+        .scale(scale)
+      
+      zoom.transform(svg as any, transform)
+    }
+  }
+
+  const handleResetPosition = () => {
+    if (svgRef.current) {
+      const svg = d3.select(svgRef.current)
+      const zoom = d3.zoom<SVGSVGElement, unknown>()
+      zoom.transform(svg as any, d3.zoomIdentity)
+    }
+  }
 
   useEffect(() => {
     if (!svgRef.current) return
 
     const svg = d3.select(svgRef.current)
-    const width = 1200
-    const height = 600
 
     // Clear previous content
     svg.selectAll("*").remove()
@@ -170,7 +221,7 @@ export default function WorkflowDesigner() {
         })
     }
 
-    function dragstarted(event: any, d: Node) {
+    function dragstarted(event: any, _d: Node) {
       d3.select(event.currentTarget).raise()
     }
 
@@ -182,7 +233,7 @@ export default function WorkflowDesigner() {
       updateLinks()
     }
 
-    function dragended(event: any, d: Node) {
+    function dragended(_event: any, d: Node) {
       // Update node position
       setNodes(prev => prev.map(n => n.id === d.id ? { ...n, x: d.x, y: d.y } : n))
     }
@@ -325,6 +376,22 @@ export default function WorkflowDesigner() {
               🔗 Click on a target node to create connection
             </div>
           )}
+          
+          {/* Canvas Toolbar */}
+          <CanvasToolbar
+            zoomLevel={zoomLevel}
+            showGrid={showGrid}
+            onToggleGrid={() => setShowGrid(!showGrid)}
+            onZoomIn={handleZoomIn}
+            onZoomOut={handleZoomOut}
+            onFitToScreen={handleFitToScreen}
+            onResetPosition={handleResetPosition}
+            onSave={saveWorkflow}
+            onExecute={executeWorkflow}
+            executionStatus="idle"
+            selectedNodeCount={selectedNode ? 1 : 0}
+          />
+          
           <svg ref={svgRef} width="100%" height="600">
             <defs>
               <marker

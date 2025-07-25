@@ -5,6 +5,7 @@ import React from 'react'
 import RootLayout from './components/RootLayout'
 import Dashboard from './components/Dashboard'
 import AdvancedWorkflowDesigner from './components/AdvancedWorkflowDesigner'
+import WorkflowDesigner from './components/workflow-designer/WorkflowDesigner'
 import WorkflowList from './components/WorkflowList'
 import ExecutionHistory from './components/ExecutionHistory'
 import DataMapper from './components/DataMapper'
@@ -36,12 +37,19 @@ const workflowsRoute = createRoute({
 const designerRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/designer',
-  component: AdvancedWorkflowDesigner
+  component: WorkflowDesigner
 })
 
 const designerIdRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/designer/$id',
+  component: WorkflowDesigner
+})
+
+// Legacy designer route for comparison
+const designerLegacyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/designer-legacy',
   component: AdvancedWorkflowDesigner
 })
 
@@ -90,7 +98,6 @@ const mapperRoute = createRoute({
       sourceData: {},
       targetSchema: {},
       mappings: [],
-      onMappingChange: () => {}
     })
   }
 })
@@ -153,6 +160,7 @@ const routeTree = rootRoute.addChildren([
   workflowsRoute,
   designerRoute,
   designerIdRoute,
+  designerLegacyRoute,
   templatesRoute,
   credentialsRoute,
   executionsRoute,

@@ -1,11 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { 
-  Play, 
   CheckCircle, 
   XCircle, 
   Clock, 
   Search, 
-  Filter,
   RefreshCw,
   Calendar,
   Timer,

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import * as d3 from 'd3'
-import { Save, Play, ZoomIn, ZoomOut, Download, Upload, Maximize2, Eye, EyeOff, Trash2, RotateCcw } from 'lucide-react'
+import { Save, Play, ZoomIn, ZoomOut, Download, Upload, Maximize2, Trash2, RotateCcw } from 'lucide-react'
 import NodePalette from './NodePalette'
 import NodeEditor from './NodeEditor'
 
@@ -129,7 +129,7 @@ export default function AdvancedWorkflowDesigner() {
   const [connectionStart, setConnectionStart] = useState<{nodeId: string, portId: string, type: 'input' | 'output'} | null>(null)
   const [connectionPreview, setConnectionPreview] = useState<{x: number, y: number} | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
-  const [showGrid, setShowGrid] = useState(true)
+  const [showGrid] = useState(true) // Static grid display for now
   const [zoomLevel, setZoomLevel] = useState(1) // Keep for display purposes
   const zoomLevelRef = useRef(1)
   

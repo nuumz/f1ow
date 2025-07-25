@@ -6,7 +6,9 @@
       "Bash(curl:*)",
       "Bash(pnpm run lint:*)",
       "Bash(npx tsc:*)",
-      "Bash(npm run lint)"
+      "Bash(npm run lint)",
+      "Bash(mkdir:*)",
+      "Bash(touch:*)"
     ],
     "deny": []
   }

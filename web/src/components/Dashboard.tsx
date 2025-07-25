@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Activity,
   TrendingUp,
   Clock,
   CheckCircle,
   XCircle,
-  Users,
   Workflow,
   Zap,
   BarChart3,

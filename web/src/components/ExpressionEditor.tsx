@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useRef } from 'react'
 import { Code, Book, Lightbulb, Check, X, ChevronDown } from 'lucide-react'
 
 interface ExpressionSuggestion {

@@ -1,28 +1,7 @@
 import { useState, useCallback } from 'react'
+import type { WorkflowNode } from '../types'
 
-export interface WorkflowNode {
-  id: string
-  type: string
-  label: string
-  x: number
-  y: number
-  width?: number
-  height?: number
-  config: any
-  inputs: any[]
-  outputs: any[]
-  status?: 'idle' | 'running' | 'completed' | 'error' | 'warning'
-  data?: any
-  locked?: boolean
-  selected?: boolean
-  group?: string
-  metadata?: {
-    description?: string
-    version?: string
-    author?: string
-    tags?: string[]
-  }
-}
+export type { WorkflowNode } from '../types' // Re-export for backward compatibility
 
 export interface UseNodeSelectionProps {
   nodes: WorkflowNode[]

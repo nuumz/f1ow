@@ -1,46 +1,8 @@
-import type { WorkflowNode } from '../../hooks/useNodeSelection'
+import type { WorkflowNode, NodeTheme, NodeRenderProps } from '../../types'
 import { CompactNode } from './variants/CompactNode'
 import { StandardNode } from './variants/StandardNode'
 
-export type NodeVariant = 'compact' | 'standard'
-// Single size - remove NodeSize type
-
-export interface NodeTheme {
-  backgroundColor: string
-  borderColor: string
-  textColor: string
-  accentColor: string
-  shadowColor?: string
-  borderRadius?: number
-  borderWidth?: number
-}
-
-export interface NodeRenderProps {
-  node: WorkflowNode
-  variant?: NodeVariant
-  theme?: Partial<NodeTheme>
-  isSelected?: boolean
-  isConnecting?: boolean
-  isDragging?: boolean
-  showPorts?: boolean
-  showLabel?: boolean
-  showIcon?: boolean
-  showStatus?: boolean
-  customWidth?: number
-  customHeight?: number
-  
-  // Event handlers
-  onNodeClick?: (node: WorkflowNode, ctrlKey: boolean) => void
-  onNodeDoubleClick?: (node: WorkflowNode) => void
-  onPortClick?: (nodeId: string, portId: string, portType: 'input' | 'output') => void
-  onPortDragStart?: (nodeId: string, portId: string, portType: 'input' | 'output') => void
-  onPortDrag?: (x: number, y: number) => void
-  onPortDragEnd?: (targetNodeId?: string, targetPortId?: string) => void
-  
-  // Visual feedback for connections
-  canDropOnPort?: (targetNodeId: string, targetPortId: string) => boolean
-  canDropOnNode?: (targetNodeId: string) => boolean
-}
+export type { NodeVariant, NodeTheme, NodeRenderProps } from '../../types'
 
 /**
  * Main NodeRenderer component that delegates to specific variant components

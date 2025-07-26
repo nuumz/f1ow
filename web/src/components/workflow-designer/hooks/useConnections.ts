@@ -1,26 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
-import type { WorkflowNode } from './useNodeSelection'
+import type { WorkflowNode, Connection, ConnectionStart } from '../types'
 
-export interface Connection {
-  id: string
-  sourceNodeId: string
-  sourcePortId: string
-  targetNodeId: string
-  targetPortId: string
-  validated?: boolean
-  dataFlow?: any
-  style?: {
-    color?: string
-    strokeWidth?: number
-    animated?: boolean
-  }
-}
-
-export interface ConnectionStart {
-  nodeId: string
-  portId: string
-  type: 'input' | 'output'
-}
+export type { Connection, ConnectionStart } from '../types' // Re-export for backward compatibility
 
 export interface UseConnectionsProps {
   nodes: WorkflowNode[]

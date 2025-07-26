@@ -52,7 +52,7 @@ export function useWorkflowCanvas() {
   }, [state.workflowName])
 
 
-  const resetCanvasPosition = useCallback((nodes?: WorkflowNode[], getNodeHeightFn = getNodeHeight) => {
+  const resetCanvasPosition = useCallback((nodes?: WorkflowNode[]) => {
     const nodesToUse = nodes || state.nodes
     
     if (!svgRef.current) {

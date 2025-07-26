@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import * as d3 from 'd3'
-import type { WorkflowNode } from '../hooks/useNodeSelection'
-import type { Connection } from '../hooks/useConnections'
+import type { WorkflowNode, Connection, NodeVariant } from '../types'
 import { getVisibleCanvasBounds } from '../utils/canvas-utils'
 import { 
   getNodeColor, 
@@ -9,7 +8,7 @@ import {
   getNodeIcon,
   NodeTypes
 } from '../utils/node-utils'
-import { type NodeVariant, getNodeDimensions } from './nodes/NodeRenderer'
+import { getNodeDimensions } from './nodes/NodeRenderer'
 import { generateVariantAwareConnectionPath, calculateConnectionPreviewPath } from '../utils/connection-utils'
 
 export interface WorkflowCanvasProps {
@@ -1006,14 +1005,14 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           console.log('🚀 Output port drag START:', d.nodeId, d.id)
           onPortDragStart(d.nodeId, d.id, 'output')
         })
-        .on('drag', (event: any, d: any) => {
+        .on('drag', (event: any) => {
           const [x, y] = d3.pointer(event.sourceEvent, event.sourceEvent.target.ownerSVGElement)
           const transform = d3.zoomTransform(event.sourceEvent.target.ownerSVGElement)
           const [canvasX, canvasY] = transform.invert([x, y])
           console.log('🚀 Output port DRAGGING to:', canvasX, canvasY)
           onPortDrag(canvasX, canvasY)
         })
-        .on('end', (event: any, d: any) => {
+        .on('end', (event: any) => {
           console.log('🚀 Output port drag END')
           
           // Get correct SVG element and apply zoom transform

@@ -2,7 +2,7 @@ import { ZoomIn, ZoomOut, Maximize2, Eye, EyeOff, RotateCcw, Play, Save, Trash2 
 import './CanvasToolbar.css'
 
 // Import types
-import type { NodeVariant } from './nodes/NodeRenderer'
+import type { NodeVariant } from '../types'
 
 export interface CanvasToolbarProps {
   // Zoom state

@@ -1,53 +1,17 @@
 import React, { createContext, useContext, useReducer, useCallback, useRef, ReactNode, useMemo, useEffect } from 'react'
 
-// Types
-import type { WorkflowNode } from '../hooks/useNodeSelection'
-import type { Connection } from '../hooks/useConnections'
-import type { NodeVariant } from '../components/nodes/NodeRenderer'
+// Import centralized types
+import type { 
+  WorkflowNode, 
+  Connection, 
+  NodeVariant,
+  ExecutionState,
+  CanvasTransform,
+  ConnectionState,
+  UIState
+} from '../types'
 
-// Execution state interface
-interface ExecutionState {
-  status: 'idle' | 'running' | 'completed' | 'error' | 'paused'
-  currentNode?: string
-  completedNodes: string[]
-  nodeData: Record<string, any>
-  errors: Record<string, string>
-  startTime?: number
-  endTime?: number
-  logs: Array<{
-    nodeId: string
-    timestamp: number
-    level: 'info' | 'warning' | 'error'
-    message: string
-  }>
-}
-
-// Canvas transform interface
-interface CanvasTransform {
-  x: number
-  y: number
-  k: number
-}
-
-// Connection state interface
-interface ConnectionState {
-  isConnecting: boolean
-  connectionStart: { nodeId: string; portId: string; type: 'input' | 'output' } | null
-  connectionPreview: { x: number; y: number } | null
-  selectedConnection: Connection | null
-  lastModified: number
-  autoSaveEnabled: boolean
-}
-
-// UI state interface
-interface UIState {
-  showGrid: boolean
-  showNodeEditor: boolean
-  isDragOver: boolean
-  nodeVariant: NodeVariant
-}
-
-// Workflow state interface
+// Workflow state interface (extends centralized types)
 interface WorkflowState {
   // Core data
   workflowName: string
@@ -706,4 +670,6 @@ export function useWorkflowContext() {
   return context
 }
 
-export type { WorkflowState, WorkflowAction, ExecutionState, CanvasTransform, ConnectionState, UIState }
+// Export types (centralized types are re-exported from ../types)
+export type { WorkflowState, WorkflowAction }
+export type { ExecutionState, CanvasTransform, ConnectionState, UIState } from '../types'

@@ -1,10 +1,7 @@
-import type { WorkflowNode } from '../hooks/useNodeSelection'
-import { type NodeVariant, getNodeDimensions } from '../components/nodes/NodeRenderer'
+import type { WorkflowNode, PortPosition, NodeVariant } from '../types'
+import { getNodeDimensions } from '../components/nodes/NodeRenderer'
 
-export interface PortPosition {
-  x: number
-  y: number
-}
+export type { PortPosition } from '../types'
 
 /**
  * Calculate port position based on node variant, size, and port configuration

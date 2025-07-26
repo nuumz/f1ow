@@ -53,7 +53,7 @@ export interface WorkflowCanvasProps {
   
   // Drop validation
   canDropOnPort: (targetNodeId: string, targetPortId: string, targetPortType?: 'input' | 'output') => boolean
-  canDropOnNode: (targetNodeId: string) => boolean
+  // canDropOnNode: (targetNodeId: string) => boolean // Commented out - reserved for future use
   
   // Canvas transform
   onTransformChange: (transform: d3.ZoomTransform) => void
@@ -558,8 +558,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       const deltaX = currentCanvasX - dragData.dragStartX
       const deltaY = currentCanvasY - dragData.dragStartY
 
-      // Mark as dragged if movement is significant
-      if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
+      // Mark as dragged if movement is significant - increase threshold for better click detection
+      if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
         dragData.hasDragged = true
       }
 
@@ -696,7 +696,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       })
       .call(d3.drag<any, WorkflowNode>()
         .container(g.node() as any)
-        .clickDistance(3)
+        .clickDistance(5) // Increase click distance for better click detection
         .on('start', dragStarted)
         .on('drag', dragged)
         .on('end', dragEnded) as any)
@@ -714,6 +714,14 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     // Node background
     nodeEnter.append('rect')
       .attr('class', 'node-background')
+      .on('click', (event: any, d: any) => {
+        // Fallback click handler for node background
+        if (!isDraggingRef.current) {
+          event.stopPropagation()
+          const ctrlKey = event.ctrlKey || event.metaKey
+          onNodeClick(d, ctrlKey)
+        }
+      })
       .on('dblclick', (event: any, d: any) => {
         event.stopPropagation()
         event.preventDefault()

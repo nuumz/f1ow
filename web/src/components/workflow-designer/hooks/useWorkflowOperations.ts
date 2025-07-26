@@ -227,7 +227,7 @@ export function useWorkflowOperations() {
       const text = await file.text()
       const workflow = JSON.parse(text)
       
-      if (!workflow.definition || !workflow.definition.nodes) {
+      if (!workflow?.definition?.nodes) {
         throw new Error('Invalid workflow format')
       }
 

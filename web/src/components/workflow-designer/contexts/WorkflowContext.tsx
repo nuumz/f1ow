@@ -255,7 +255,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
     case 'SET_CANVAS_TRANSFORM':
       return { ...state, canvasTransform: action.payload }
     
-    case 'START_CONNECTION':
+    case 'START_CONNECTION': {
       console.log('START_CONNECTION reducer:', action.payload)
       const newConnectionState = {
         ...state,
@@ -268,6 +268,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
       }
       console.log('New connection state:', newConnectionState.connectionState)
       return newConnectionState
+    }
     
     case 'UPDATE_CONNECTION_PREVIEW':
       return {

@@ -2,7 +2,7 @@
 export { default as WorkflowDesigner } from './WorkflowDesigner'
 
 // Export the new WorkflowDesigner with provider
-export { default as WorkflowDesignerWithProvider } from './WorkflowDesignerWithProvider'
+export { default as WorkflowDesignerWithProvider } from './WorkflowDesigner'
 
 // Export the provider and context
 export { WorkflowProvider, useWorkflowContext } from './contexts/WorkflowContext'

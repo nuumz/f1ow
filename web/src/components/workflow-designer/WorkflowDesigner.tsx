@@ -1,15 +1,14 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import React, { useEffect, useCallback, useState } from 'react'
 import { Save, Play, Download, Upload } from 'lucide-react'
-import * as d3 from 'd3'
 
 // Import CSS styles
 import './WorkflowDesigner.css'
 
-// Import refactored hooks
-import { useCanvasTransform } from './hooks/useCanvasTransform'
-import { useNodeSelection } from './hooks/useNodeSelection'
-import { useConnections } from './hooks/useConnections'
-// import { useDragOperations } from './hooks/useDragOperations' // Available for future use
+// Import provider and hooks
+import { WorkflowProvider, useWorkflowContext } from './contexts/WorkflowContext'
+import { useWorkflowOperations } from './hooks/useWorkflowOperations'
+import { useWorkflowCanvas } from './hooks/useWorkflowCanvas'
+import { useWorkflowEventHandlers } from './hooks/useWorkflowEventHandlers'
 
 // Import components
 import WorkflowCanvas from './components/WorkflowCanvas'
@@ -17,557 +16,444 @@ import CanvasToolbar from './components/CanvasToolbar'
 import NodePalette from '../NodePalette'
 import NodeEditor from '../NodeEditor'
 
-// Import node renderer types
-import type { NodeVariant } from './components/nodes/NodeRenderer'
-
-// Import utilities
-import { createNode, getNodeHeight } from './utils/node-utils'
-
 // Types
-import type { WorkflowNode } from './hooks/useNodeSelection'
-
-interface ExecutionState {
-  status: 'idle' | 'running' | 'completed' | 'error' | 'paused'
-  currentNode?: string
-  completedNodes: string[]
-  nodeData: Record<string, any>
-  errors: Record<string, string>
-  startTime?: number
-  endTime?: number
-  logs: Array<{
-    nodeId: string
-    timestamp: number
-    level: 'info' | 'warning' | 'error'
-    message: string
-  }>
+interface WorkflowDesignerProps {
+  readonly initialWorkflow?: {
+    readonly name?: string
+    readonly nodes?: any[]
+    readonly connections?: any[]
+  }
+  readonly onSave?: (workflow: any) => Promise<void>
+  readonly onExecute?: (workflow: any) => Promise<void>
+  readonly onExport?: (workflow: any) => void
+  readonly onImport?: (workflow: any) => void
+  readonly className?: string
+  readonly showToolbar?: boolean
+  readonly showNodePalette?: boolean
+  readonly showStatusBar?: boolean
+  readonly readOnly?: boolean
 }
 
-export default function WorkflowDesigner() {
-  // Core state
-  const svgRef = useRef<SVGSVGElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [nodes, setNodes] = useState<WorkflowNode[]>([])
-  const [workflowName, setWorkflowName] = useState('New Workflow')
-  const [showGrid, setShowGrid] = useState(true)
-  const [showNodeEditor, setShowNodeEditor] = useState(false)
-  const [isDragOver, setIsDragOver] = useState(false)
-  
-  // Node rendering configuration
-  const [nodeVariant, setNodeVariant] = useState<NodeVariant>('standard')
-  
-  // Execution state
-  const [executionState, setExecutionState] = useState<ExecutionState>({ 
-    status: 'idle', 
-    completedNodes: [], 
-    nodeData: {},
-    errors: {},
-    logs: []
-  })
+// Content component props interface
+interface WorkflowDesignerContentProps {
+  readonly onSave?: (workflow: any) => Promise<void>
+  readonly onExecute?: (workflow: any) => Promise<void>
+  readonly onExport?: (workflow: any) => void
+  readonly onImport?: (workflow: any) => void
+  readonly className?: string
+  readonly showToolbar?: boolean
+  readonly showNodePalette?: boolean
+  readonly showStatusBar?: boolean
+  readonly readOnly?: boolean
+}
 
-  // Use refactored hooks
-  const canvasTransform = useCanvasTransform({
-    workflowName,
-    svgRef
-  })
+// Workflow Designer component that uses the provider
+function WorkflowDesignerContent({
+  onSave,
+  onExecute,
+  onExport,
+  onImport,
+  className = '',
+  showToolbar = true,
+  showNodePalette = true,
+  showStatusBar = true,
+  readOnly = false
+}: WorkflowDesignerContentProps) {
+  const { state, svgRef, containerRef } = useWorkflowContext()
+  const operations = useWorkflowOperations()
+  const canvas = useWorkflowCanvas()
+  const handlers = useWorkflowEventHandlers()
 
-  const nodeSelection = useNodeSelection({
-    nodes
-  })
+  // File operations
+  const [isLoading, setIsLoading] = useState(false)
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
-  const connections = useConnections({
-    nodes
-  })
-
-  // Note: dragOperations hook is available but not currently used in this component
-  // const dragOperations = useDragOperations({
-  //   nodes,
-  //   setNodes,
-  //   selectedNodes: nodeSelection.selectedNodes,
-  //   isNodeSelected: nodeSelection.isNodeSelected,
-  //   getSelectedNodesList: nodeSelection.getSelectedNodesList
-  // })
-
-  // Node operations
-  const addNode = useCallback((type: string, position?: { x: number; y: number }) => {
-    let nodePosition = position
-    
-    if (!nodePosition && svgRef.current) {
-      // Calculate center of current viewport
-      const rect = svgRef.current.getBoundingClientRect()
-      const centerX = rect.width / 2
-      const centerY = rect.height / 2
-      
-      const currentTransform = canvasTransform.canvasTransformRef.current
-      if (currentTransform) {
-        const canvasCenterX = (centerX - currentTransform.x) / currentTransform.k
-        const canvasCenterY = (centerY - currentTransform.y) / currentTransform.k
-        
-        nodePosition = {
-          x: canvasCenterX + (Math.random() - 0.5) * 100,
-          y: canvasCenterY + (Math.random() - 0.5) * 100
-        }
-      }
-    }
-    
-    const newNode = createNode(type, nodePosition || { x: 300, y: 200 })
-    setNodes(prev => [...prev, newNode])
-  }, [canvasTransform.canvasTransformRef])
-
-  const deleteNode = useCallback((nodeId: string) => {
-    setNodes(prev => prev.filter(n => n.id !== nodeId))
-    connections.setConnections(prev => prev.filter(c => 
-      c.sourceNodeId !== nodeId && c.targetNodeId !== nodeId
-    ))
-    nodeSelection.setSelectedNode(null)
-  }, [connections, nodeSelection])
-
-  // Canvas event handlers
-  const handleCanvasClick = useCallback((event: React.MouseEvent) => {
-    if (connections.isConnecting) {
-      connections.clearConnectionState()
-      return
-    }
-
-    const ctrlKey = event.ctrlKey || event.metaKey
-    if (!ctrlKey) {
-      nodeSelection.clearSelection()
-      connections.setSelectedConnection(null)
-    }
-    
-    setShowNodeEditor(false)
-  }, [connections, nodeSelection])
-
-  const handleCanvasDragOver = useCallback((event: React.DragEvent) => {
-    event.preventDefault()
-    event.dataTransfer.dropEffect = 'copy'
-    setIsDragOver(true)
+  const showNotification = useCallback((type: 'success' | 'error', message: string) => {
+    setNotification({ type, message })
+    setTimeout(() => setNotification(null), 3000)
   }, [])
 
-  const handleCanvasDragLeave = useCallback((event: React.DragEvent) => {
-    event.preventDefault()
-    setIsDragOver(false)
-  }, [])
-
-  const handleCanvasDrop = useCallback((event: React.DragEvent) => {
-    event.preventDefault()
-    setIsDragOver(false)
-    
-    const nodeType = event.dataTransfer.getData('application/node-type')
-    if (nodeType && svgRef.current) {
-      const rect = svgRef.current.getBoundingClientRect()
-      const clientX = event.clientX - rect.left
-      const clientY = event.clientY - rect.top
-      
-      // Convert screen coordinates to canvas coordinates
-      const currentTransform = canvasTransform.canvasTransformRef.current
-      if (currentTransform) {
-        const canvasX = (clientX - currentTransform.x) / currentTransform.k
-        const canvasY = (clientY - currentTransform.y) / currentTransform.k
-        
-        addNode(nodeType, { x: canvasX, y: canvasY })
-      } else {
-        // Fallback to screen coordinates if transform not available
-        addNode(nodeType, { x: clientX, y: clientY })
-      }
-    }
-  }, [addNode, canvasTransform.canvasTransformRef])
-
-  // Node event handlers
-  const handleNodeClick = useCallback((nodeData: WorkflowNode, ctrlKey: boolean = false) => {
-    nodeSelection.toggleNodeSelection(nodeData.id, ctrlKey)
-    connections.setSelectedConnection(null)
-    setShowNodeEditor(false)
-  }, [nodeSelection, connections])
-
-  const handleNodeDoubleClick = useCallback((nodeData: WorkflowNode) => {
-    nodeSelection.setSelectedNodes(new Set([nodeData.id]))
-    nodeSelection.setSelectedNode(nodeData)
-    connections.setSelectedConnection(null)
-    setShowNodeEditor(true)
-  }, [nodeSelection, connections])
-
-  const handleNodeDrag = useCallback((nodeId: string, x: number, y: number) => {
-    setNodes(prev => prev.map(node => 
-      node.id === nodeId ? { ...node, x, y } : node
-    ))
-  }, [])
-
-  const handlePortClick = useCallback((nodeId: string, portId: string, portType: 'input' | 'output') => {
-    if (connections.isConnecting && connections.connectionStart) {
-      // Complete connection
-      if (connections.connectionStart.nodeId !== nodeId) {
-        let sourceNodeId, sourcePortId, targetNodeId, targetPortId
-
-        if (connections.connectionStart.type === 'output' && portType === 'input') {
-          sourceNodeId = connections.connectionStart.nodeId
-          sourcePortId = connections.connectionStart.portId
-          targetNodeId = nodeId
-          targetPortId = portId
-        } else if (connections.connectionStart.type === 'input' && portType === 'output') {
-          sourceNodeId = nodeId
-          sourcePortId = portId
-          targetNodeId = connections.connectionStart.nodeId
-          targetPortId = connections.connectionStart.portId
-        }
-
-        if (sourceNodeId && sourcePortId && targetNodeId && targetPortId) {
-          connections.createConnection(sourceNodeId, sourcePortId, targetNodeId, targetPortId)
-        }
-      }
-      connections.clearConnectionState()
-    } else {
-      // Start connection
-      connections.setIsConnecting(true)
-      connections.setConnectionStart({
-        nodeId,
-        portId,
-        type: portType
-      })
-    }
-  }, [connections])
-
-  const handleCanvasMouseMove = useCallback((x: number, y: number) => {
-    if (connections.isConnecting && connections.connectionStart) {
-      connections.setConnectionPreview({ x, y })
-    }
-  }, [connections])
-
-  // Drag & Drop handlers for connections
-  const handlePortDragStart = useCallback((nodeId: string, portId: string, portType: 'input' | 'output') => {
-    connections.startDragConnection(nodeId, portId, portType)
-  }, [connections])
-
-  const handlePortDrag = useCallback((x: number, y: number) => {
-    connections.updateConnectionPreview(x, y)
-  }, [connections])
-
-  const handlePortDragEnd = useCallback((targetNodeId?: string, targetPortId?: string) => {
-    connections.finishDragConnection(targetNodeId, targetPortId)
-  }, [connections])
-
-  const handleCanvasClickInternal = useCallback(() => {
-    if (connections.isConnecting) {
-      connections.clearConnectionState()
-      return
-    }
-    
-    nodeSelection.clearSelection()
-    connections.setSelectedConnection(null)
-    setShowNodeEditor(false)
-  }, [connections, nodeSelection])
-
-  const handleTransformChange = useCallback((transform: d3.ZoomTransform) => {
-    const transformObj = {
-      x: transform.x,
-      y: transform.y,
-      k: transform.k
-    }
-    canvasTransform.saveCanvasTransform(transformObj)
-  }, [canvasTransform])
-
-  // Workflow operations
-  const saveWorkflow = useCallback(async () => {
-    const workflow = {
-      name: workflowName,
-      definition: {
-        nodes: nodes.map(n => ({
-          id: n.id,
-          type: n.type,
-          position: [n.x, n.y],
-          parameters: n.config
-        })),
-        edges: connections.connections.map(c => ({
-          id: c.id,
-          source: c.sourceNodeId,
-          target: c.targetNodeId,
-          sourceHandle: c.sourcePortId,
-          targetHandle: c.targetPortId
-        }))
-      }
-    }
-    
-    try {
-      console.log('Workflow saved:', workflow)
-      alert('Workflow saved successfully!')
-    } catch (error) {
-      console.error('Failed to save workflow:', error)
-      alert('Failed to save workflow')
-    }
-  }, [workflowName, nodes, connections.connections])
-
-  const executeWorkflow = useCallback(async () => {
-    if (nodes.length === 0) {
-      alert('Please add nodes to the workflow before executing')
-      return
-    }
-
-    // Reset node states
-    setNodes(prev => prev.map(n => ({ ...n, status: 'idle' })))
-    setExecutionState({ 
-      status: 'running', 
-      completedNodes: [], 
-      nodeData: {},
-      errors: {},
-      logs: []
-    })
-    
-    // Simulate execution with visual feedback
-    for (let i = 0; i < nodes.length; i++) {
-      const node = nodes[i]
-      setTimeout(() => {
-        setNodes(prev => prev.map(n => 
-          n.id === node.id ? { ...n, status: 'running' } : n
-        ))
-        
-        setTimeout(() => {
-          setNodes(prev => prev.map(n => 
-            n.id === node.id ? { ...n, status: 'completed' } : n
-          ))
-        }, 1000)
-      }, i * 1500)
-    }
-    
-    setTimeout(() => {
-      setExecutionState(prev => ({ ...prev, status: 'completed' }))
-    }, nodes.length * 1500 + 1000)
-  }, [nodes])
-
-  const exportWorkflow = useCallback(() => {
-    const workflow = {
-      name: workflowName,
-      nodes,
-      connections: connections.connections
-    }
-    const dataStr = JSON.stringify(workflow, null, 2)
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr)
-    
-    const exportFileDefaultName = `${workflowName.replace(/\s+/g, '-').toLowerCase()}.json`
-    
-    const linkElement = document.createElement('a')
-    linkElement.setAttribute('href', dataUri)
-    linkElement.setAttribute('download', exportFileDefaultName)
-    linkElement.click()
-  }, [workflowName, nodes, connections.connections])
-
-  const importWorkflow = useCallback((file: File) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
+  const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
       try {
-        const workflow = JSON.parse(e.target?.result as string)
-        setWorkflowName(workflow.name || 'Imported Workflow')
-        setNodes(workflow.nodes || [])
-        connections.setConnections(workflow.connections || [])
-      } catch (err) {
-        console.error('Import error:', err)
-        alert('Invalid workflow file')
+        setIsLoading(true)
+        const result = await operations.importWorkflow(file)
+        showNotification('success', 'Workflow imported successfully!')
+        onImport?.(result)
+      } catch (error) {
+        console.error('Import failed:', error)
+        showNotification('error', 'Failed to import workflow')
+      } finally {
+        setIsLoading(false)
       }
     }
-    reader.readAsText(file)
-  }, [connections])
+    // Reset file input
+    event.target.value = ''
+  }, [operations, onImport, showNotification])
 
-  // Keyboard shortcuts
+  const handleSave = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      const workflow = await operations.saveWorkflow()
+      await onSave?.(workflow)
+      showNotification('success', 'Workflow saved successfully!')
+    } catch (error) {
+      console.error('Save failed:', error)
+      showNotification('error', 'Failed to save workflow')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [operations, onSave, showNotification])
+
+  const handleExecute = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      const workflow = {
+        name: state.workflowName,
+        nodes: state.nodes,
+        connections: state.connections
+      }
+      await onExecute?.(workflow)
+      await operations.executeWorkflow()
+      showNotification('success', 'Workflow executed successfully!')
+    } catch (error) {
+      console.error('Execute failed:', error)
+      showNotification('error', 'Failed to execute workflow')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [operations, onExecute, state, showNotification])
+
+  const handleExport = useCallback(() => {
+    try {
+      const workflow = {
+        name: state.workflowName,
+        nodes: state.nodes,
+        connections: state.connections
+      }
+      onExport?.(workflow)
+      operations.exportWorkflow()
+      showNotification('success', 'Workflow exported successfully!')
+    } catch (error) {
+      console.error('Export failed:', error)
+      showNotification('error', 'Failed to export workflow')
+    }
+  }, [operations, onExport, state, showNotification])
+
+  // Keyboard event setup
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (connections.isConnecting) {
-          connections.clearConnectionState()
-        } else if (showNodeEditor) {
-          setShowNodeEditor(false)
-        } else if (nodeSelection.selectedNodes.size > 0) {
-          nodeSelection.clearSelection()
-        }
-      }
-      
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (connections.selectedConnection) {
-          connections.removeConnection(connections.selectedConnection.id)
-        } else if (nodeSelection.selectedNodes.size > 0) {
-          const nodeIdsToDelete = Array.from(nodeSelection.selectedNodes)
-          nodeIdsToDelete.forEach(nodeId => deleteNode(nodeId))
-          nodeSelection.clearSelection()
-        } else if (nodeSelection.selectedNode) {
-          deleteNode(nodeSelection.selectedNode.id)
-        }
-      }
-
-      // Select all with Ctrl+A
-      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
-        e.preventDefault()
-        nodeSelection.selectAllNodes()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
+    document.addEventListener('keydown', handlers.handleKeyDown)
     return () => {
-      window.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('keydown', handlers.handleKeyDown)
     }
-  }, [connections, nodeSelection, showNodeEditor, deleteNode])
+  }, [handlers.handleKeyDown])
 
   return (
-    <div className="advanced-workflow-designer">
-      {/* Header */}
-      <div className="designer-header">
-        <div className="header-left">
-          <input
-            type="text"
-            value={workflowName}
-            onChange={(e) => setWorkflowName(e.target.value)}
-            className="workflow-name-input"
-            placeholder="Workflow Name"
-          />
-          <div className={`status-indicator ${executionState.status}`}>
-            {executionState.status === 'running' && '⚡ Running'}
-            {executionState.status === 'completed' && '✅ Completed'}
-            {executionState.status === 'error' && '❌ Error'}
-            {executionState.status === 'idle' && '⭕ Idle'}
-          </div>
-          {nodeSelection.selectedNodes.size > 0 && (
-            <div className="selection-info">
-              <span className="selected-count">
-                {nodeSelection.selectedNodes.size} node{nodeSelection.selectedNodes.size > 1 ? 's' : ''} selected
-              </span>
-            </div>
-          )}
-        </div>
+    <div className={`workflow-designer ${className}`}>
+      {/* Notifications */}
+      {notification && (
+        <Notification 
+          notification={notification} 
+          onClose={() => setNotification(null)} 
+        />
+      )}
 
-        <div className="header-right">
-          <button onClick={saveWorkflow} className="header-btn save-btn">
-            <Save size={18} />
-            Save
-          </button>
-          <button 
-            onClick={executeWorkflow} 
-            className="header-btn execute-btn"
-            disabled={executionState.status === 'running'}
-          >
-            <Play size={18} />
-            {executionState.status === 'running' ? 'Running...' : 'Execute'}
-          </button>
-          <button onClick={exportWorkflow} className="header-btn">
-            <Download size={18} />
-            Export
-          </button>
-          <label className="header-btn import-btn">
-            <Upload size={18} />
-            Import
+      {/* Header */}
+      {showToolbar && (
+        <div className="workflow-designer-header">
+          <div className="workflow-name-section">
             <input
-              type="file"
-              accept=".json"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file) importWorkflow(file)
-              }}
-              style={{ display: 'none' }}
+              type="text"
+              value={state.workflowName}
+              onChange={(e) => operations.setWorkflowName(e.target.value)}
+              className="workflow-name-input"
+              placeholder="Workflow Name"
+              disabled={readOnly}
             />
-          </label>
+          </div>
+          
+          <div className="workflow-actions">
+            {!readOnly && (
+              <>
+                <button 
+                  onClick={handleSave}
+                  className="action-button save-button"
+                  title="Save Workflow"
+                  disabled={isLoading}
+                >
+                  <Save size={16} />
+                  {isLoading ? 'Saving...' : 'Save'}
+                </button>
+                
+                <button 
+                  onClick={handleExecute}
+                  className="action-button execute-button"
+                  title="Execute Workflow"
+                  disabled={state.executionState.status === 'running' || isLoading || state.nodes.length === 0}
+                >
+                  <Play size={16} />
+                  {state.executionState.status === 'running' ? 'Running...' : 'Execute'}
+                </button>
+              </>
+            )}
+            
+            <button 
+              onClick={handleExport}
+              className="action-button export-button"
+              title="Export Workflow"
+              disabled={isLoading || state.nodes.length === 0}
+            >
+              <Download size={16} />
+              Export
+            </button>
+            
+            {!readOnly && (
+              <label className={`action-button import-button ${isLoading ? 'disabled' : ''}`} title="Import Workflow">
+                <Upload size={16} />
+                Import
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleFileUpload}
+                  style={{ display: 'none' }}
+                  disabled={isLoading}
+                />
+              </label>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Content */}
-      <div className="designer-content">
-        {/* Left Sidebar - Node Palette */}
-        <div className="left-sidebar">
-          <NodePalette onAddNode={addNode} />
-        </div>
+      <div className="workflow-designer-content">
+        {/* Node Palette */}
+        {showNodePalette && !readOnly && (
+          <div className="node-palette-container">
+            <NodePalette onAddNode={operations.addNode} />
+          </div>
+        )}
 
-        {/* Center - Canvas */}
-        <div 
+        {/* Canvas Container */}
+        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex */}
+        <section 
           ref={containerRef}
-          className={`canvas-container ${isDragOver ? 'drag-over' : ''}`}
-          onClick={handleCanvasClick}
-          onDragOver={handleCanvasDragOver}
-          onDragLeave={handleCanvasDragLeave}
-          onDrop={handleCanvasDrop}
+          className={`canvas-container ${state.uiState.isDragOver ? 'drag-over' : ''}`}
+          aria-label="Workflow canvas - interactive workspace"
+          // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              handlers.handleCanvasClick(e as any)
+            }
+          }}
+          onClick={handlers.handleCanvasClick}
+          onDragOver={handlers.handleCanvasDragOver}
+          onDragLeave={handlers.handleCanvasDragLeave}
+          onDrop={handlers.handleCanvasDrop}
         >
-          <svg
-            ref={svgRef}
+          <svg 
+            ref={svgRef} 
             className="workflow-canvas"
-            width="100%"
+            width="100%" 
             height="100%"
-          />
-
-          {/* Workflow Canvas with D3 Integration and Embedded Toolbar */}
-          <WorkflowCanvas
-            svgRef={svgRef}
-            nodes={nodes}
-            connections={connections.connections}
-            showGrid={showGrid}
-            canvasTransform={canvasTransform.canvasTransformRef.current || { x: 0, y: 0, k: 1 }}
-            nodeVariant={nodeVariant}
-            selectedNodes={nodeSelection.selectedNodes}
-            selectedConnection={connections.selectedConnection}
-            isNodeSelected={nodeSelection.isNodeSelected}
-            isConnecting={connections.isConnecting}
-            connectionStart={connections.connectionStart}
-            connectionPreview={connections.connectionPreview}
-            onNodeClick={handleNodeClick}
-            onNodeDoubleClick={handleNodeDoubleClick}
-            onNodeDrag={handleNodeDrag}
-            onConnectionClick={connections.setSelectedConnection}
-            onPortClick={handlePortClick}
-            onCanvasClick={handleCanvasClickInternal}
-            onCanvasMouseMove={handleCanvasMouseMove}
-            onPortDragStart={handlePortDragStart}
-            onPortDrag={handlePortDrag}
-            onPortDragEnd={handlePortDragEnd}
-            canDropOnPort={connections.canDropOnPort}
-            canDropOnNode={connections.canDropOnNode}
-            onTransformChange={handleTransformChange}
-          />
+          >
+            <WorkflowCanvas
+              svgRef={svgRef}
+              nodes={state.nodes}
+              connections={state.connections}
+              showGrid={state.uiState.showGrid}
+              canvasTransform={state.canvasTransform}
+              nodeVariant={state.uiState.nodeVariant}
+              selectedNodes={state.selectedNodes}
+              selectedConnection={state.connectionState.selectedConnection}
+              isNodeSelected={(nodeId: string) => state.selectedNodes.has(nodeId)}
+              isConnecting={state.connectionState.isConnecting}
+              connectionStart={state.connectionState.connectionStart}
+              connectionPreview={state.connectionState.connectionPreview}
+              onNodeClick={handlers.handleNodeClick}
+              onNodeDoubleClick={handlers.handleNodeDoubleClick}
+              onNodeDrag={handlers.handleNodeDrag}
+              onConnectionClick={handlers.handleConnectionClick}
+              onPortClick={handlers.handlePortClick}
+              onCanvasClick={handlers.handleCanvasClickInternal}
+              onCanvasMouseMove={handlers.handleCanvasMouseMove}
+              onPortDragStart={handlers.handlePortDragStart}
+              onPortDrag={handlers.handlePortDrag}
+              onPortDragEnd={handlers.handlePortDragEnd}
+              canDropOnPort={(targetNodeId: string, targetPortId: string) => {
+                const { connectionStart } = state.connectionState
+                if (!connectionStart || connectionStart.nodeId === targetNodeId) {
+                  return false
+                }
+                
+                // Check if connection already exists
+                const existingConnection = state.connections.find(conn => {
+                  if (connectionStart.type === 'output') {
+                    return conn.sourceNodeId === connectionStart.nodeId &&
+                           conn.sourcePortId === connectionStart.portId &&
+                           conn.targetNodeId === targetNodeId &&
+                           conn.targetPortId === targetPortId
+                  } else {
+                    return conn.sourceNodeId === targetNodeId &&
+                           conn.sourcePortId === targetPortId &&
+                           conn.targetNodeId === connectionStart.nodeId &&
+                           conn.targetPortId === connectionStart.portId
+                  }
+                })
+                
+                return !existingConnection
+              }}
+              onTransformChange={handlers.handleTransformChange}
+              onZoomLevelChange={handlers.handleZoomLevelChange}
+              onRegisterZoomBehavior={canvas.registerZoomBehavior}
+            />
+          </svg>
 
           {/* Canvas Toolbar */}
           <CanvasToolbar
-            zoomLevel={canvasTransform.canvasTransformRef.current?.k || 1}
-            showGrid={showGrid}
-            onToggleGrid={() => setShowGrid(!showGrid)}
-            nodeVariant={nodeVariant}
-            onVariantChange={setNodeVariant}
-            onZoomIn={canvasTransform.zoomIn}
-            onZoomOut={canvasTransform.zoomOut}
-            onFitToScreen={() => canvasTransform.fitToScreen(nodes)}
-            onResetPosition={() => canvasTransform.resetCanvasPosition(nodes, getNodeHeight)}
-            executionStatus={executionState.status === 'paused' ? 'idle' : executionState.status}
-            selectedNodeCount={nodeSelection.selectedNodes.size}
-          />
-        </div>
+              zoomLevel={state.canvasTransform.k || 1}
+              showGrid={state.uiState.showGrid}
+              onToggleGrid={operations.toggleGrid}
+              nodeVariant={state.uiState.nodeVariant}
+              onVariantChange={operations.setNodeVariant}
+              onZoomIn={canvas.zoomIn}
+              onZoomOut={canvas.zoomOut}
+              onFitToScreen={() => canvas.fitToScreen(state.nodes)}
+              onResetPosition={() => canvas.resetCanvasPosition(state.nodes)}
+              executionStatus={state.executionState.status === 'paused' ? 'idle' : state.executionState.status}
+              selectedNodeCount={state.selectedNodes.size}
+            />
+        </section>
 
-        {/* Right Sidebar - Node Editor */}
-        {showNodeEditor && nodeSelection.selectedNode && (
-          <div className="right-sidebar">
+        {/* Node Editor */}
+        {state.uiState.showNodeEditor && state.selectedNode && (
+          <div className="node-editor-container">
             <NodeEditor
-              node={nodeSelection.selectedNode}
-              onUpdate={(updatedConfig: any) => {
-                if (nodeSelection.selectedNode) {
-                  const updatedNode = { ...nodeSelection.selectedNode, config: updatedConfig }
-                  setNodes(prev => prev.map(n => 
-                    n.id === updatedNode.id ? updatedNode : n
-                  ))
-                  nodeSelection.setSelectedNode(updatedNode)
-                }
+              node={state.selectedNode}
+              onUpdate={(config: any) => {
+                operations.updateNode(state.selectedNode!.id, { config })
+                operations.setShowNodeEditor(false)
               }}
               onDelete={() => {
-                if (nodeSelection.selectedNode) {
-                  deleteNode(nodeSelection.selectedNode.id)
-                  setShowNodeEditor(false)
+                if (state.selectedNode) {
+                  operations.deleteNode(state.selectedNode.id)
+                  operations.setShowNodeEditor(false)
                 }
               }}
               onDuplicate={() => {
-                if (nodeSelection.selectedNode) {
-                  const duplicatedNode = createNode(
-                    nodeSelection.selectedNode.type, 
-                    { 
-                      x: nodeSelection.selectedNode.x + 50, 
-                      y: nodeSelection.selectedNode.y + 50 
-                    }
-                  )
-                  duplicatedNode.config = { ...nodeSelection.selectedNode.config }
-                  setNodes(prev => [...prev, duplicatedNode])
+                if (state.selectedNode) {
+                  operations.addNode(state.selectedNode.type, {
+                    x: state.selectedNode.x + 50,
+                    y: state.selectedNode.y + 50
+                  })
+                  operations.setShowNodeEditor(false)
                 }
               }}
             />
           </div>
         )}
       </div>
+
+      {/* Status Bar */}
+      {showStatusBar && (
+        <div className="workflow-designer-status">
+          <div className="status-info">
+            <span>Nodes: {state.nodes.length}</span>
+            <span>Connections: {state.connections.length}</span>
+            <span>Selected: {state.selectedNodes.size}</span>
+            <span>Zoom: {Math.round(state.canvasTransform.k * 100)}%</span>
+            {state.executionState.status !== 'idle' && (
+              <span>Status: {state.executionState.status}</span>
+            )}
+          </div>
+          
+          <div className="execution-status">
+            <span className={`status-indicator ${state.executionState.status}`}>
+              {state.executionState.status.toUpperCase()}
+            </span>
+            {state.executionState.currentNode && (
+              <span>Current: {state.executionState.currentNode}</span>
+            )}
+            {state.executionState.status === 'completed' && state.executionState.endTime && state.executionState.startTime && (() => {
+              const duration = Math.round((state.executionState.endTime - state.executionState.startTime) / 1000)
+              return <span>Duration: {duration}s</span>
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Execution Logs (if running) */}
+      {state.executionState.status === 'running' && state.executionState.logs.length > 0 && (
+        <div className="execution-logs">
+          <h3>Execution Logs</h3>
+          <div className="logs-container">
+            {state.executionState.logs.slice(-10).map((log) => (
+              <div key={`${log.nodeId}-${log.timestamp}-${log.level}`} className={`log-entry ${log.level}`}>
+                <span className="log-timestamp">
+                  {new Date(log.timestamp).toLocaleTimeString()}
+                </span>
+                <span className="log-node">{log.nodeId}</span>
+                <span className="log-message">{log.message}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
+  )
+}
+
+// Notification component props interface
+interface NotificationProps {
+  readonly notification: {
+    readonly type: 'success' | 'error'
+    readonly message: string
+  }
+  readonly onClose: () => void
+}
+
+// Notification component
+function Notification({ notification, onClose }: NotificationProps) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000)
+    return () => clearTimeout(timer)
+  }, [onClose])
+
+  return (
+    <div className={`notification notification-${notification.type}`}>
+      {notification.message}
+      <button onClick={onClose} className="notification-close">×</button>
+    </div>
+  )
+}
+
+export default function WorkflowDesigner({
+  initialWorkflow,
+  onSave,
+  onExecute,
+  onExport,
+  onImport,
+  className = '',
+  showToolbar = true,
+  showNodePalette = true,
+  showStatusBar = true,
+  readOnly = false
+}: WorkflowDesignerProps) {
+  return (
+    <WorkflowProvider initialWorkflow={initialWorkflow}>
+      <WorkflowDesignerContent 
+        onSave={onSave}
+        onExecute={onExecute}
+        onExport={onExport}
+        onImport={onImport}
+        className={className}
+        showToolbar={showToolbar}
+        showNodePalette={showNodePalette}
+        showStatusBar={showStatusBar}
+        readOnly={readOnly}
+      />
+    </WorkflowProvider>
   )
 }

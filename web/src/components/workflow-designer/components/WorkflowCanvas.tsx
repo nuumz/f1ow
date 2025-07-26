@@ -591,11 +591,22 @@ export default function WorkflowCanvas({
       .attr('y', (d: any) => -getConfigurableDimensions(d).height / 2)
       .attr('rx', 8)
       .attr('fill', '#ffffff')
-      .attr('stroke', (d: any) => getNodeColor(d.type, d.status))
-      .attr('stroke-width', (d: any) => isNodeSelected(d.id) ? 3 : 2)
+      .attr('stroke', (d: any) => {
+        // Check if node is selected (even during drag)
+        if (isNodeSelected(d.id)) {
+          return '#2196F3' // Blue selection color
+        }
+        return getNodeColor(d.type, d.status)
+      })
+      .attr('stroke-width', (d: any) => {
+        // Keep thick border for selected nodes
+        return isNodeSelected(d.id) ? 3 : 2
+      })
       .style('filter', (d: any) => {
         if (d.status === 'running') return 'drop-shadow(0 0 8px rgba(255, 167, 38, 0.6))'
-        if (isNodeSelected(d.id)) return 'drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))'
+        if (isNodeSelected(d.id)) {
+          return 'drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))'
+        }
         return 'none'
       })
 

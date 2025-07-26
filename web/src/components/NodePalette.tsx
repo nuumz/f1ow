@@ -1,5 +1,5 @@
 import React from 'react'
-import { Globe, Code, Database, GitBranch, Cpu, Package } from 'lucide-react'
+import { Globe, Code, Database, GitBranch, Package, Bot, Brain, Zap, Mail, Clock, FileText } from 'lucide-react'
 
 interface NodePaletteProps {
   onAddNode: (type: string, position?: { x: number; y: number }) => void
@@ -7,11 +7,23 @@ interface NodePaletteProps {
 
 export default function NodePalette({ onAddNode }: NodePaletteProps) {
   const nodeTypes = [
+    // Core nodes
+    { type: 'start', label: 'Start', icon: Zap },
     { type: 'http', label: 'HTTP Request', icon: Globe },
-    { type: 'transform', label: 'Transform', icon: Code },
-    { type: 'database', label: 'Database', icon: Database },
-    { type: 'conditional', label: 'Conditional', icon: GitBranch },
-    { type: 'ai', label: 'AI Agent', icon: Cpu },
+    { type: 'set', label: 'Set', icon: Code },
+    { type: 'if', label: 'IF', icon: GitBranch },
+    
+    // AI nodes
+    { type: 'aiagent', label: 'AI Agent', icon: Bot },
+    { type: 'openai', label: 'OpenAI', icon: Brain },
+    
+    // Database nodes
+    { type: 'mysql', label: 'MySQL', icon: Database },
+    
+    // Other nodes
+    { type: 'email', label: 'Email', icon: Mail },
+    { type: 'schedule', label: 'Schedule', icon: Clock },
+    { type: 'json', label: 'JSON', icon: FileText },
     { type: 'subworkflow', label: 'Sub-workflow', icon: Package },
   ]
 

@@ -24,7 +24,6 @@ import { createNode, getNodeHeight } from './utils/node-utils'
 
 // Types
 import type { WorkflowNode } from './hooks/useNodeSelection'
-import CanvasToolbar from './components/CanvasToolbar'
 
 interface ExecutionState {
   status: 'idle' | 'running' | 'completed' | 'error' | 'paused'

@@ -79,6 +79,7 @@ export const NodeTypes = {
   // AI/ML nodes
   openai: { icon: '🤖', color: '#10A37F', label: 'OpenAI' },
   anthropic: { icon: '🧠', color: '#FF6B35', label: 'Anthropic' },
+  aiagent: { icon: '🤖', color: '#8B5CF6', label: 'AI Agent' },
   
   // Advanced nodes
   subworkflow: { icon: '📦', color: '#E91E63', label: 'Execute Workflow' },
@@ -205,6 +206,19 @@ export function getNodeDefinition(type: string): NodeDefinition {
       inputs: [{ id: 'main', type: 'input', dataType: 'any', label: 'Main', required: true }],
       outputs: [{ id: 'main', type: 'output', dataType: 'any', label: 'Main' }],
       defaultConfig: { operation: 'executeQuery', query: '' }
+    },
+    
+    // AI Agent node
+    aiagent: {
+      inputs: [{ id: 'main', type: 'input', dataType: 'any', label: 'Input', required: true }],
+      outputs: [{ id: 'main', type: 'output', dataType: 'any', label: 'Output' }],
+      defaultConfig: { 
+        model: 'gpt-4',
+        prompt: '',
+        temperature: 0.7,
+        maxTokens: 1000,
+        systemPrompt: 'You are a helpful AI assistant.'
+      }
     }
   }
   

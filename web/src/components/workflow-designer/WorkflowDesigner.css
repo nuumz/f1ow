@@ -2,7 +2,7 @@
 .advanced-workflow-designer, .workflow-designer {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   background: #f8f9fa;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
 }
@@ -171,6 +171,7 @@
   display: flex;
   flex: 1;
   overflow: hidden;
+  min-height: 0;
 }
 
 .left-sidebar {
@@ -184,6 +185,7 @@
   flex: 1;
   position: relative;
   background: #fcfcfc;
+  min-height: 0;
 }
 
 .canvas-container.drag-over {

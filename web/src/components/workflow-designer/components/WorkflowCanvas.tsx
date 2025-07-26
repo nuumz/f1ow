@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback, useState } from 'react'
+import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import * as d3 from 'd3'
 import type { WorkflowNode } from '../hooks/useNodeSelection'
 import type { Connection } from '../hooks/useConnections'
@@ -52,24 +52,16 @@ export interface WorkflowCanvasProps {
   onPortDragEnd: (targetNodeId?: string, targetPortId?: string) => void
   
   // Drop validation
-  canDropOnPort: (targetNodeId: string, targetPortId: string) => boolean
+  canDropOnPort: (targetNodeId: string, targetPortId: string, targetPortType?: 'input' | 'output') => boolean
   canDropOnNode: (targetNodeId: string) => boolean
   
   // Canvas transform
   onTransformChange: (transform: d3.ZoomTransform) => void
-  onZoomLevel?: (zoomLevel: number) => void
-  
-  // Toolbar controls
-  onToggleGrid: () => void
-  onVariantChange?: (variant: NodeVariant) => void
-  onZoomIn: () => void
-  onZoomOut: () => void
-  onFitToScreen: () => void
-  onResetPosition: () => void
-  executionStatus?: 'idle' | 'running' | 'completed' | 'error'
+  onZoomLevelChange?: (zoomLevel: number) => void
+  onRegisterZoomBehavior?: (zoomBehavior: d3.ZoomBehavior<SVGSVGElement, unknown>) => void
 }
 
-export default function WorkflowCanvas({
+const WorkflowCanvas = React.memo(function WorkflowCanvas({
   svgRef,
   nodes,
   connections,
@@ -93,21 +85,22 @@ export default function WorkflowCanvas({
   onPortDrag,
   onPortDragEnd,
   canDropOnPort,
-  canDropOnNode,
   onTransformChange,
-  onZoomLevel,
-  onToggleGrid,
-  onVariantChange,
-  onZoomIn,
-  onZoomOut,
-  onFitToScreen,
-  onResetPosition,
-  executionStatus = 'idle'
+  onZoomLevelChange,
+  onRegisterZoomBehavior,
 }: WorkflowCanvasProps) {
-
   // Performance state
   const [isInitialized, setIsInitialized] = useState(false)
   const rafIdRef = useRef<number | null>(null)
+  const rafScheduledRef = useRef<boolean>(false)
+  
+  // Track current transform with ref for immediate access
+  const currentTransformRef = useRef(canvasTransform)
+  useEffect(() => {
+    currentTransformRef.current = canvasTransform
+  }, [canvasTransform])
+  
+  
   
   // Drag state
   const draggedElementRef = useRef<d3.Selection<any, any, any, any> | null>(null)
@@ -120,6 +113,7 @@ export default function WorkflowCanvas({
   // Cache refs for performance
   const connectionPathCacheRef = useRef<Map<string, string>>(new Map())
   const gridCacheRef = useRef<{ transform: string; lines: any[] } | null>(null)
+  const nodePositionCacheRef = useRef<Map<string, { x: number; y: number }>>(new Map())
 
   // Optimized grid creation with caching
   const createGrid = useCallback((
@@ -201,17 +195,24 @@ export default function WorkflowCanvas({
     }
   }, [showGrid])
 
-  // Optimized Z-Index Management with RAF
-  const organizeNodeZIndex = useCallback(() => {
+  // Debounced RAF utility
+  const scheduleRAF = useCallback((callback: () => void) => {
+    if (rafScheduledRef.current) return
+    
+    rafScheduledRef.current = true
+    rafIdRef.current = requestAnimationFrame(() => {
+      callback()
+      rafScheduledRef.current = false
+      rafIdRef.current = null
+    })
+  }, [])
+
+  // Optimized Z-Index Management - now with immediate execution when needed
+  const organizeNodeZIndex = useCallback((immediate = false) => {
     const nodeLayer = nodeLayerRef.current
     if (!nodeLayer || allNodeElementsRef.current.size === 0) return
 
-    // Cancel any pending RAF to avoid duplicate work
-    if (rafIdRef.current) {
-      cancelAnimationFrame(rafIdRef.current)
-    }
-
-    rafIdRef.current = requestAnimationFrame(() => {
+    const executeZIndexUpdate = () => {
       const normalNodes: SVGGElement[] = []
       const selectedNodes: SVGGElement[] = []
       const draggingNodes: SVGGElement[] = []
@@ -239,22 +240,37 @@ export default function WorkflowCanvas({
           nodeLayer.appendChild(element)
         }
       })
-      
-      rafIdRef.current = null
-    })
-  }, [isNodeSelected])
+    }
 
-  // Specific functions for different scenarios
+    if (immediate) {
+      executeZIndexUpdate()
+    } else {
+      scheduleRAF(executeZIndexUpdate)
+    }
+  }, [isNodeSelected, scheduleRAF])
+
+  // Immediate node dragging z-index management
   const setNodeAsDragging = useCallback((nodeId: string) => {
     const element = allNodeElementsRef.current.get(nodeId)
     const nodeLayer = nodeLayerRef.current
     
-    if (element && nodeLayer && nodeLayer.lastChild !== element) {
-      // Only move if not already on top to avoid flicker
-      nodeLayer.appendChild(element)
+    if (element && nodeLayer) {
+      // Immediately move to top for dragging to ensure proper layering
+      if (nodeLayer.lastChild !== element) {
+        nodeLayer.appendChild(element)
+      }
+      // Also trigger full z-index organization to ensure proper order
+      organizeNodeZIndex(true) // Use immediate execution
     }
-  }, [])
+  }, [organizeNodeZIndex])
 
+
+  // Optimized node lookup with memoization
+  const nodeMap = useMemo(() => {
+    const map = new Map<string, WorkflowNode>()
+    nodes.forEach(node => map.set(node.id, node))
+    return map
+  }, [nodes])
 
   // Memoized connection path calculation
   const getConnectionPath = useCallback((connection: Connection) => {
@@ -263,8 +279,8 @@ export default function WorkflowCanvas({
     const cached = connectionPathCacheRef.current.get(cacheKey)
     if (cached) return cached
     
-    const sourceNode = nodes.find(n => n.id === connection.sourceNodeId)
-    const targetNode = nodes.find(n => n.id === connection.targetNodeId)
+    const sourceNode = nodeMap.get(connection.sourceNodeId)
+    const targetNode = nodeMap.get(connection.targetNodeId)
     if (!sourceNode || !targetNode) return ''
     
     const path = generateVariantAwareConnectionPath(
@@ -277,19 +293,143 @@ export default function WorkflowCanvas({
     
     connectionPathCacheRef.current.set(cacheKey, path)
     return path
-  }, [nodes, nodeVariant])
+  }, [nodeMap, nodeVariant])
 
-  // Clear connection cache when nodes change
+  // Memoized configurable dimensions calculation
+  const getConfigurableDimensions = useMemo(() => {
+    const dimensionsCache = new Map<string, any>()
+    
+    return (node: WorkflowNode) => {
+      const cacheKey = `${node.id}-${nodeVariant}`
+      const cached = dimensionsCache.get(cacheKey)
+      if (cached) return cached
+      
+      const dimensions = getNodeDimensions(node)
+      
+      // Adjust dimensions based on variant
+      const result = nodeVariant === 'compact' 
+        ? {
+            ...dimensions,
+            width: dimensions.width * 0.8,
+            height: dimensions.height * 0.8
+          }
+        : dimensions
+      
+      dimensionsCache.set(cacheKey, result)
+      return result
+    }
+  }, [nodeVariant])
+
+  // Component-level optimized handlers
+  const applyDragVisualStyle = useCallback((nodeElement: any, nodeId: string) => {
+    scheduleRAF(() => {
+      nodeElement
+        .style('opacity', 0.9)
+        .style('filter', 'drop-shadow(0 6px 12px rgba(0, 0, 0, 0.3))')
+      
+      const nodeBackground = nodeElement.select('.node-background')
+      const isSelected = isNodeSelected(nodeId)
+      if (isSelected) {
+        nodeBackground.attr('stroke', '#2196F3').attr('stroke-width', 3)
+      } else {
+        const node = nodeMap.get(nodeId)
+        if (node) {
+          nodeBackground.attr('stroke', getNodeColor(node.type, node.status)).attr('stroke-width', 3)
+        }
+      }
+    })
+  }, [scheduleRAF, isNodeSelected, nodeMap, getNodeColor])
+
+  const updateDraggedNodePosition = useCallback((nodeId: string, newX: number, newY: number) => {
+    scheduleRAF(() => {
+      // Update visual position
+      if (draggedElementRef.current) {
+        draggedElementRef.current.attr('transform', `translate(${newX}, ${newY})`)
+      }
+
+      // Clear connection cache for affected connections
+      connections.forEach(conn => {
+        if (conn.sourceNodeId === nodeId || conn.targetNodeId === nodeId) {
+          const cacheKey = `${conn.sourceNodeId}-${conn.sourcePortId}-${conn.targetNodeId}-${conn.targetPortId}-${nodeVariant}`
+          connectionPathCacheRef.current.delete(cacheKey)
+        }
+      })
+
+      // Update connections in real-time (only affected ones)
+      const svg = d3.select(svgRef.current!)
+      const connectionLayer = svg.select('.connection-layer')
+      connectionLayer.selectAll('.connection path')
+        .filter((conn: any) => conn.sourceNodeId === nodeId || conn.targetNodeId === nodeId)
+        .attr('d', (conn: any) => getConnectionPath(conn))
+    })
+  }, [scheduleRAF, connections, nodeVariant, getConnectionPath])
+
+  const resetNodeVisualStyle = useCallback((nodeElement: any, nodeId: string) => {
+    const isSelected = isNodeSelected(nodeId)
+    const nodeBackground = nodeElement.select('.node-background')
+    const node = nodeMap.get(nodeId)
+    
+    if (isSelected) {
+      nodeElement
+        .style('opacity', 1)
+        .style('filter', 'drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))')
+      nodeBackground
+        .attr('stroke', '#2196F3')
+        .attr('stroke-width', 3)
+    } else {
+      nodeElement
+        .style('opacity', 1)
+        .style('filter', 'none')
+      if (node) {
+        nodeBackground
+          .attr('stroke', getNodeColor(node.type, node.status))
+          .attr('stroke-width', 2)
+      }
+    }
+  }, [isNodeSelected, nodeMap, getNodeColor])
+
+  // Clear caches when nodes change
   useEffect(() => {
     connectionPathCacheRef.current.clear()
+    nodePositionCacheRef.current.clear()
   }, [nodes])
 
-  // Optimized selection change handler
+  // Immediate z-index organization for selection changes
   useEffect(() => {
     if (!isDraggingRef.current && isInitialized) {
-      organizeNodeZIndex()
+      // Use immediate update for selection changes to ensure proper layering
+      const nodeLayer = nodeLayerRef.current
+      if (!nodeLayer || allNodeElementsRef.current.size === 0) return
+
+      const normalNodes: SVGGElement[] = []
+      const selectedNodes: SVGGElement[] = []
+      const draggingNodes: SVGGElement[] = []
+
+      allNodeElementsRef.current.forEach((element, nodeId) => {
+        if (!nodeLayer.contains(element)) return
+        
+        const isDragging = isDraggingRef.current && nodeId === draggedNodeIdRef.current
+        const isSelected = isNodeSelected(nodeId)
+
+        if (isDragging) {
+          draggingNodes.push(element)
+        } else if (isSelected) {
+          selectedNodes.push(element)
+        } else {
+          normalNodes.push(element)
+        }
+      })
+
+      // Reorder DOM elements immediately: normal → selected → dragging
+      const orderedElements = [...normalNodes, ...selectedNodes, ...draggingNodes]
+      
+      orderedElements.forEach(element => {
+        if (nodeLayer.contains(element) && nodeLayer.lastChild !== element) {
+          nodeLayer.appendChild(element)
+        }
+      })
     }
-  }, [selectedNodes, organizeNodeZIndex, isInitialized])
+  }, [selectedNodes, isNodeSelected, isInitialized])
 
   // Main D3 rendering effect - split into smaller, focused effects
   useEffect(() => {
@@ -337,136 +477,10 @@ export default function WorkflowCanvas({
     // Store node layer reference
     nodeLayerRef.current = mainNodeLayer.node() as SVGGElement
     
-    // Add toolbar layer (fixed positioning, not affected by zoom/pan)
-    const toolbarLayer = svg.append('g').attr('class', 'toolbar-layer').style('pointer-events', 'all')
 
     // Create initial grid
     const rect = svgRef.current.getBoundingClientRect()
     createGrid(gridLayer, canvasTransform, rect.width, rect.height)
-
-    // Render canvas toolbar function (defined before zoom behavior)
-    const renderCanvasToolbar = () => {
-      const rect = svgRef.current?.getBoundingClientRect()
-      if (!rect) return
-      
-      // Get current transform
-      const currentTransform = svgRef.current ? d3.zoomTransform(svgRef.current) : null
-      const currentZoom = currentTransform ? currentTransform.k : canvasTransform.k
-      
-      toolbarLayer.selectAll('*').remove()
-      
-      // Toolbar background
-      toolbarLayer.append('rect')
-        .attr('x', 10)
-        .attr('y', 10)
-        .attr('width', 320)
-        .attr('height', 50)
-        .attr('rx', 8)
-        .attr('fill', 'rgba(255, 255, 255, 0.95)')
-        .attr('stroke', '#e0e0e0')
-        .attr('stroke-width', 1)
-        .style('filter', 'drop-shadow(0 2px 8px rgba(0, 0, 0, 0.1))')
-        .style('backdrop-filter', 'blur(8px)')
-      
-      let xOffset = 20
-      
-      // Zoom controls
-      const createToolbarButton = (x: number, y: number, width: number, height: number, text: string, onClick: () => void, disabled = false) => {
-        const btn = toolbarLayer.append('g')
-          .style('cursor', disabled ? 'not-allowed' : 'pointer')
-          .style('opacity', disabled ? 0.5 : 1)
-        
-        if (!disabled) {
-          btn.on('click', onClick)
-        }
-        
-        btn.append('rect')
-          .attr('x', x)
-          .attr('y', y)
-          .attr('width', width)
-          .attr('height', height)
-          .attr('rx', 4)
-          .attr('fill', disabled ? '#f5f5f5' : '#ffffff')
-          .attr('stroke', '#ddd')
-          .attr('stroke-width', 1)
-        
-        btn.append('text')
-          .attr('x', x + width / 2)
-          .attr('y', y + height / 2)
-          .attr('text-anchor', 'middle')
-          .attr('dominant-baseline', 'middle')
-          .attr('font-size', '12px')
-          .attr('fill', disabled ? '#999' : '#333')
-          .text(text)
-        
-        return btn
-      }
-      
-      // Zoom In button
-      createToolbarButton(xOffset, 25, 30, 20, '+', onZoomIn, currentZoom >= 3)
-      xOffset += 35
-      
-      // Zoom Out button
-      createToolbarButton(xOffset, 25, 30, 20, '−', onZoomOut, currentZoom <= 0.2)
-      xOffset += 35
-      
-      // Zoom level display
-      toolbarLayer.append('text')
-        .attr('x', xOffset + 15)
-        .attr('y', 35)
-        .attr('text-anchor', 'middle')
-        .attr('dominant-baseline', 'middle')
-        .attr('font-size', '11px')
-        .attr('fill', '#666')
-        .text(`${Math.round(currentZoom * 100)}%`)
-      xOffset += 40
-      
-      // Fit to Screen button
-      createToolbarButton(xOffset, 25, 30, 20, '⌂', onFitToScreen)
-      xOffset += 35
-      
-      // Reset Position button
-      createToolbarButton(xOffset, 25, 30, 20, '↻', onResetPosition)
-      xOffset += 35
-      
-      // Grid Toggle button
-      const gridBtn = createToolbarButton(xOffset, 25, 30, 20, showGrid ? '⊞' : '⊡', onToggleGrid)
-      if (showGrid) {
-        gridBtn.select('rect').attr('fill', '#e3f2fd').attr('stroke', '#2196F3')
-      }
-      xOffset += 35
-      
-      // Node variant selector (if available)
-      if (onVariantChange) {
-        const variantGroup = toolbarLayer.append('g')
-        
-        variantGroup.append('rect')
-          .attr('x', xOffset)
-          .attr('y', 25)
-          .attr('width', 60)
-          .attr('height', 20)
-          .attr('rx', 4)
-          .attr('fill', '#ffffff')
-          .attr('stroke', '#ddd')
-          .attr('stroke-width', 1)
-        
-        variantGroup.append('text')
-          .attr('x', xOffset + 30)
-          .attr('y', 35)
-          .attr('text-anchor', 'middle')
-          .attr('dominant-baseline', 'middle')
-          .attr('font-size', '10px')
-          .attr('fill', '#333')
-          .text(nodeVariant === 'compact' ? 'Compact' : 'Standard')
-        
-        variantGroup
-          .style('cursor', 'pointer')
-          .on('click', () => {
-            const newVariant = nodeVariant === 'compact' ? 'standard' : 'compact'
-            onVariantChange(newVariant as NodeVariant)
-          })
-      }
-    }
 
     // Zoom behavior
     const zoom = d3.zoom<SVGSVGElement, unknown>()
@@ -474,21 +488,32 @@ export default function WorkflowCanvas({
       .on('zoom', (event) => {
         const transform = event.transform
         g.attr('transform', transform.toString())
-        !!onZoomLevel && onZoomLevel(transform.k)
+        !!onZoomLevelChange && currentTransformRef.current.k!=transform.k && onZoomLevelChange(transform.k)
         createGrid(gridLayer, transform, rect.width, rect.height)
         onTransformChange(transform)
-        // Update toolbar when zoom changes
-        renderCanvasToolbar()
+        
+        // Force nodes to re-render on zoom change by updating their visual state
+        if (Math.abs(transform.k - currentTransformRef.current.k) > 0.01) {
+          mainNodeLayer.selectAll('.node').each(function(d: any) {
+            const node = d3.select(this)
+            // Force update by re-applying transform
+            node.attr('transform', `translate(${d.x}, ${d.y})`)
+          })
+        }
       })
 
     svg.call(zoom)
+    
+    // Register zoom behavior for programmatic control
+    onRegisterZoomBehavior?.(zoom)
 
     // Set initial transform (not in dependencies to avoid infinite loop)
     svg.call(zoom.transform, d3.zoomIdentity
       .translate(canvasTransform.x, canvasTransform.y)
       .scale(canvasTransform.k))
 
-    // Optimized drag functions with RAF
+    // Optimized drag functions
+
     function dragStarted(this: any, event: any, d: WorkflowNode) {
       const nodeElement = d3.select(this)
       const dragData = d as any
@@ -501,22 +526,9 @@ export default function WorkflowCanvas({
       draggedNodeIdRef.current = d.id
       draggedNodeElementRef.current = domNode
       
-      // Apply dragging visual style with RAF
-      requestAnimationFrame(() => {
-        nodeElement
-          .style('opacity', 0.9)
-          .style('filter', 'drop-shadow(0 6px 12px rgba(0, 0, 0, 0.3))')
-        
-        const nodeBackground = nodeElement.select('.node-background')
-        const isSelected = isNodeSelected(d.id)
-        if (isSelected) {
-          nodeBackground.attr('stroke', '#2196F3').attr('stroke-width', 3)
-        } else {
-          nodeBackground.attr('stroke', getNodeColor(d.type, d.status)).attr('stroke-width', 3)
-        }
-      })
-      
-      // Use centralized z-index management  
+      // Apply dragging visual style and ensure proper z-index
+      applyDragVisualStyle(nodeElement, d.id)
+      // Set z-index immediately to ensure dragged node is on top
       setNodeAsDragging(d.id)
       
       const svgElement = svgRef.current!
@@ -531,6 +543,7 @@ export default function WorkflowCanvas({
       dragData.hasDragged = false
       dragData.dragStartTime = Date.now()
     }
+
 
     function dragged(this: any, event: any, d: WorkflowNode) {
       const dragData = d as any
@@ -553,44 +566,19 @@ export default function WorkflowCanvas({
       const newX = dragData.initialX + deltaX
       const newY = dragData.initialY + deltaY
 
-      // Throttle visual updates with RAF
-      if (rafIdRef.current) {
-        cancelAnimationFrame(rafIdRef.current)
-      }
+      // Throttle visual updates with debounced RAF
+      updateDraggedNodePosition(d.id, newX, newY)
       
-      rafIdRef.current = requestAnimationFrame(() => {
-        // Update visual position
-        if (draggedElementRef.current) {
-          draggedElementRef.current.attr('transform', `translate(${newX}, ${newY})`)
-        }
-
-        // Clear connection cache for affected connections
-        connections.forEach(conn => {
-          if (conn.sourceNodeId === d.id || conn.targetNodeId === d.id) {
-            const cacheKey = `${conn.sourceNodeId}-${conn.sourcePortId}-${conn.targetNodeId}-${conn.targetPortId}-${nodeVariant}`
-            connectionPathCacheRef.current.delete(cacheKey)
-          }
-        })
-
-        // Update connections in real-time (only affected ones)
-        connectionLayer.selectAll('.connection path')
-          .filter((conn: any) => conn.sourceNodeId === d.id || conn.targetNodeId === d.id)
-          .attr('d', (conn: any) => getConnectionPath(conn))
-          
-        rafIdRef.current = null
-      })
-
       // Notify parent component
       onNodeDrag(d.id, newX, newY)
     }
+
 
     function dragEnded(this: any, event: any, d: WorkflowNode) {
       const dragData = d as any
       const hasDragged = dragData.hasDragged
       const dragDuration = Date.now() - (dragData.dragStartTime || 0)
       const nodeElement = d3.select(this)
-      const nodeBackground = nodeElement.select('.node-background')
-      const isSelected = isNodeSelected(d.id)
 
       // Clean up drag state
       delete dragData.dragStartX
@@ -607,27 +595,11 @@ export default function WorkflowCanvas({
       draggedNodeIdRef.current = null
       draggedNodeElementRef.current = null
 
-      // Reset visual styles based on selection state
-      if (isSelected) {
-        nodeElement
-          .style('opacity', 1)
-          .style('filter', 'drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))')
-        nodeBackground
-          .attr('stroke', '#2196F3')
-          .attr('stroke-width', 3)
-      } else {
-        nodeElement
-          .style('opacity', 1)
-          .style('filter', 'none')
-        nodeBackground
-          .attr('stroke', getNodeColor(d.type, d.status))
-          .attr('stroke-width', 2)
-      }
+      // Reset visual styles
+      resetNodeVisualStyle(nodeElement, d.id)
 
-      // Use centralized z-index management after drag ends
-      setTimeout(() => {
-        organizeNodeZIndex()
-      }, 0)
+      // Reorganize z-index immediately after drag ends to restore proper order
+      organizeNodeZIndex(true) // Use immediate execution to ensure proper layering
 
       // If no significant drag occurred, treat as click
       if (!hasDragged && event.sourceEvent && dragDuration < 500) {
@@ -720,7 +692,7 @@ export default function WorkflowCanvas({
       .style('cursor', 'move')
       .each(function(d: any) {
         // Register node element in our centralized management
-        allNodeElementsRef.current.set(d.id, this as SVGGElement)
+        allNodeElementsRef.current.set(d.id, this)
       })
       .call(d3.drag<any, WorkflowNode>()
         .container(g.node() as any)
@@ -738,22 +710,6 @@ export default function WorkflowCanvas({
       })
       .attr('transform', (d: any) => `translate(${d.x}, ${d.y})`)
 
-    // Get configurable dimensions based on variant
-    const getConfigurableDimensions = (node: WorkflowNode) => {
-      const dimensions = getNodeDimensions(node)
-      
-      // Adjust dimensions based on variant
-      switch (nodeVariant) {
-        case 'compact':
-          return {
-            ...dimensions,
-            width: dimensions.width * 0.8,
-            height: dimensions.height * 0.8
-          }
-        default: // standard
-          return dimensions
-      }
-    }
 
     // Node background
     nodeEnter.append('rect')
@@ -819,12 +775,12 @@ export default function WorkflowCanvas({
     // Mark as initialized and organize z-index
     if (!isInitialized) {
       setIsInitialized(true)
-      // Initial z-index organization
-      requestAnimationFrame(() => {
+      // Initial z-index organization - use immediate execution for initial setup
+      setTimeout(() => {
         if (!isDraggingRef.current) {
-          organizeNodeZIndex()
+          organizeNodeZIndex(true) // Immediate execution for initialization
         }
-      })
+      }, 0)
     }
 
     // Node icon
@@ -872,6 +828,75 @@ export default function WorkflowCanvas({
         event.stopPropagation()
         onPortClick(d.nodeId, d.id, 'input')
       })
+      .call(d3.drag<any, any>()
+        .on('start', (event: any, d: any) => {
+          event.sourceEvent.stopPropagation()
+          event.sourceEvent.preventDefault()
+          onPortDragStart(d.nodeId, d.id, 'input')
+          
+          const [x, y] = d3.pointer(event.sourceEvent, event.sourceEvent.target.ownerSVGElement)
+          const transform = d3.zoomTransform(event.sourceEvent.target.ownerSVGElement)
+          const [canvasX, canvasY] = transform.invert([x, y])
+          onPortDrag(canvasX, canvasY)
+        })
+        .on('drag', (event: any) => {
+          const [x, y] = d3.pointer(event.sourceEvent, event.sourceEvent.target.ownerSVGElement)
+          const transform = d3.zoomTransform(event.sourceEvent.target.ownerSVGElement)
+          const [canvasX, canvasY] = transform.invert([x, y])
+          onPortDrag(canvasX, canvasY)
+        })
+        .on('end', (event: any) => {
+          console.log('Input port drag end', event.sourceEvent.clientX, event.sourceEvent.clientY)
+          
+          // Alternative method: use D3 pointer and hit testing
+          const svgElement = event.sourceEvent.target.ownerSVGElement
+          const [mouseX, mouseY] = d3.pointer(event.sourceEvent, svgElement)
+          console.log('Mouse position in SVG (input):', mouseX, mouseY)
+          
+          let targetNodeId: string | undefined
+          let targetPortId: string | undefined
+          
+          // Find all output port circles and check if mouse is over them
+          const allOutputPorts = d3.select(svgElement).selectAll('.output-port-circle')
+          
+          allOutputPorts.each(function(d: any) {
+            const circle = d3.select(this)
+            const cx = parseFloat(circle.attr('cx'))
+            const cy = parseFloat(circle.attr('cy'))
+            const r = parseFloat(circle.attr('r'))
+            
+            // Get the port's parent group transform
+            const element = this as SVGElement
+            const portGroup = d3.select(element.parentNode as SVGElement)
+            const nodeGroup = d3.select(portGroup.node()?.closest('g[data-node-id]') as SVGElement)
+            const transform = nodeGroup.attr('transform')
+            
+            let nodeX = 0, nodeY = 0
+            if (transform) {
+              const regex = /translate\(([^,]+),([^)]+)\)/
+              const match = regex.exec(transform)
+              if (match) {
+                nodeX = parseFloat(match[1])
+                nodeY = parseFloat(match[2])
+              }
+            }
+            
+            const actualX = nodeX + cx
+            const actualY = nodeY + cy
+            
+            // Check if mouse is within port radius
+            const distance = Math.sqrt((mouseX - actualX) ** 2 + (mouseY - actualY) ** 2)
+            if (distance <= r + 5) { // Add 5px tolerance
+              targetNodeId = nodeGroup.attr('data-node-id')
+              targetPortId = d.id
+              console.log('Found output port via hit test:', targetNodeId, targetPortId, 'distance:', distance)
+            }
+          })
+          
+          console.log('Final target (input drag):', targetNodeId, targetPortId)
+          onPortDragEnd(targetNodeId, targetPortId)
+        })
+      )
 
     inputPortGroups.selectAll('circle').remove()
     inputPortGroups.append('circle')
@@ -887,14 +912,14 @@ export default function WorkflowCanvas({
       .attr('r', (d: any) => getConfigurableDimensions(d.nodeData).portRadius)
       .attr('fill', (d: any) => {
         if (isConnecting && connectionStart && connectionStart.type === 'output') {
-          const canDrop = canDropOnPort(d.nodeId, d.id)
+          const canDrop = canDropOnPort(d.nodeId, d.id, 'input')
           return canDrop ? '#4CAF50' : getPortColor('any')
         }
         return getPortColor('any')
       })
       .attr('stroke', (d: any) => {
         if (isConnecting && connectionStart && connectionStart.type === 'output') {
-          const canDrop = canDropOnPort(d.nodeId, d.id)
+          const canDrop = canDropOnPort(d.nodeId, d.id, 'input')
           return canDrop ? '#4CAF50' : '#ff5722'
         }
         return '#333'
@@ -930,27 +955,54 @@ export default function WorkflowCanvas({
           onPortDrag(canvasX, canvasY)
         })
         .on('end', (event: any) => {
-          const elementsUnderMouse = document.elementsFromPoint(
-            event.sourceEvent.clientX,
-            event.sourceEvent.clientY
-          )
+          console.log('Output port drag end', event.sourceEvent.clientX, event.sourceEvent.clientY)
+          
+          // Alternative method: use D3 pointer and hit testing
+          const svgElement = event.sourceEvent.target.ownerSVGElement
+          const [mouseX, mouseY] = d3.pointer(event.sourceEvent, svgElement)
+          console.log('Mouse position in SVG:', mouseX, mouseY)
           
           let targetNodeId: string | undefined
           let targetPortId: string | undefined
           
-          for (const element of elementsUnderMouse) {
-            if (element.closest('.input-port-group')) {
-              const inputPortGroup = element.closest('.input-port-group')
-              const nodeGroup = inputPortGroup?.closest('g[data-node-id]')
-              if (nodeGroup && inputPortGroup) {
-                targetNodeId = nodeGroup.getAttribute('data-node-id') || undefined
-                const portData = d3.select(inputPortGroup).datum() as any
-                targetPortId = portData?.id
-                break
+          // Find all input port circles and check if mouse is over them
+          const allInputPorts = d3.select(svgElement).selectAll('.input-port-circle')
+          
+          allInputPorts.each(function(d: any) {
+            const circle = d3.select(this)
+            const cx = parseFloat(circle.attr('cx'))
+            const cy = parseFloat(circle.attr('cy'))
+            const r = parseFloat(circle.attr('r'))
+            
+            // Get the port's parent group transform
+            const element = this as SVGElement
+            const portGroup = d3.select(element.parentNode as SVGElement)
+            const nodeGroup = d3.select(portGroup.node()?.closest('g[data-node-id]') as SVGElement)
+            const transform = nodeGroup.attr('transform')
+            
+            let nodeX = 0, nodeY = 0
+            if (transform) {
+              const regex = /translate\(([^,]+),([^)]+)\)/
+              const match = regex.exec(transform)
+              if (match) {
+                nodeX = parseFloat(match[1])
+                nodeY = parseFloat(match[2])
               }
             }
-          }
+            
+            const actualX = nodeX + cx
+            const actualY = nodeY + cy
+            
+            // Check if mouse is within port radius
+            const distance = Math.sqrt((mouseX - actualX) ** 2 + (mouseY - actualY) ** 2)
+            if (distance <= r + 5) { // Add 5px tolerance
+              targetNodeId = nodeGroup.attr('data-node-id')
+              targetPortId = d.id
+              console.log('Found input port via hit test:', targetNodeId, targetPortId, 'distance:', distance)
+            }
+          })
           
+          console.log('Final target:', targetNodeId, targetPortId)
           onPortDragEnd(targetNodeId, targetPortId)
         })
       )
@@ -983,9 +1035,6 @@ export default function WorkflowCanvas({
       onCanvasMouseMove(canvasX, canvasY)
     })
 
-    // Initial toolbar render
-    renderCanvasToolbar()
-
     // Cleanup function
     return () => {
       if (rafIdRef.current) {
@@ -1000,7 +1049,8 @@ export default function WorkflowCanvas({
 
   }, [nodes, connections, showGrid, nodeVariant])
   
-  // Visual state effect - handle selection and connection states
+  
+  // Visual state effect - handle selection and connection states with z-index management
   useEffect(() => {
     if (!svgRef.current || !isInitialized) return
     
@@ -1028,13 +1078,18 @@ export default function WorkflowCanvas({
       }
     })
     
+    // Ensure proper z-index after visual state changes (but only if not dragging)
+    if (!isDraggingRef.current) {
+      organizeNodeZIndex(true) // Use immediate execution to ensure proper layering
+    }
+    
     // Update connection visual states only
     connectionLayer.selectAll('.connection path')
       .attr('stroke', (d: any) => selectedConnection?.id === d.id ? '#2196F3' : '#666')
       .attr('stroke-width', (d: any) => selectedConnection?.id === d.id ? 3 : 2)
       .attr('marker-end', (d: any) => selectedConnection?.id === d.id ? 'url(#arrowhead-selected)' : 'url(#arrowhead)')
       
-  }, [selectedNodes, selectedConnection, isNodeSelected, getNodeColor, isInitialized])
+  }, [selectedNodes, selectedConnection, isNodeSelected, getNodeColor, isInitialized, organizeNodeZIndex])
   
   // Connection state effect
   useEffect(() => {
@@ -1047,7 +1102,7 @@ export default function WorkflowCanvas({
     g.selectAll('.connection-preview').remove()
     
     if (isConnecting && connectionStart) {
-      const sourceNode = nodes.find(n => n.id === connectionStart.nodeId)
+      const sourceNode = nodeMap.get(connectionStart.nodeId)
       if (sourceNode && connectionPreview) {
         const previewPath = calculateConnectionPreviewPath(
           sourceNode,
@@ -1068,7 +1123,75 @@ export default function WorkflowCanvas({
           .style('opacity', 0.7)
       }
     }
-  }, [isConnecting, connectionStart, connectionPreview, nodeVariant, nodes, isInitialized])
+    
+    // Update port visual states during connection
+    const nodeLayer = svg.select('.node-layer')
+    
+    // Update input ports visual state
+    nodeLayer.selectAll('.input-port-circle')
+      .attr('fill', (d: any) => {
+        if (isConnecting && connectionStart && connectionStart.type === 'output') {
+          const canDrop = canDropOnPort(d.nodeId, d.id, 'input')
+          return canDrop ? '#4CAF50' : '#ccc'
+        }
+        return getPortColor('any')
+      })
+      .attr('stroke', (d: any) => {
+        if (isConnecting && connectionStart && connectionStart.type === 'output') {
+          const canDrop = canDropOnPort(d.nodeId, d.id, 'input')
+          return canDrop ? '#4CAF50' : '#ff5722'
+        }
+        return '#333'
+      })
+      .attr('stroke-width', (d: any) => {
+        if (isConnecting && connectionStart && connectionStart.type === 'output') {
+          const canDrop = canDropOnPort(d.nodeId, d.id, 'input')
+          return canDrop ? 3 : 2
+        }
+        return 2
+      })
+      .attr('r', (d: any) => {
+        if (isConnecting && connectionStart && connectionStart.type === 'output') {
+          const canDrop = canDropOnPort(d.nodeId, d.id, 'input')
+          const baseDimensions = getConfigurableDimensions(d.nodeData)
+          return canDrop ? baseDimensions.portRadius * 1.5 : baseDimensions.portRadius
+        }
+        return getConfigurableDimensions(d.nodeData).portRadius
+      })
+      
+    // Update output ports visual state
+    nodeLayer.selectAll('.output-port-circle')
+      .attr('fill', (d: any) => {
+        if (isConnecting && connectionStart && connectionStart.type === 'input') {
+          const canDrop = canDropOnPort(d.nodeId, d.id, 'output')
+          return canDrop ? '#4CAF50' : '#ccc'
+        }
+        return getPortColor('any')
+      })
+      .attr('stroke', (d: any) => {
+        if (isConnecting && connectionStart && connectionStart.type === 'input') {
+          const canDrop = canDropOnPort(d.nodeId, d.id, 'output')
+          return canDrop ? '#4CAF50' : '#ff5722'
+        }
+        return '#333'
+      })
+      .attr('stroke-width', (d: any) => {
+        if (isConnecting && connectionStart && connectionStart.type === 'input') {
+          const canDrop = canDropOnPort(d.nodeId, d.id, 'output')
+          return canDrop ? 3 : 2
+        }
+        return 2
+      })
+      .attr('r', (d: any) => {
+        if (isConnecting && connectionStart && connectionStart.type === 'input') {
+          const canDrop = canDropOnPort(d.nodeId, d.id, 'output')
+          const baseDimensions = getConfigurableDimensions(d.nodeData)
+          return canDrop ? baseDimensions.portRadius * 1.5 : baseDimensions.portRadius
+        }
+        return getConfigurableDimensions(d.nodeData).portRadius
+      })
+      
+  }, [isConnecting, connectionStart, connectionPreview, nodeVariant, nodeMap, isInitialized, canDropOnPort, getPortColor, getConfigurableDimensions])
   
   // Canvas state effect
   useEffect(() => {
@@ -1096,4 +1219,6 @@ export default function WorkflowCanvas({
   }, [])
 
   return null // This component only manages D3 rendering
-}
+})
+
+export default WorkflowCanvas

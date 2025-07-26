@@ -13,6 +13,7 @@ import { useConnections } from './hooks/useConnections'
 
 // Import components
 import WorkflowCanvas from './components/WorkflowCanvas'
+import CanvasToolbar from './components/CanvasToolbar'
 import NodePalette from '../NodePalette'
 import NodeEditor from '../NodeEditor'
 
@@ -512,17 +513,10 @@ export default function WorkflowDesigner() {
             canDropOnPort={connections.canDropOnPort}
             canDropOnNode={connections.canDropOnNode}
             onTransformChange={handleTransformChange}
-            onToggleGrid={() => setShowGrid(!showGrid)}
-            onVariantChange={setNodeVariant}
-            onZoomIn={canvasTransform.zoomIn}
-            onZoomOut={canvasTransform.zoomOut}
-            onFitToScreen={() => canvasTransform.fitToScreen(nodes)}
-            onResetPosition={() => canvasTransform.resetCanvasPosition(nodes, getNodeHeight)}
-            executionStatus={executionState.status === 'paused' ? 'idle' : executionState.status}
           />
 
           {/* Canvas Toolbar */}
-          {/* <CanvasToolbar
+          <CanvasToolbar
             zoomLevel={canvasTransform.canvasTransformRef.current?.k || 1}
             showGrid={showGrid}
             onToggleGrid={() => setShowGrid(!showGrid)}
@@ -534,7 +528,7 @@ export default function WorkflowDesigner() {
             onResetPosition={() => canvasTransform.resetCanvasPosition(nodes, getNodeHeight)}
             executionStatus={executionState.status === 'paused' ? 'idle' : executionState.status}
             selectedNodeCount={nodeSelection.selectedNodes.size}
-          /> */}
+          />
         </div>
 
         {/* Right Sidebar - Node Editor */}

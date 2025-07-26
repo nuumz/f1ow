@@ -1,0 +1,492 @@
+/* Enhanced Workflow Designer Styles */
+
+/* Layout Fixes */
+.workflow-designer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: white;
+  border-bottom: 1px solid #e9ecef;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  z-index: 1000;
+  flex-shrink: 0;
+}
+
+.workflow-name-section {
+  flex: 1;
+  min-width: 0;
+}
+
+.workflow-designer-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.node-palette-container {
+  width: 280px;
+  background: white;
+  border-right: 1px solid #e9ecef;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.canvas-container {
+  flex: 1;
+  position: relative;
+  background: #fcfcfc;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.canvas-container.drag-over {
+  background: #e3f2fd;
+}
+
+.node-editor-container {
+  width: 320px;
+  background: white;
+  border-left: 1px solid #e9ecef;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.workflow-canvas {
+  cursor: grab;
+  width: 100%;
+  height: 100%;
+}
+
+.workflow-canvas:active {
+  cursor: grabbing;
+}
+
+/* Execution Logs */
+.execution-logs {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 200px;
+  background: white;
+  border-top: 1px solid #e9ecef;
+  overflow-y: auto;
+  z-index: 100;
+}
+
+.execution-logs h3 {
+  margin: 0;
+  padding: 8px 16px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.logs-container {
+  padding: 8px 0;
+}
+
+.log-entry {
+  display: flex;
+  gap: 12px;
+  padding: 4px 16px;
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  border-bottom: 1px solid #f1f3f4;
+}
+
+.log-entry:last-child {
+  border-bottom: none;
+}
+
+.log-entry.error {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.log-entry.warning {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.log-entry.info {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.log-timestamp {
+  font-weight: 600;
+  min-width: 80px;
+}
+
+.log-node {
+  font-weight: 500;
+  min-width: 100px;
+}
+
+.log-message {
+  flex: 1;
+}
+
+/* Notification Styles */
+.notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  color: white;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 300px;
+  animation: slideInRight 0.3s ease-out;
+}
+
+.notification-success {
+  background: #10b981;
+}
+
+.notification-error {
+  background: #ef4444;
+}
+
+.notification-close {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  margin-left: 12px;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Enhanced Action Buttons */
+.workflow-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Canvas Toolbar Integration */
+.canvas-toolbar {
+  margin-left: 12px;
+  padding-left: 12px;
+  border-left: 1px solid #e9ecef;
+}
+
+.action-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: white;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.action-button:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #9ca3af;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.action-button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.action-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #f3f4f6;
+}
+
+/* Specific button styles */
+.save-button:not(:disabled) {
+  background: #3b82f6;
+  color: white;
+  border-color: #2563eb;
+}
+
+.save-button:hover:not(:disabled) {
+  background: #2563eb;
+  border-color: #1d4ed8;
+}
+
+.execute-button:not(:disabled) {
+  background: #10b981;
+  color: white;
+  border-color: #059669;
+}
+
+.execute-button:hover:not(:disabled) {
+  background: #059669;
+  border-color: #047857;
+}
+
+.export-button:not(:disabled) {
+  background: #8b5cf6;
+  color: white;
+  border-color: #7c3aed;
+}
+
+.export-button:hover:not(:disabled) {
+  background: #7c3aed;
+  border-color: #6d28d9;
+}
+
+.import-button:not(.disabled) {
+  background: #f59e0b;
+  color: white;
+  border-color: #d97706;
+}
+
+.import-button:hover:not(.disabled) {
+  background: #d97706;
+  border-color: #b45309;
+}
+
+/* Canvas control buttons */
+.zoom-button, .fit-button, .reset-button {
+  padding: 6px 8px;
+  min-width: auto;
+}
+
+.grid-button.active {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-color: #3b82f6;
+}
+
+.variant-button {
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+/* Enhanced Status Bar */
+.workflow-designer-status {
+  background: white;
+  border-top: 1px solid #e9ecef;
+  padding: 8px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.status-info {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.status-info span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.execution-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-indicator {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-indicator.idle {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.status-indicator.running {
+  background: #dbeafe;
+  color: #1d4ed8;
+  animation: pulse 2s infinite;
+}
+
+.status-indicator.completed {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-indicator.error {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .node-palette-container {
+    width: 240px;
+  }
+  
+  .node-editor-container {
+    width: 280px;
+  }
+}
+
+@media (max-width: 768px) {
+  .workflow-designer-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+    padding: 8px 12px;
+  }
+  
+  .workflow-name-section {
+    order: 1;
+  }
+  
+  .workflow-actions {
+    order: 2;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  
+  .canvas-toolbar {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: none;
+    border-top: 1px solid #e9ecef;
+    padding-top: 8px;
+    justify-content: center;
+  }
+  
+  .workflow-designer-content {
+    flex-direction: column;
+  }
+  
+  .node-palette-container {
+    width: 100%;
+    height: 120px;
+    border-right: none;
+    border-bottom: 1px solid #e9ecef;
+    order: 1;
+  }
+  
+  .canvas-container {
+    order: 2;
+    flex: 1;
+    min-height: 400px;
+  }
+  
+  .node-editor-container {
+    width: 100%;
+    height: 200px;
+    border-left: none;
+    border-top: 1px solid #e9ecef;
+    order: 3;
+  }
+  
+  .workflow-designer-status {
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+    text-align: center;
+  }
+  
+  .notification {
+    left: 20px;
+    right: 20px;
+    min-width: auto;
+  }
+  
+  .action-button {
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+  
+  .execution-logs {
+    max-height: 150px;
+  }
+}
+
+/* Dark mode support (optional) */
+@media (prefers-color-scheme: dark) {
+  .workflow-designer {
+    background: #111827;
+  }
+  
+  .workflow-designer-header {
+    background: #1f2937;
+    border-bottom-color: #374151;
+  }
+  
+  .workflow-name-input {
+    color: #f9fafb;
+  }
+  
+  .workflow-name-input:hover {
+    background: #374151;
+  }
+  
+  .workflow-name-input:focus {
+    background: #4b5563;
+  }
+  
+  .action-button {
+    background: #374151;
+    border-color: #4b5563;
+    color: #f9fafb;
+  }
+  
+  .action-button:hover:not(:disabled) {
+    background: #4b5563;
+    border-color: #6b7280;
+  }
+  
+  .workflow-designer-status {
+    background: #1f2937;
+    border-top-color: #374151;
+    color: #9ca3af;
+  }
+}

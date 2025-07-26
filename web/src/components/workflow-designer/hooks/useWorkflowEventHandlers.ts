@@ -128,78 +128,92 @@ export function useWorkflowEventHandlers() {
   }, [dispatch])
 
   const handleCanvasMouseMove = useCallback((x: number, y: number) => {
-    if (state.connectionState.isConnecting && state.connectionState.connectionStart) {
+    const currentConnectionState = connectionStateRef.current
+    if (currentConnectionState.isConnecting && currentConnectionState.connectionStart) {
       dispatch({ type: 'UPDATE_CONNECTION_PREVIEW', payload: { x, y } })
     }
-  }, [state.connectionState, dispatch])
+  }, [dispatch])
 
   // Drag & Drop handlers for connections
   const handlePortDragStart = useCallback((nodeId: string, portId: string, portType: 'input' | 'output') => {
-    console.log('handlePortDragStart called:', { nodeId, portId, portType })
-    console.log('Current connection state before START_CONNECTION:', state.connectionState)
-    dispatch({ type: 'START_CONNECTION', payload: { nodeId, portId, type: portType } })
+    console.log('🔥 handlePortDragStart called:', { nodeId, portId, portType })
     
-    // Force re-check state after dispatch
-    setTimeout(() => {
-      console.log('Connection state after START_CONNECTION dispatch:', state.connectionState)
-    }, 0)
-  }, [dispatch, state.connectionState])
+    // Prevent duplicate calls - only allow if not already connecting
+    const currentConnectionState = connectionStateRef.current
+    if (currentConnectionState.isConnecting) {
+      console.log('⚠️ Already connecting, ignoring duplicate call')
+      return
+    }
+    
+    // Only allow dragging from output ports
+    if (portType === 'output') {
+      dispatch({ type: 'START_CONNECTION', payload: { nodeId, portId, type: portType } })
+      console.log('✅ Connection started from output port')
+    } else {
+      console.log('❌ Cannot start connection from input port')
+    }
+  }, [dispatch])
 
   const handlePortDrag = useCallback((x: number, y: number) => {
-    dispatch({ type: 'UPDATE_CONNECTION_PREVIEW', payload: { x, y } })
+    // Update connection preview position in real-time
+    const currentConnectionState = connectionStateRef.current
+    console.log('🎯 handlePortDrag called:', { x, y, isConnecting: currentConnectionState.isConnecting })
+    if (currentConnectionState.isConnecting) {
+      console.log('🎯 Dispatching UPDATE_CONNECTION_PREVIEW:', { x, y })
+      dispatch({ type: 'UPDATE_CONNECTION_PREVIEW', payload: { x, y } })
+    }
   }, [dispatch])
 
   const handlePortDragEnd = useCallback((targetNodeId?: string, targetPortId?: string) => {
-    // Use ref to get fresh connection state
+    // Get fresh connection state from ref
     const currentConnectionState = connectionStateRef.current
     
-    console.log('handlePortDragEnd called:', {
+    console.log('🔥 handlePortDragEnd called:', {
       targetNodeId,
       targetPortId,
-      connectionStart: currentConnectionState.connectionStart,
-      isConnecting: currentConnectionState.isConnecting
+      isConnecting: currentConnectionState.isConnecting,
+      connectionStart: currentConnectionState.connectionStart
     })
     
-    if (targetNodeId && targetPortId && currentConnectionState.connectionStart) {
-      const { nodeId, portId, type } = currentConnectionState.connectionStart
+    // Guard against multiple calls when not connecting
+    if (!currentConnectionState.isConnecting || !currentConnectionState.connectionStart) {
+      console.log('⚠️ Not currently connecting, ignoring call')
+      return
+    }
+    
+    if (targetNodeId && targetPortId) {
+      const { nodeId: sourceNodeId, portId: sourcePortId, type } = currentConnectionState.connectionStart
       
-      console.log('Connection start data:', { nodeId, portId, type })
+      console.log('🔗 Attempting to create connection:', {
+        sourceNodeId,
+        sourcePortId,
+        sourceType: type,
+        targetNodeId,
+        targetPortId
+      })
       
-      if (nodeId !== targetNodeId) {
-        let sourceNodeId, sourcePortId, targetNodeIdFinal, targetPortIdFinal
-
-        if (type === 'output') {
-          sourceNodeId = nodeId
-          sourcePortId = portId
-          targetNodeIdFinal = targetNodeId
-          targetPortIdFinal = targetPortId
-        } else {
-          sourceNodeId = targetNodeId
-          sourcePortId = targetPortId
-          targetNodeIdFinal = nodeId
-          targetPortIdFinal = portId
-        }
-
-        console.log('Creating connection:', {
-          sourceNodeId,
-          sourcePortId,
-          targetNodeIdFinal,
-          targetPortIdFinal
-        })
-
+      // Only allow output -> input connections
+      if (type === 'output' && sourceNodeId !== targetNodeId) {
+        console.log('✅ Valid connection attempt: output -> input')
+        
         // Use operations for connection creation
-        operations.createConnection(sourceNodeId, sourcePortId, targetNodeIdFinal, targetPortIdFinal)
+        const result = operations.createConnection(sourceNodeId, sourcePortId, targetNodeId, targetPortId)
+        
+        if (result) {
+          console.log('✅ Connection created successfully')
+        } else {
+          console.log('❌ Connection creation failed')
+        }
       } else {
-        console.log('Same node - not creating connection')
+        console.log('❌ Invalid connection:', {
+          reason: type !== 'output' ? 'Not from output port' : 'Same node connection attempt'
+        })
       }
     } else {
-      console.log('Missing required data for connection creation:', {
-        hasTargetNodeId: !!targetNodeId,
-        hasTargetPortId: !!targetPortId,
-        hasConnectionStart: !!currentConnectionState.connectionStart,
-        isConnecting: currentConnectionState.isConnecting
-      })
+      console.log('❌ Missing target information for connection')
     }
+    
+    // Clear connection state after drag end
     dispatch({ type: 'CLEAR_CONNECTION_STATE' })
   }, [operations, dispatch])
 

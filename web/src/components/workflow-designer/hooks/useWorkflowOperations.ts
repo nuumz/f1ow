@@ -48,6 +48,8 @@ export function useWorkflowOperations() {
 
   const deleteNode = useCallback((nodeId: string) => {
     dispatch({ type: 'DELETE_NODE', payload: nodeId })
+    // Validate connections after node deletion to remove invalid connections
+    dispatch({ type: 'VALIDATE_CONNECTIONS' })
   }, [dispatch])
 
   const updateNodePosition = useCallback((nodeId: string, x: number, y: number) => {
@@ -92,6 +94,10 @@ export function useWorkflowOperations() {
 
   const deleteConnection = useCallback((connectionId: string) => {
     dispatch({ type: 'DELETE_CONNECTION', payload: connectionId })
+  }, [dispatch])
+
+  const updateConnection = useCallback((connectionId: string, updates: Partial<Connection>) => {
+    dispatch({ type: 'UPDATE_CONNECTION', payload: { connectionId, updates } })
   }, [dispatch])
 
   // Selection operations
@@ -161,6 +167,9 @@ export function useWorkflowOperations() {
   }, [dispatch])
 
   const saveWorkflow = useCallback(async () => {
+    // Validate connections before saving
+    dispatch({ type: 'VALIDATE_CONNECTIONS' })
+    
     const workflow = {
       name: state.workflowName,
       definition: {
@@ -181,6 +190,12 @@ export function useWorkflowOperations() {
     }
     
     try {
+      // Save connections to storage
+      dispatch({ type: 'SAVE_CONNECTIONS_TO_STORAGE' })
+      
+      // Mark as clean
+      dispatch({ type: 'MARK_CLEAN' })
+      
       console.log('Workflow saved:', workflow)
       alert('Workflow saved successfully!')
       return workflow
@@ -189,7 +204,7 @@ export function useWorkflowOperations() {
       alert('Failed to save workflow')
       throw error
     }
-  }, [state.workflowName, state.nodes, state.connections])
+  }, [state.workflowName, state.nodes, state.connections, dispatch])
 
   const exportWorkflow = useCallback(() => {
     const workflow = {
@@ -338,6 +353,7 @@ export function useWorkflowOperations() {
     // Connection operations
     createConnection,
     deleteConnection,
+    updateConnection,
     
     // Selection operations
     selectNode,

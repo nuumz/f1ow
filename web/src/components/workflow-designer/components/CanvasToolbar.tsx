@@ -1,4 +1,4 @@
-import { ZoomIn, ZoomOut, Maximize2, Eye, EyeOff, RotateCcw, Play, Save } from 'lucide-react'
+import { ZoomIn, ZoomOut, Maximize2, Eye, EyeOff, RotateCcw, Play, Save, Trash2 } from 'lucide-react'
 import './CanvasToolbar.css'
 
 // Import types
@@ -31,6 +31,7 @@ export interface CanvasToolbarProps {
   
   // Selection info
   selectedNodeCount?: number
+  onDeleteSelected?: () => void
 }
 
 export default function CanvasToolbar({
@@ -46,7 +47,8 @@ export default function CanvasToolbar({
   onSave,
   onExecute,
   executionStatus = 'idle',
-  selectedNodeCount = 0
+  selectedNodeCount = 0,
+  onDeleteSelected
 }: CanvasToolbarProps) {
   return (
     <div className="canvas-toolbar">
@@ -95,7 +97,7 @@ export default function CanvasToolbar({
             className={`control-btn ${showGrid ? 'active' : ''}`}
             title={showGrid ? 'Hide Grid' : 'Show Grid'}
           >
-            {showGrid ? <Eye size={14} /> : <EyeOff size={14} />}
+            {showGrid ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
         </div>
       </div>
@@ -122,11 +124,15 @@ export default function CanvasToolbar({
       {/* Selection Info */}
       {selectedNodeCount > 0 && (
         <div className="toolbar-section">
-          <div className="selection-info">
-            <span className="selected-count">
-              {selectedNodeCount} node{selectedNodeCount > 1 ? 's' : ''}
-            </span>
-          </div>
+            {onDeleteSelected && (
+              <button 
+                onClick={onDeleteSelected}
+                className="control-btn delete-btn"
+                title={`Delete ${selectedNodeCount > 1 ? 'selected nodes' : 'selected node'}`}
+              >
+                <Trash2 size={12} />
+              </button>
+            )}
         </div>
       )}
 

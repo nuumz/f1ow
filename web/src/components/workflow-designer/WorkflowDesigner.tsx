@@ -324,6 +324,12 @@ function WorkflowDesignerContent({
               onResetPosition={() => canvas.resetCanvasPosition(state.nodes)}
               executionStatus={state.executionState.status === 'paused' ? 'idle' : state.executionState.status}
               selectedNodeCount={state.selectedNodes.size}
+              onDeleteSelected={state.selectedNodes.size > 0 ? () => {
+                Array.from(state.selectedNodes).forEach(nodeId => {
+                  operations.deleteNode(nodeId)
+                })
+                operations.clearSelection()
+              } : undefined}
             />
         </section>
 

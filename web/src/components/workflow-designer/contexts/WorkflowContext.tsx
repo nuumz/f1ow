@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useCallback, useRef, ReactNode, useMemo } from 'react'
+import React, { createContext, useContext, useReducer, useCallback, useRef, ReactNode, useMemo, useEffect } from 'react'
 
 // Types
 import type { WorkflowNode } from '../hooks/useNodeSelection'
@@ -35,6 +35,8 @@ interface ConnectionState {
   connectionStart: { nodeId: string; portId: string; type: 'input' | 'output' } | null
   connectionPreview: { x: number; y: number } | null
   selectedConnection: Connection | null
+  lastModified: number
+  autoSaveEnabled: boolean
 }
 
 // UI state interface
@@ -67,6 +69,10 @@ interface WorkflowState {
   
   // UI state
   uiState: UIState
+  
+  // Workflow metadata
+  lastSaved: number
+  isDirty: boolean
 }
 
 // Action types
@@ -85,6 +91,10 @@ type WorkflowAction =
   | { type: 'ADD_CONNECTION'; payload: Connection }
   | { type: 'DELETE_CONNECTION'; payload: string }
   | { type: 'SET_CONNECTIONS'; payload: Connection[] }
+  | { type: 'UPDATE_CONNECTION'; payload: { connectionId: string; updates: Partial<Connection> } }
+  | { type: 'VALIDATE_CONNECTIONS' }
+  | { type: 'SAVE_CONNECTIONS_TO_STORAGE' }
+  | { type: 'LOAD_CONNECTIONS_FROM_STORAGE'; payload: Connection[] }
   
   // Selection actions
   | { type: 'SELECT_NODE'; payload: { nodeId: string; multiSelect: boolean } }
@@ -110,6 +120,12 @@ type WorkflowAction =
   | { type: 'SET_SHOW_NODE_EDITOR'; payload: boolean }
   | { type: 'SET_DRAG_OVER'; payload: boolean }
   | { type: 'SET_NODE_VARIANT'; payload: NodeVariant }
+  
+  // Workflow state actions
+  | { type: 'MARK_DIRTY' }
+  | { type: 'MARK_CLEAN' }
+  | { type: 'SET_LAST_SAVED'; payload: number }
+  | { type: 'TOGGLE_AUTO_SAVE'; payload: boolean }
 
 // Initial state
 const initialState: WorkflowState = {
@@ -123,7 +139,9 @@ const initialState: WorkflowState = {
     isConnecting: false,
     connectionStart: null,
     connectionPreview: null,
-    selectedConnection: null
+    selectedConnection: null,
+    lastModified: Date.now(),
+    autoSaveEnabled: true
   },
   executionState: {
     status: 'idle',
@@ -137,8 +155,78 @@ const initialState: WorkflowState = {
     showNodeEditor: false,
     isDragOver: false,
     nodeVariant: 'standard'
+  },
+  lastSaved: Date.now(),
+  isDirty: false
+}
+
+// Helper functions for connection management
+const saveConnectionsToStorage = (workflowName: string, connections: Connection[]) => {
+  try {
+    const key = `workflow-connections-${workflowName}`
+    const connectionData = {
+      connections,
+      timestamp: Date.now(),
+      version: '1.0'
+    }
+    localStorage.setItem(key, JSON.stringify(connectionData))
+    console.log('✅ Connections saved to storage:', connections.length, 'connections')
+  } catch (error) {
+    console.warn('Failed to save connections to localStorage:', error)
   }
 }
+
+const loadConnectionsFromStorage = (workflowName: string): Connection[] => {
+  try {
+    const key = `workflow-connections-${workflowName}`
+    const saved = localStorage.getItem(key)
+    if (saved) {
+      const connectionData = JSON.parse(saved)
+      console.log('✅ Connections loaded from storage:', connectionData.connections.length, 'connections')
+      return connectionData.connections || []
+    }
+  } catch (error) {
+    console.warn('Failed to load connections from localStorage:', error)
+  }
+  return []
+}
+
+const validateConnections = (connections: Connection[], nodes: WorkflowNode[]): Connection[] => {
+  const nodeIds = new Set(nodes.map(n => n.id))
+  
+  return connections.filter(conn => {
+    // Check if both nodes exist
+    if (!nodeIds.has(conn.sourceNodeId) || !nodeIds.has(conn.targetNodeId)) {
+      console.warn('Invalid connection - missing node:', conn)
+      return false
+    }
+    
+    // Check if ports exist on nodes
+    const sourceNode = nodes.find(n => n.id === conn.sourceNodeId)
+    const targetNode = nodes.find(n => n.id === conn.targetNodeId)
+    
+    if (!sourceNode || !targetNode) return false
+    
+    const sourcePortExists = sourceNode.outputs.some(p => p.id === conn.sourcePortId)
+    const targetPortExists = targetNode.inputs.some(p => p.id === conn.targetPortId)
+    
+    if (!sourcePortExists || !targetPortExists) {
+      console.warn('Invalid connection - missing port:', conn)
+      return false
+    }
+    
+    return true
+  })
+}
+
+const markStateAsDirty = (state: WorkflowState): WorkflowState => ({
+  ...state,
+  isDirty: true,
+  connectionState: {
+    ...state.connectionState,
+    lastModified: Date.now()
+  }
+})
 
 // Reducer function
 function workflowReducer(state: WorkflowState, action: WorkflowAction): WorkflowState {
@@ -193,23 +281,104 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
         )
       }
     
-    case 'ADD_CONNECTION':
-      return { ...state, connections: [...state.connections, action.payload] }
+    case 'ADD_CONNECTION': {
+      const newConnections = [...state.connections, action.payload]
+      const newState = markStateAsDirty({ ...state, connections: newConnections })
+      
+      // Auto-save to storage if enabled
+      if (state.connectionState.autoSaveEnabled) {
+        saveConnectionsToStorage(state.workflowName, newConnections)
+      }
+      
+      console.log('✅ Connection added:', action.payload.id)
+      return newState
+    }
     
-    case 'DELETE_CONNECTION':
-      return {
+    case 'DELETE_CONNECTION': {
+      const newConnections = state.connections.filter(conn => conn.id !== action.payload)
+      const newState = markStateAsDirty({
         ...state,
-        connections: state.connections.filter(conn => conn.id !== action.payload),
+        connections: newConnections,
         connectionState: {
           ...state.connectionState,
           selectedConnection: state.connectionState.selectedConnection?.id === action.payload
             ? null
             : state.connectionState.selectedConnection
         }
+      })
+      
+      // Auto-save to storage if enabled
+      if (state.connectionState.autoSaveEnabled) {
+        saveConnectionsToStorage(state.workflowName, newConnections)
       }
+      
+      console.log('✅ Connection deleted:', action.payload)
+      return newState
+    }
     
-    case 'SET_CONNECTIONS':
-      return { ...state, connections: action.payload }
+    case 'SET_CONNECTIONS': {
+      const newState = markStateAsDirty({ ...state, connections: action.payload })
+      
+      // Auto-save to storage if enabled
+      if (state.connectionState.autoSaveEnabled) {
+        saveConnectionsToStorage(state.workflowName, action.payload)
+      }
+      
+      console.log('✅ Connections set:', action.payload.length, 'connections')
+      return newState
+    }
+    
+    case 'UPDATE_CONNECTION': {
+      const newConnections = state.connections.map(conn =>
+        conn.id === action.payload.connectionId
+          ? { ...conn, ...action.payload.updates }
+          : conn
+      )
+      const newState = markStateAsDirty({ ...state, connections: newConnections })
+      
+      // Auto-save to storage if enabled
+      if (state.connectionState.autoSaveEnabled) {
+        saveConnectionsToStorage(state.workflowName, newConnections)
+      }
+      
+      console.log('✅ Connection updated:', action.payload.connectionId)
+      return newState
+    }
+    
+    case 'VALIDATE_CONNECTIONS': {
+      const validConnections = validateConnections(state.connections, state.nodes)
+      const invalidCount = state.connections.length - validConnections.length
+      
+      if (invalidCount > 0) {
+        console.warn(`⚠️ Removed ${invalidCount} invalid connections`)
+        const newState = markStateAsDirty({ ...state, connections: validConnections })
+        
+        // Auto-save to storage if enabled
+        if (state.connectionState.autoSaveEnabled) {
+          saveConnectionsToStorage(state.workflowName, validConnections)
+        }
+        
+        return newState
+      }
+      
+      console.log('✅ All connections are valid')
+      return state
+    }
+    
+    case 'SAVE_CONNECTIONS_TO_STORAGE': {
+      saveConnectionsToStorage(state.workflowName, state.connections)
+      return {
+        ...state,
+        lastSaved: Date.now(),
+        isDirty: false
+      }
+    }
+    
+    case 'LOAD_CONNECTIONS_FROM_STORAGE': {
+      const validConnections = validateConnections(action.payload, state.nodes)
+      console.log('✅ Loaded connections from storage:', validConnections.length, 'connections')
+      return { ...state, connections: validConnections, isDirty: false }
+    }
     
     case 'SELECT_NODE': {
       const { nodeId, multiSelect } = action.payload
@@ -333,6 +502,39 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
         uiState: { ...state.uiState, nodeVariant: action.payload }
       }
     
+    case 'MARK_DIRTY':
+      return {
+        ...state,
+        isDirty: true,
+        connectionState: {
+          ...state.connectionState,
+          lastModified: Date.now()
+        }
+      }
+    
+    case 'MARK_CLEAN':
+      return {
+        ...state,
+        isDirty: false,
+        lastSaved: Date.now()
+      }
+    
+    case 'SET_LAST_SAVED':
+      return {
+        ...state,
+        lastSaved: action.payload,
+        isDirty: false
+      }
+    
+    case 'TOGGLE_AUTO_SAVE':
+      return {
+        ...state,
+        connectionState: {
+          ...state.connectionState,
+          autoSaveEnabled: action.payload
+        }
+      }
+    
     default:
       return state
   }
@@ -355,6 +557,12 @@ interface WorkflowContextType {
   getSelectedNodesList: () => WorkflowNode[]
   canDropOnPort: (targetNodeId: string, targetPortId: string, targetPortType?: 'input' | 'output') => boolean
   canDropOnNode: (targetNodeId: string) => boolean
+  
+  // Connection management
+  validateConnections: () => void
+  saveConnectionsToStorage: () => void
+  loadConnectionsFromStorage: () => void
+  toggleAutoSave: (enabled: boolean) => void
 }
 
 // Context
@@ -430,6 +638,43 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     return !!connectionStart && connectionStart.nodeId !== targetNodeId
   }, [state.connectionState])
   
+  // Connection management functions
+  const validateConnections = useCallback(() => {
+    dispatch({ type: 'VALIDATE_CONNECTIONS' })
+  }, [dispatch])
+  
+  const saveConnectionsToStorage = useCallback(() => {
+    dispatch({ type: 'SAVE_CONNECTIONS_TO_STORAGE' })
+  }, [dispatch])
+  
+  const loadConnectionsFromStorageHandler = useCallback(() => {
+    const savedConnections = loadConnectionsFromStorage(state.workflowName)
+    if (savedConnections.length > 0) {
+      dispatch({ type: 'LOAD_CONNECTIONS_FROM_STORAGE', payload: savedConnections })
+    }
+  }, [state.workflowName, dispatch])
+  
+  const toggleAutoSave = useCallback((enabled: boolean) => {
+    dispatch({ type: 'TOGGLE_AUTO_SAVE', payload: enabled })
+  }, [dispatch])
+  
+  // Auto-load connections when workflow name changes
+  useEffect(() => {
+    if (state.workflowName && state.workflowName !== 'New Workflow') {
+      const savedConnections = loadConnectionsFromStorage(state.workflowName)
+      if (savedConnections.length > 0) {
+        dispatch({ type: 'LOAD_CONNECTIONS_FROM_STORAGE', payload: savedConnections })
+      }
+    }
+  }, [state.workflowName])
+  
+  // Auto-validate connections when nodes change
+  useEffect(() => {
+    if (state.nodes.length > 0 && state.connections.length > 0) {
+      validateConnections()
+    }
+  }, [state.nodes, validateConnections])
+  
   const contextValue: WorkflowContextType = useMemo(() => ({
     state,
     svgRef,
@@ -438,8 +683,12 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     isNodeSelected,
     getSelectedNodesList,
     canDropOnPort,
-    canDropOnNode
-  }), [state, svgRef, containerRef, dispatch, isNodeSelected, getSelectedNodesList, canDropOnPort, canDropOnNode])
+    canDropOnNode,
+    validateConnections,
+    saveConnectionsToStorage,
+    loadConnectionsFromStorage: loadConnectionsFromStorageHandler,
+    toggleAutoSave
+  }), [state, svgRef, containerRef, dispatch, isNodeSelected, getSelectedNodesList, canDropOnPort, canDropOnNode, validateConnections, saveConnectionsToStorage, loadConnectionsFromStorageHandler, toggleAutoSave])
   
   return (
     <WorkflowContext.Provider value={contextValue}>

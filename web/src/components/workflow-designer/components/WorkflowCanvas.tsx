@@ -89,10 +89,25 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   onZoomLevelChange,
   onRegisterZoomBehavior,
 }: WorkflowCanvasProps) {
+  // Remove hover state from React - manage it directly in D3
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   // Performance state
   const [isInitialized, setIsInitialized] = useState(false)
   const rafIdRef = useRef<number | null>(null)
   const rafScheduledRef = useRef<boolean>(false)
+  
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current)
+      }
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current)
+      }
+    }
+  }, [])
   
   // Track current transform with ref for immediate access
   const currentTransformRef = useRef(canvasTransform)
@@ -358,9 +373,13 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       // Update connections in real-time (only affected ones)
       const svg = d3.select(svgRef.current!)
       const connectionLayer = svg.select('.connection-layer')
-      connectionLayer.selectAll('.connection path')
+      connectionLayer.selectAll('.connection')
         .filter((conn: any) => conn.sourceNodeId === nodeId || conn.targetNodeId === nodeId)
-        .attr('d', (conn: any) => getConnectionPath(conn))
+        .each(function(conn: any) {
+          const connectionGroup = d3.select(this)
+          const newPath = getConnectionPath(conn)
+          connectionGroup.select('.connection-path').attr('d', newPath)
+        })
     })
   }, [scheduleRAF, connections, nodeVariant, getConnectionPath])
 
@@ -619,40 +638,71 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .append('g')
       .attr('class', 'connection')
 
+    // Add visible connection path with direct interaction 
     connectionEnter.append('path')
       .attr('class', 'connection-path')
-      .style('cursor', 'pointer')
       .attr('fill', 'none')
+      .style('cursor', 'pointer')
       .on('click', (event, d) => {
         event.stopPropagation()
         onConnectionClick(d)
       })
-      .on('mouseenter', function(this: any) {
-        d3.select(this)
-          .attr('stroke', '#1976D2')
-          .attr('stroke-width', 3)
-          .attr('marker-end', 'url(#arrowhead-hover)')
+      .on('mouseenter', function(this: any, _event: any, d: Connection) {
+        const connectionElement = d3.select(this)
+        const connectionGroup = d3.select(this.parentNode)
+        const isSelected = selectedConnection?.id === d.id
+        
+        // Clear any pending timeout
+        if (hoverTimeoutRef.current) {
+          clearTimeout(hoverTimeoutRef.current)
+        }
+        
+        // Apply hover immediately for non-selected connections
+        if (!isSelected) {
+          connectionGroup.classed('connection-hover', true)
+          // Force immediate visual update
+          connectionElement
+            .interrupt() // Stop any ongoing transitions
+            .attr('stroke', '#1976D2')
+            .attr('stroke-width', 3)
+            .attr('marker-end', 'url(#arrowhead-hover)')
+        }
       })
       .on('mouseleave', function(this: any, _event: any, d: Connection) {
+        const connectionElement = d3.select(this)
+        const connectionGroup = d3.select(this.parentNode)
         const isSelected = selectedConnection?.id === d.id
-        d3.select(this)
-          .attr('stroke', isSelected ? '#2196F3' : '#666')
-          .attr('stroke-width', isSelected ? 3 : 2)
-          .attr('marker-end', isSelected ? 'url(#arrowhead-selected)' : 'url(#arrowhead)')
+        
+        // Remove hover class
+        connectionGroup.classed('connection-hover', false)
+        
+        // Delay the visual reset to prevent flickering
+        hoverTimeoutRef.current = setTimeout(() => {
+          if (!isSelected && !connectionGroup.classed('connection-hover')) {
+            connectionElement
+              .interrupt() // Stop any ongoing transitions
+              .attr('stroke', '#666')
+              .attr('stroke-width', 2)
+              .attr('marker-end', 'url(#arrowhead)')
+          }
+        }, 50) // Small delay to prevent flicker on quick mouse movements
       })
     
     const connectionUpdate = connectionEnter.merge(connectionPaths as any)
     
-    connectionUpdate.select('path')
+    // Update visible path
+    connectionUpdate.select('.connection-path')
       .attr('d', (d: any) => getConnectionPath(d))
-      .attr('stroke', (d: any) => selectedConnection?.id === d.id ? '#2196F3' : '#666')
-      .attr('stroke-width', (d: any) => selectedConnection?.id === d.id ? 3 : 2)
-      .attr('marker-end', (d: any) => selectedConnection?.id === d.id ? 'url(#arrowhead-selected)' : 'url(#arrowhead)')
+      .attr('stroke', '#666') // Default stroke - CSS will override for selection/hover
+      .attr('stroke-width', 2) // Default width - CSS will override for selection/hover
+      .attr('marker-end', 'url(#arrowhead)') // Default marker - CSS will override for selection/hover
 
     // Render connection preview
     if (isConnecting && connectionStart) {
+      console.log('🎯 Connection preview check:', { isConnecting, connectionStart, connectionPreview })
       const sourceNode = nodes.find(n => n.id === connectionStart.nodeId)
       if (sourceNode && connectionPreview) {
+        console.log('🎯 Rendering connection preview from:', sourceNode.id, 'to:', connectionPreview)
         const previewPath = calculateConnectionPreviewPath(
           sourceNode,
           connectionStart.portId,
@@ -670,6 +720,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           .attr('marker-end', 'url(#arrowhead)')
           .attr('pointer-events', 'none')
           .style('opacity', 0.7)
+      } else {
+        console.log('🎯 Not rendering preview:', { sourceNode: !!sourceNode, connectionPreview: !!connectionPreview })
       }
     }
 
@@ -934,6 +986,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       })
       .attr('stroke-width', 2)
 
+    console.log('🔵 Created', inputPortGroups.selectAll('circle').size(), 'input port circles')
+
     // Output ports
     const outputPortGroups = nodeGroups.selectAll('.output-port-group')
       .data((d: any) => d.outputs.map((output: any) => ({ ...output, nodeId: d.id, nodeData: d })))
@@ -949,72 +1003,110 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         .on('start', (event: any, d: any) => {
           event.sourceEvent.stopPropagation()
           event.sourceEvent.preventDefault()
+          console.log('🚀 Output port drag START:', d.nodeId, d.id)
           onPortDragStart(d.nodeId, d.id, 'output')
-          
+        })
+        .on('drag', (event: any, d: any) => {
           const [x, y] = d3.pointer(event.sourceEvent, event.sourceEvent.target.ownerSVGElement)
           const transform = d3.zoomTransform(event.sourceEvent.target.ownerSVGElement)
           const [canvasX, canvasY] = transform.invert([x, y])
+          console.log('🚀 Output port DRAGGING to:', canvasX, canvasY)
           onPortDrag(canvasX, canvasY)
         })
-        .on('drag', (event: any) => {
-          const [x, y] = d3.pointer(event.sourceEvent, event.sourceEvent.target.ownerSVGElement)
-          const transform = d3.zoomTransform(event.sourceEvent.target.ownerSVGElement)
-          const [canvasX, canvasY] = transform.invert([x, y])
-          onPortDrag(canvasX, canvasY)
-        })
-        .on('end', (event: any) => {
-          console.log('Output port drag end', event.sourceEvent.clientX, event.sourceEvent.clientY)
+        .on('end', (event: any, d: any) => {
+          console.log('🚀 Output port drag END')
           
-          // Alternative method: use D3 pointer and hit testing
+          // Get correct SVG element and apply zoom transform
           const svgElement = event.sourceEvent.target.ownerSVGElement
-          const [mouseX, mouseY] = d3.pointer(event.sourceEvent, svgElement)
-          console.log('Mouse position in SVG:', mouseX, mouseY)
+          const svgSelection = d3.select(svgElement)
+          
+          // Get current zoom transform to correct coordinates
+          const currentTransform = d3.zoomTransform(svgElement)
+          console.log('🔍 Current zoom transform:', {
+            k: currentTransform.k,
+            x: currentTransform.x, 
+            y: currentTransform.y
+          })
+          
+          // Get mouse position in screen coordinates first
+          const [screenX, screenY] = d3.pointer(event.sourceEvent, svgElement)
+          console.log('📍 Screen coordinates:', screenX, screenY)
+          
+          // Apply inverse transform to get canvas coordinates
+          const [canvasX, canvasY] = currentTransform.invert([screenX, screenY])
+          console.log('🎯 Canvas coordinates:', canvasX, canvasY)
           
           let targetNodeId: string | undefined
           let targetPortId: string | undefined
           
-          // Find all input port circles and check if mouse is over them
-          const allInputPorts = d3.select(svgElement).selectAll('.input-port-circle')
+          // Find target input port by checking all input port circles
+          const allInputPorts = svgSelection.selectAll('.input-port-circle')
+          let minDistance = Infinity
           
-          allInputPorts.each(function(d: any) {
+          console.log('🔍 Found', allInputPorts.size(), 'input ports to check')
+          
+          allInputPorts.each(function(portData: any) {
             const circle = d3.select(this)
-            const cx = parseFloat(circle.attr('cx'))
-            const cy = parseFloat(circle.attr('cy'))
-            const r = parseFloat(circle.attr('r'))
-            
-            // Get the port's parent group transform
             const element = this as SVGElement
+            
+            // Get port position in SVG coordinates
             const portGroup = d3.select(element.parentNode as SVGElement)
             const nodeGroup = d3.select(portGroup.node()?.closest('g[data-node-id]') as SVGElement)
-            const transform = nodeGroup.attr('transform')
             
-            let nodeX = 0, nodeY = 0
+            if (nodeGroup.empty()) {
+              console.log('⚠️ Could not find parent node group for port')
+              return
+            }
+            
+            const nodeId = nodeGroup.attr('data-node-id')
+            const transform = nodeGroup.attr('transform')
+            let nodeSvgX = 0, nodeSvgY = 0
+            
             if (transform) {
-              const regex = /translate\(([^,]+),([^)]+)\)/
-              const match = regex.exec(transform)
+              const match = /translate\(([^,]+),([^)]+)\)/.exec(transform)
               if (match) {
-                nodeX = parseFloat(match[1])
-                nodeY = parseFloat(match[2])
+                nodeSvgX = parseFloat(match[1])
+                nodeSvgY = parseFloat(match[2])
               }
             }
             
-            const actualX = nodeX + cx
-            const actualY = nodeY + cy
+            const cx = parseFloat(circle.attr('cx') || '0')
+            const cy = parseFloat(circle.attr('cy') || '0')
+            const r = parseFloat(circle.attr('r') || '8')
             
-            // Check if mouse is within port radius
-            const distance = Math.sqrt((mouseX - actualX) ** 2 + (mouseY - actualY) ** 2)
-            if (distance <= r + 5) { // Add 5px tolerance
-              targetNodeId = nodeGroup.attr('data-node-id')
-              targetPortId = d.id
-              console.log('Found input port via hit test:', targetNodeId, targetPortId, 'distance:', distance)
+            // Port position in SVG coordinates (this is already in canvas space)
+            const portCanvasX = nodeSvgX + cx
+            const portCanvasY = nodeSvgY + cy
+            
+            // Calculate distance directly in canvas coordinates
+            const distance = Math.sqrt((canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2)
+            const tolerance = r + 15 // Increased tolerance for easier dropping
+            
+            console.log('🎯 Checking port:', {
+              nodeId,
+              portId: portData.id,
+              portCanvasPos: { x: portCanvasX, y: portCanvasY },
+              mouseCanvasPos: { x: canvasX, y: canvasY },
+              distance,
+              tolerance,
+              isWithinRange: distance <= tolerance
+            })
+            
+            // Use closest valid input port with tolerance
+            if (distance <= tolerance && distance < minDistance) {
+              minDistance = distance
+              targetNodeId = nodeId
+              targetPortId = portData.id
+              console.log('🎯✅ Found best input port target:', targetNodeId, targetPortId, 'distance:', distance)
             }
           })
           
-          console.log('Final target:', targetNodeId, targetPortId)
+          console.log('🏁 Final target result:', { targetNodeId, targetPortId, minDistance })
           onPortDragEnd(targetNodeId, targetPortId)
         })
       )
 
+    // Create output port circles
     outputPortGroups.selectAll('circle').remove()
     outputPortGroups.append('circle')
       .attr('class', 'output-port-circle')
@@ -1030,6 +1122,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr('fill', () => getPortColor('any'))
       .attr('stroke', '#333')
       .attr('stroke-width', 2)
+
+    console.log('🔴 Created', outputPortGroups.selectAll('circle').size(), 'output port circles')
 
     // Canvas event handlers
     svg.on('click', () => {
@@ -1057,6 +1151,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
   }, [nodes, connections, showGrid, nodeVariant])
   
+  // Remove duplicate CSS since hover styles are already in globals.css
   
   // Visual state effect - handle selection and connection states with z-index management
   useEffect(() => {
@@ -1091,11 +1186,32 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       organizeNodeZIndex(true) // Use immediate execution to ensure proper layering
     }
     
-    // Update connection visual states only
-    connectionLayer.selectAll('.connection path')
-      .attr('stroke', (d: any) => selectedConnection?.id === d.id ? '#2196F3' : '#666')
-      .attr('stroke-width', (d: any) => selectedConnection?.id === d.id ? 3 : 2)
-      .attr('marker-end', (d: any) => selectedConnection?.id === d.id ? 'url(#arrowhead-selected)' : 'url(#arrowhead)')
+    // Update connection selection state only - don't touch hover state
+    connectionLayer.selectAll('.connection')
+      .each(function(d: any) {
+        const connectionGroup = d3.select(this)
+        const pathElement = connectionGroup.select('.connection-path')
+        const isSelected = selectedConnection?.id === d.id
+        const isCurrentlyHovered = connectionGroup.classed('connection-hover')
+        
+        // Update selection class
+        connectionGroup.classed('connection-selected', isSelected)
+        
+        // Only update visual attributes if not currently hovered
+        if (!isCurrentlyHovered) {
+          if (isSelected) {
+            pathElement
+              .attr('stroke', '#2196F3')
+              .attr('stroke-width', 3)
+              .attr('marker-end', 'url(#arrowhead-selected)')
+          } else {
+            pathElement
+              .attr('stroke', '#666')
+              .attr('stroke-width', 2)
+              .attr('marker-end', 'url(#arrowhead)')
+          }
+        }
+      })
       
   }, [selectedNodes, selectedConnection, isNodeSelected, getNodeColor, isInitialized, organizeNodeZIndex])
   
@@ -1110,8 +1226,10 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     g.selectAll('.connection-preview').remove()
     
     if (isConnecting && connectionStart) {
+      console.log('🔄 Connection effect - preview update:', { isConnecting, connectionStart, connectionPreview })
       const sourceNode = nodeMap.get(connectionStart.nodeId)
       if (sourceNode && connectionPreview) {
+        console.log('🔄 Rendering preview in effect from:', sourceNode.id, 'to:', connectionPreview)
         const previewPath = calculateConnectionPreviewPath(
           sourceNode,
           connectionStart.portId,
@@ -1129,74 +1247,80 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           .attr('marker-end', 'url(#arrowhead)')
           .attr('pointer-events', 'none')
           .style('opacity', 0.7)
+      } else {
+        console.log('🔄 Effect not rendering preview:', { sourceNode: !!sourceNode, connectionPreview: !!connectionPreview })
       }
     }
     
     // Update port visual states during connection
     const nodeLayer = svg.select('.node-layer')
     
-    // Update input ports visual state
+    // Update input ports visual state with change detection
     nodeLayer.selectAll('.input-port-circle')
-      .attr('fill', (d: any) => {
-        if (isConnecting && connectionStart && connectionStart.type === 'output') {
-          const canDrop = canDropOnPort(d.nodeId, d.id, 'input')
-          return canDrop ? '#4CAF50' : '#ccc'
+      .each(function(d: any) {
+        const portElement = d3.select(this)
+        const isConnectionActive = isConnecting && connectionStart && connectionStart.type === 'output'
+        const canDrop = isConnectionActive ? canDropOnPort(d.nodeId, d.id, 'input') : false
+        
+        // Calculate target values
+        const targetFill = isConnectionActive ? (canDrop ? '#4CAF50' : '#ccc') : getPortColor('any')
+        const targetStroke = isConnectionActive ? (canDrop ? '#4CAF50' : '#ff5722') : '#333'
+        const targetStrokeWidth = isConnectionActive ? (canDrop ? 3 : 2) : 2
+        const baseDimensions = getConfigurableDimensions(d.nodeData)
+        const targetRadius = isConnectionActive ? (canDrop ? baseDimensions.portRadius * 1.5 : baseDimensions.portRadius) : baseDimensions.portRadius
+        
+        // Only update if values changed to prevent flickering
+        const currentFill = portElement.attr('fill')
+        const currentStroke = portElement.attr('stroke')
+        const currentStrokeWidth = parseInt(portElement.attr('stroke-width') || '2')
+        const currentRadius = parseFloat(portElement.attr('r') || '0')
+        
+        if (currentFill !== targetFill) {
+          portElement.attr('fill', targetFill)
         }
-        return getPortColor('any')
-      })
-      .attr('stroke', (d: any) => {
-        if (isConnecting && connectionStart && connectionStart.type === 'output') {
-          const canDrop = canDropOnPort(d.nodeId, d.id, 'input')
-          return canDrop ? '#4CAF50' : '#ff5722'
+        if (currentStroke !== targetStroke) {
+          portElement.attr('stroke', targetStroke)
         }
-        return '#333'
-      })
-      .attr('stroke-width', (d: any) => {
-        if (isConnecting && connectionStart && connectionStart.type === 'output') {
-          const canDrop = canDropOnPort(d.nodeId, d.id, 'input')
-          return canDrop ? 3 : 2
+        if (currentStrokeWidth !== targetStrokeWidth) {
+          portElement.attr('stroke-width', targetStrokeWidth)
         }
-        return 2
-      })
-      .attr('r', (d: any) => {
-        if (isConnecting && connectionStart && connectionStart.type === 'output') {
-          const canDrop = canDropOnPort(d.nodeId, d.id, 'input')
-          const baseDimensions = getConfigurableDimensions(d.nodeData)
-          return canDrop ? baseDimensions.portRadius * 1.5 : baseDimensions.portRadius
+        if (Math.abs(currentRadius - targetRadius) > 0.1) {
+          portElement.attr('r', targetRadius)
         }
-        return getConfigurableDimensions(d.nodeData).portRadius
       })
       
-    // Update output ports visual state
+    // Update output ports visual state with change detection
     nodeLayer.selectAll('.output-port-circle')
-      .attr('fill', (d: any) => {
-        if (isConnecting && connectionStart && connectionStart.type === 'input') {
-          const canDrop = canDropOnPort(d.nodeId, d.id, 'output')
-          return canDrop ? '#4CAF50' : '#ccc'
+      .each(function(d: any) {
+        const portElement = d3.select(this)
+        const isConnectionActive = isConnecting && connectionStart && connectionStart.type === 'input'
+        const canDrop = isConnectionActive ? canDropOnPort(d.nodeId, d.id, 'output') : false
+        
+        // Calculate target values
+        const targetFill = isConnectionActive ? (canDrop ? '#4CAF50' : '#ccc') : getPortColor('any')
+        const targetStroke = isConnectionActive ? (canDrop ? '#4CAF50' : '#ff5722') : '#333'
+        const targetStrokeWidth = isConnectionActive ? (canDrop ? 3 : 2) : 2
+        const baseDimensions = getConfigurableDimensions(d.nodeData)
+        const targetRadius = isConnectionActive ? (canDrop ? baseDimensions.portRadius * 1.5 : baseDimensions.portRadius) : baseDimensions.portRadius
+        
+        // Only update if values changed to prevent flickering
+        const currentFill = portElement.attr('fill')
+        const currentStroke = portElement.attr('stroke')
+        const currentStrokeWidth = parseInt(portElement.attr('stroke-width') || '2')
+        const currentRadius = parseFloat(portElement.attr('r') || '0')
+        
+        if (currentFill !== targetFill) {
+          portElement.attr('fill', targetFill)
         }
-        return getPortColor('any')
-      })
-      .attr('stroke', (d: any) => {
-        if (isConnecting && connectionStart && connectionStart.type === 'input') {
-          const canDrop = canDropOnPort(d.nodeId, d.id, 'output')
-          return canDrop ? '#4CAF50' : '#ff5722'
+        if (currentStroke !== targetStroke) {
+          portElement.attr('stroke', targetStroke)
         }
-        return '#333'
-      })
-      .attr('stroke-width', (d: any) => {
-        if (isConnecting && connectionStart && connectionStart.type === 'input') {
-          const canDrop = canDropOnPort(d.nodeId, d.id, 'output')
-          return canDrop ? 3 : 2
+        if (currentStrokeWidth !== targetStrokeWidth) {
+          portElement.attr('stroke-width', targetStrokeWidth)
         }
-        return 2
-      })
-      .attr('r', (d: any) => {
-        if (isConnecting && connectionStart && connectionStart.type === 'input') {
-          const canDrop = canDropOnPort(d.nodeId, d.id, 'output')
-          const baseDimensions = getConfigurableDimensions(d.nodeData)
-          return canDrop ? baseDimensions.portRadius * 1.5 : baseDimensions.portRadius
+        if (Math.abs(currentRadius - targetRadius) > 0.1) {
+          portElement.attr('r', targetRadius)
         }
-        return getConfigurableDimensions(d.nodeData).portRadius
       })
       
   }, [isConnecting, connectionStart, connectionPreview, nodeVariant, nodeMap, isInitialized, canDropOnPort, getPortColor, getConfigurableDimensions])

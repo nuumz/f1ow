@@ -1098,17 +1098,6 @@ body {
   100% { opacity: 1; }
 }
 
-/* Connection styles */
-.connection path {
-  cursor: pointer;
-  transition: stroke-width 0.2s ease;
-}
-
-.connection path:hover {
-  stroke-width: 3;
-  stroke: #4CAF50;
-}
-
 /* Data Mapper Styles */
 .data-mapper {
   display: flex;

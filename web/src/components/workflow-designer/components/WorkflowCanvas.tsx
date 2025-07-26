@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react'
+import React, { useEffect, useRef, useCallback, useState } from 'react'
 import * as d3 from 'd3'
 import type { WorkflowNode } from '../hooks/useNodeSelection'
 import type { Connection } from '../hooks/useConnections'
@@ -105,21 +105,49 @@ export default function WorkflowCanvas({
   executionStatus = 'idle'
 }: WorkflowCanvasProps) {
 
+  // Performance state
+  const [isInitialized, setIsInitialized] = useState(false)
+  const rafIdRef = useRef<number | null>(null)
+  
+  // Drag state
   const draggedElementRef = useRef<d3.Selection<any, any, any, any> | null>(null)
+  const isDraggingRef = useRef<boolean>(false)
+  const draggedNodeIdRef = useRef<string | null>(null)
+  const draggedNodeElementRef = useRef<SVGGElement | null>(null)
+  const nodeLayerRef = useRef<SVGGElement | null>(null)
+  const allNodeElementsRef = useRef<Map<string, SVGGElement>>(new Map())
+  
+  // Cache refs for performance
+  const connectionPathCacheRef = useRef<Map<string, string>>(new Map())
+  const gridCacheRef = useRef<{ transform: string; lines: any[] } | null>(null)
 
-  // Create grid
+  // Optimized grid creation with caching
   const createGrid = useCallback((
     gridLayer: d3.Selection<SVGGElement, unknown, null, undefined>,
     transform: { x: number; y: number; k: number },
     viewportWidth: number,
     viewportHeight: number
   ) => {
-    if (!showGrid) return
-
-    gridLayer.selectAll('*').remove()
+    if (!showGrid) {
+      gridLayer.selectAll('*').remove()
+      gridCacheRef.current = null
+      return
+    }
 
     const gridSize = 20 * transform.k
-    if (gridSize < 5) return
+    if (gridSize < 5) {
+      gridLayer.selectAll('*').remove()
+      gridCacheRef.current = null
+      return
+    }
+
+    const transformString = `${transform.x},${transform.y},${transform.k}`
+    const cached = gridCacheRef.current
+    
+    // Use cached grid if transform hasn't changed significantly
+    if (cached && cached.transform === transformString) {
+      return
+    }
 
     const bounds = getVisibleCanvasBounds(transform, viewportWidth, viewportHeight)
     
@@ -138,6 +166,9 @@ export default function WorkflowCanvas({
     for (let y = startY; y <= endY; y += gridSize) {
       horizontalLines.push({ x1: bounds.minX, y1: y, x2: bounds.maxX, y2: y })
     }
+
+    // Clear and redraw only if needed
+    gridLayer.selectAll('*').remove()
 
     gridLayer.selectAll('.grid-line-v')
       .data(verticalLines)
@@ -162,9 +193,105 @@ export default function WorkflowCanvas({
       .attr('y2', d => d.y2)
       .attr('stroke', '#e0e0e0')
       .attr('stroke-width', 0.5)
+
+    // Cache the result
+    gridCacheRef.current = {
+      transform: transformString,
+      lines: [...verticalLines, ...horizontalLines]
+    }
   }, [showGrid])
 
-  // D3 rendering effect
+  // Optimized Z-Index Management with RAF
+  const organizeNodeZIndex = useCallback(() => {
+    const nodeLayer = nodeLayerRef.current
+    if (!nodeLayer || allNodeElementsRef.current.size === 0) return
+
+    // Cancel any pending RAF to avoid duplicate work
+    if (rafIdRef.current) {
+      cancelAnimationFrame(rafIdRef.current)
+    }
+
+    rafIdRef.current = requestAnimationFrame(() => {
+      const normalNodes: SVGGElement[] = []
+      const selectedNodes: SVGGElement[] = []
+      const draggingNodes: SVGGElement[] = []
+
+      allNodeElementsRef.current.forEach((element, nodeId) => {
+        if (!nodeLayer.contains(element)) return
+        
+        const isDragging = isDraggingRef.current && nodeId === draggedNodeIdRef.current
+        const isSelected = isNodeSelected(nodeId)
+
+        if (isDragging) {
+          draggingNodes.push(element)
+        } else if (isSelected) {
+          selectedNodes.push(element)
+        } else {
+          normalNodes.push(element)
+        }
+      })
+
+      // Reorder DOM elements: normal → selected → dragging
+      const orderedElements = [...normalNodes, ...selectedNodes, ...draggingNodes]
+      
+      orderedElements.forEach(element => {
+        if (nodeLayer.contains(element) && nodeLayer.lastChild !== element) {
+          nodeLayer.appendChild(element)
+        }
+      })
+      
+      rafIdRef.current = null
+    })
+  }, [isNodeSelected])
+
+  // Specific functions for different scenarios
+  const setNodeAsDragging = useCallback((nodeId: string) => {
+    const element = allNodeElementsRef.current.get(nodeId)
+    const nodeLayer = nodeLayerRef.current
+    
+    if (element && nodeLayer && nodeLayer.lastChild !== element) {
+      // Only move if not already on top to avoid flicker
+      nodeLayer.appendChild(element)
+    }
+  }, [])
+
+
+  // Memoized connection path calculation
+  const getConnectionPath = useCallback((connection: Connection) => {
+    const cacheKey = `${connection.sourceNodeId}-${connection.sourcePortId}-${connection.targetNodeId}-${connection.targetPortId}-${nodeVariant}`
+    
+    const cached = connectionPathCacheRef.current.get(cacheKey)
+    if (cached) return cached
+    
+    const sourceNode = nodes.find(n => n.id === connection.sourceNodeId)
+    const targetNode = nodes.find(n => n.id === connection.targetNodeId)
+    if (!sourceNode || !targetNode) return ''
+    
+    const path = generateVariantAwareConnectionPath(
+      sourceNode, 
+      connection.sourcePortId, 
+      targetNode, 
+      connection.targetPortId,
+      nodeVariant
+    )
+    
+    connectionPathCacheRef.current.set(cacheKey, path)
+    return path
+  }, [nodes, nodeVariant])
+
+  // Clear connection cache when nodes change
+  useEffect(() => {
+    connectionPathCacheRef.current.clear()
+  }, [nodes])
+
+  // Optimized selection change handler
+  useEffect(() => {
+    if (!isDraggingRef.current && isInitialized) {
+      organizeNodeZIndex()
+    }
+  }, [selectedNodes, organizeNodeZIndex, isInitialized])
+
+  // Main D3 rendering effect - split into smaller, focused effects
   useEffect(() => {
     if (!svgRef.current) return
 
@@ -178,7 +305,7 @@ export default function WorkflowCanvas({
     svg.append('rect')
       .attr('width', '100%')
       .attr('height', '100%')
-      .attr('fill', '#fcfcfc')
+      .attr('fill', '#fcfcfc')  
       .attr('class', 'svg-canvas-background')
 
     // Arrow markers
@@ -205,7 +332,10 @@ export default function WorkflowCanvas({
     const g = svg.append('g')
     const gridLayer = g.append('g').attr('class', 'grid-layer').style('pointer-events', 'none')
     const connectionLayer = g.append('g').attr('class', 'connection-layer')
-    const nodeLayer = g.append('g').attr('class', 'node-layer')
+    const mainNodeLayer = g.append('g').attr('class', 'node-layer')
+    
+    // Store node layer reference
+    nodeLayerRef.current = mainNodeLayer.node() as SVGGElement
     
     // Add toolbar layer (fixed positioning, not affected by zoom/pan)
     const toolbarLayer = svg.append('g').attr('class', 'toolbar-layer').style('pointer-events', 'all')
@@ -358,17 +488,37 @@ export default function WorkflowCanvas({
       .translate(canvasTransform.x, canvasTransform.y)
       .scale(canvasTransform.k))
 
-    // Drag functions
+    // Optimized drag functions with RAF
     function dragStarted(this: any, event: any, d: WorkflowNode) {
-      // Small delay to allow double-click to be processed first
-      setTimeout(() => {
-        if (!d3.select(this).classed('dragging')) {
-          d3.select(this).classed('dragging', true)
-          draggedElementRef.current = d3.select(this)
-        }
-      }, 10)
-      
+      const nodeElement = d3.select(this)
       const dragData = d as any
+      const domNode = this as SVGGElement
+      
+      // Set persistent drag state
+      nodeElement.classed('dragging', true)
+      draggedElementRef.current = nodeElement
+      isDraggingRef.current = true
+      draggedNodeIdRef.current = d.id
+      draggedNodeElementRef.current = domNode
+      
+      // Apply dragging visual style with RAF
+      requestAnimationFrame(() => {
+        nodeElement
+          .style('opacity', 0.9)
+          .style('filter', 'drop-shadow(0 6px 12px rgba(0, 0, 0, 0.3))')
+        
+        const nodeBackground = nodeElement.select('.node-background')
+        const isSelected = isNodeSelected(d.id)
+        if (isSelected) {
+          nodeBackground.attr('stroke', '#2196F3').attr('stroke-width', 3)
+        } else {
+          nodeBackground.attr('stroke', getNodeColor(d.type, d.status)).attr('stroke-width', 3)
+        }
+      })
+      
+      // Use centralized z-index management  
+      setNodeAsDragging(d.id)
+      
       const svgElement = svgRef.current!
       const [mouseX, mouseY] = d3.pointer(event.sourceEvent, svgElement)
       const transform = d3.zoomTransform(svgElement)
@@ -395,7 +545,7 @@ export default function WorkflowCanvas({
       const deltaX = currentCanvasX - dragData.dragStartX
       const deltaY = currentCanvasY - dragData.dragStartY
 
-      // Mark as dragged if movement is significant (threshold to distinguish from click)
+      // Mark as dragged if movement is significant
       if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
         dragData.hasDragged = true
       }
@@ -403,25 +553,32 @@ export default function WorkflowCanvas({
       const newX = dragData.initialX + deltaX
       const newY = dragData.initialY + deltaY
 
-      // Update visual position immediately
-      if (draggedElementRef.current) {
-        draggedElementRef.current.attr('transform', `translate(${newX}, ${newY})`)
+      // Throttle visual updates with RAF
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current)
       }
+      
+      rafIdRef.current = requestAnimationFrame(() => {
+        // Update visual position
+        if (draggedElementRef.current) {
+          draggedElementRef.current.attr('transform', `translate(${newX}, ${newY})`)
+        }
 
-      // Update connections in real-time
-      connectionLayer.selectAll('.connection path')
-        .attr('d', (conn: any) => {
-          const sourceNode = nodes.find(n => n.id === conn.sourceNodeId)
-          const targetNode = nodes.find(n => n.id === conn.targetNodeId)
-          if (!sourceNode || !targetNode) return ''
-          return generateVariantAwareConnectionPath(
-            sourceNode, 
-            conn.sourcePortId, 
-            targetNode, 
-            conn.targetPortId,
-            nodeVariant
-          )
+        // Clear connection cache for affected connections
+        connections.forEach(conn => {
+          if (conn.sourceNodeId === d.id || conn.targetNodeId === d.id) {
+            const cacheKey = `${conn.sourceNodeId}-${conn.sourcePortId}-${conn.targetNodeId}-${conn.targetPortId}-${nodeVariant}`
+            connectionPathCacheRef.current.delete(cacheKey)
+          }
         })
+
+        // Update connections in real-time (only affected ones)
+        connectionLayer.selectAll('.connection path')
+          .filter((conn: any) => conn.sourceNodeId === d.id || conn.targetNodeId === d.id)
+          .attr('d', (conn: any) => getConnectionPath(conn))
+          
+        rafIdRef.current = null
+      })
 
       // Notify parent component
       onNodeDrag(d.id, newX, newY)
@@ -431,6 +588,9 @@ export default function WorkflowCanvas({
       const dragData = d as any
       const hasDragged = dragData.hasDragged
       const dragDuration = Date.now() - (dragData.dragStartTime || 0)
+      const nodeElement = d3.select(this)
+      const nodeBackground = nodeElement.select('.node-background')
+      const isSelected = isNodeSelected(d.id)
 
       // Clean up drag state
       delete dragData.dragStartX
@@ -440,44 +600,57 @@ export default function WorkflowCanvas({
       delete dragData.hasDragged
       delete dragData.dragStartTime
 
-      d3.select(this).classed('dragging', false)
-      if (draggedElementRef.current) {
-        draggedElementRef.current = null
+      // Clear persistent drag state
+      nodeElement.classed('dragging', false)
+      draggedElementRef.current = null
+      isDraggingRef.current = false
+      draggedNodeIdRef.current = null
+      draggedNodeElementRef.current = null
+
+      // Reset visual styles based on selection state
+      if (isSelected) {
+        nodeElement
+          .style('opacity', 1)
+          .style('filter', 'drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))')
+        nodeBackground
+          .attr('stroke', '#2196F3')
+          .attr('stroke-width', 3)
+      } else {
+        nodeElement
+          .style('opacity', 1)
+          .style('filter', 'none')
+        nodeBackground
+          .attr('stroke', getNodeColor(d.type, d.status))
+          .attr('stroke-width', 2)
       }
 
-      // If no significant drag occurred and duration was short (not a double-click), treat as click
-      if (!hasDragged && event.sourceEvent && dragDuration > 200) { // Avoid conflicting with double-click
+      // Use centralized z-index management after drag ends
+      setTimeout(() => {
+        organizeNodeZIndex()
+      }, 0)
+
+      // If no significant drag occurred, treat as click
+      if (!hasDragged && event.sourceEvent && dragDuration < 500) {
         const ctrlKey = event.sourceEvent.ctrlKey || event.sourceEvent.metaKey
         onNodeClick(d, ctrlKey)
       }
     }
 
-    // Render connections
+    // Optimized connection rendering with caching
     const connectionPaths = connectionLayer.selectAll('.connection')
-      .data(connections)
+      .data(connections, (d: any) => d.id)
+      
+    connectionPaths.exit().remove()
+    
+    const connectionEnter = connectionPaths
       .enter()
       .append('g')
       .attr('class', 'connection')
 
-    connectionPaths.append('path')
-      .attr('d', d => {
-        const sourceNode = nodes.find(n => n.id === d.sourceNodeId)
-        const targetNode = nodes.find(n => n.id === d.targetNodeId)
-        if (!sourceNode || !targetNode) return ''
-        return generateVariantAwareConnectionPath(
-          sourceNode, 
-          d.sourcePortId, 
-          targetNode, 
-          d.targetPortId,
-          nodeVariant
-        )
-      })
-      .attr('stroke', d => selectedConnection?.id === d.id ? '#2196F3' : '#666')
-      .attr('stroke-width', d => selectedConnection?.id === d.id ? 3 : 2)
-      .attr('fill', 'none')
-      .attr('marker-end', d => selectedConnection?.id === d.id ? 'url(#arrowhead-selected)' : 'url(#arrowhead)')
+    connectionEnter.append('path')
       .attr('class', 'connection-path')
       .style('cursor', 'pointer')
+      .attr('fill', 'none')
       .on('click', (event, d) => {
         event.stopPropagation()
         onConnectionClick(d)
@@ -495,6 +668,14 @@ export default function WorkflowCanvas({
           .attr('stroke-width', isSelected ? 3 : 2)
           .attr('marker-end', isSelected ? 'url(#arrowhead-selected)' : 'url(#arrowhead)')
       })
+    
+    const connectionUpdate = connectionEnter.merge(connectionPaths as any)
+    
+    connectionUpdate.select('path')
+      .attr('d', (d: any) => getConnectionPath(d))
+      .attr('stroke', (d: any) => selectedConnection?.id === d.id ? '#2196F3' : '#666')
+      .attr('stroke-width', (d: any) => selectedConnection?.id === d.id ? 3 : 2)
+      .attr('marker-end', (d: any) => selectedConnection?.id === d.id ? 'url(#arrowhead-selected)' : 'url(#arrowhead)')
 
     // Render connection preview
     if (isConnecting && connectionStart) {
@@ -521,10 +702,15 @@ export default function WorkflowCanvas({
     }
 
     // Render nodes
-    const nodeSelection = nodeLayer.selectAll('.node')
+    const nodeSelection = mainNodeLayer.selectAll('.node')
       .data(nodes, (d: any) => d.id)
     
-    nodeSelection.exit().remove()
+    nodeSelection.exit()
+      .each(function(d: any) {
+        // Clean up from our centralized management
+        allNodeElementsRef.current.delete(d.id)
+      })
+      .remove()
     
     const nodeEnter = nodeSelection.enter()
       .append('g')
@@ -532,9 +718,13 @@ export default function WorkflowCanvas({
       .attr('data-node-id', (d: any) => d.id)
       .attr('transform', (d: any) => `translate(${d.x}, ${d.y})`)
       .style('cursor', 'move')
+      .each(function(d: any) {
+        // Register node element in our centralized management
+        allNodeElementsRef.current.set(d.id, this as SVGGElement)
+      })
       .call(d3.drag<any, WorkflowNode>()
         .container(g.node() as any)
-        .clickDistance(5) // Allow clicks within 5px movement
+        .clickDistance(3)
         .on('start', dragStarted)
         .on('drag', dragged)
         .on('end', dragEnded) as any)
@@ -568,22 +758,13 @@ export default function WorkflowCanvas({
     // Node background
     nodeEnter.append('rect')
       .attr('class', 'node-background')
-      .on('click', (event: any, d: any) => {
-        // Only handle click if not dragging
-        if (!d3.select(event.currentTarget.parentNode).classed('dragging')) {
-          event.stopPropagation()
-          const ctrlKey = event.ctrlKey || event.metaKey
-          onNodeClick(d, ctrlKey)
-        }
-      })
       .on('dblclick', (event: any, d: any) => {
-        // Always handle double-click immediately to prevent drag interference
         event.stopPropagation()
         event.preventDefault()
         onNodeDoubleClick(d)
       })
       
-    // Update node background attributes
+    // Update node background attributes and manage node ordering
     nodeGroups.select('.node-background')
       .attr('width', (d: any) => getConfigurableDimensions(d).width)
       .attr('height', (d: any) => getConfigurableDimensions(d).height)
@@ -591,44 +772,65 @@ export default function WorkflowCanvas({
       .attr('y', (d: any) => -getConfigurableDimensions(d).height / 2)
       .attr('rx', 8)
       .attr('fill', '#ffffff')
-      .attr('stroke', (d: any) => {
-        // Check if node is selected (even during drag)
-        if (isNodeSelected(d.id)) {
-          return '#2196F3' // Blue selection color
+      .attr('stroke', (d: any) => getNodeColor(d.type, d.status))
+      .attr('stroke-width', 2)
+
+    // Apply visual styling to all nodes using centralized system
+    nodeGroups.each(function(d: any) {
+      const nodeElement = d3.select(this)
+      const isSelected = isNodeSelected(d.id)
+      const isDragging = nodeElement.classed('dragging')
+      const nodeBackground = nodeElement.select('.node-background')
+      
+      // Apply CSS classes
+      nodeElement.classed('selected', isSelected)
+      
+      // Apply visual styling
+      let opacity = 1
+      let filter = 'none'
+      let strokeColor = getNodeColor(d.type, d.status)
+      let strokeWidth = 2
+      
+      if (isDragging) {
+        opacity = 0.9
+        filter = 'drop-shadow(0 6px 12px rgba(0, 0, 0, 0.3))'
+        if (isSelected) {
+          strokeColor = '#2196F3' // Blue for selected+dragging
+          strokeWidth = 3
+        } else {
+          strokeColor = getNodeColor(d.type, d.status) // Original color for just dragging
+          strokeWidth = 3
         }
-        return getNodeColor(d.type, d.status)
-      })
-      .attr('stroke-width', (d: any) => {
-        // Keep thick border for selected nodes
-        return isNodeSelected(d.id) ? 3 : 2
-      })
-      .style('filter', (d: any) => {
-        if (d.status === 'running') return 'drop-shadow(0 0 8px rgba(255, 167, 38, 0.6))'
-        if (isNodeSelected(d.id)) {
-          return 'drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))'
+      } else if (isSelected) {
+        filter = 'drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))'
+        strokeColor = '#2196F3'
+        strokeWidth = 3
+      }
+      
+      nodeElement
+        .style('opacity', opacity)
+        .style('filter', filter)
+      
+      nodeBackground
+        .attr('stroke', strokeColor)
+        .attr('stroke-width', strokeWidth)
+    })
+    
+    // Mark as initialized and organize z-index
+    if (!isInitialized) {
+      setIsInitialized(true)
+      // Initial z-index organization
+      requestAnimationFrame(() => {
+        if (!isDraggingRef.current) {
+          organizeNodeZIndex()
         }
-        return 'none'
       })
+    }
 
     // Node icon
     nodeEnter.append('text')
       .attr('class', 'node-icon')
-      .style('pointer-events', 'all')
-      .style('cursor', 'pointer')
-      .on('click', (event: any, d: any) => {
-        // Only handle click if not dragging
-        if (!d3.select(event.currentTarget.parentNode).classed('dragging')) {
-          event.stopPropagation()
-          const ctrlKey = event.ctrlKey || event.metaKey
-          onNodeClick(d, ctrlKey)
-        }
-      })
-      .on('dblclick', (event: any, d: any) => {
-        // Always handle double-click immediately to prevent drag interference
-        event.stopPropagation()
-        event.preventDefault()
-        onNodeDoubleClick(d)
-      })
+      .style('pointer-events', 'none')
     
     nodeGroups.select('.node-icon')
       .attr('x', 0)
@@ -642,22 +844,7 @@ export default function WorkflowCanvas({
     // Node label
     nodeEnter.append('text')
       .attr('class', 'node-label')
-      .style('pointer-events', 'all')
-      .style('cursor', 'pointer')
-      .on('click', (event: any, d: any) => {
-        // Only handle click if not dragging
-        if (!d3.select(event.currentTarget.parentNode).classed('dragging')) {
-          event.stopPropagation()
-          const ctrlKey = event.ctrlKey || event.metaKey
-          onNodeClick(d, ctrlKey)
-        }
-      })
-      .on('dblclick', (event: any, d: any) => {
-        // Always handle double-click immediately to prevent drag interference
-        event.stopPropagation()
-        event.preventDefault()
-        onNodeDoubleClick(d)
-      })
+      .style('pointer-events', 'none')
     
     nodeGroups.select('.node-label')
       .attr('x', 0)
@@ -801,44 +988,112 @@ export default function WorkflowCanvas({
 
     // Cleanup function
     return () => {
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current)
+        rafIdRef.current = null
+      }
       svg.selectAll('*').remove()
+      connectionPathCacheRef.current.clear()
+      gridCacheRef.current = null
+      allNodeElementsRef.current.clear()
     }
 
-  }, [
-    nodes, 
-    connections,
-    showGrid, 
-    nodeVariant,
-    selectedNodes, 
-    selectedConnection, 
-    isConnecting, 
-    connectionStart, 
-    connectionPreview,
-    onNodeClick,
-    onNodeDoubleClick,
-    onNodeDrag,
-    onConnectionClick,
-    onPortClick,
-    onCanvasClick,
-    onCanvasMouseMove,
-    onPortDragStart,
-    onPortDrag,
-    onPortDragEnd,
-    canDropOnPort,
-    canDropOnNode,
-    onTransformChange,
-    onZoomLevel,
-    isNodeSelected,
-    createGrid,
-    canvasTransform.k,
-    onToggleGrid,
-    onVariantChange,
-    onZoomIn,
-    onZoomOut,
-    onFitToScreen,
-    onResetPosition,
-    executionStatus
-  ])
+  }, [nodes, connections, showGrid, nodeVariant])
+  
+  // Visual state effect - handle selection and connection states
+  useEffect(() => {
+    if (!svgRef.current || !isInitialized) return
+    
+    const svg = d3.select(svgRef.current)
+    const mainNodeLayer = svg.select('.node-layer')
+    const connectionLayer = svg.select('.connection-layer')
+    
+    // Update node visual states only
+    mainNodeLayer.selectAll('.node').each(function(d: any) {
+      const nodeElement = d3.select(this)
+      const isSelected = isNodeSelected(d.id)
+      const isDragging = nodeElement.classed('dragging')
+      const nodeBackground = nodeElement.select('.node-background')
+      
+      nodeElement.classed('selected', isSelected)
+      
+      if (!isDragging) {
+        if (isSelected) {
+          nodeElement.style('filter', 'drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))')
+          nodeBackground.attr('stroke', '#2196F3').attr('stroke-width', 3)
+        } else {
+          nodeElement.style('filter', 'none')
+          nodeBackground.attr('stroke', getNodeColor(d.type, d.status)).attr('stroke-width', 2)
+        }
+      }
+    })
+    
+    // Update connection visual states only
+    connectionLayer.selectAll('.connection path')
+      .attr('stroke', (d: any) => selectedConnection?.id === d.id ? '#2196F3' : '#666')
+      .attr('stroke-width', (d: any) => selectedConnection?.id === d.id ? 3 : 2)
+      .attr('marker-end', (d: any) => selectedConnection?.id === d.id ? 'url(#arrowhead-selected)' : 'url(#arrowhead)')
+      
+  }, [selectedNodes, selectedConnection, isNodeSelected, getNodeColor, isInitialized])
+  
+  // Connection state effect
+  useEffect(() => {
+    if (!svgRef.current || !isInitialized) return
+    
+    const svg = d3.select(svgRef.current)
+    const g = svg.select('g')
+    
+    // Handle connection preview
+    g.selectAll('.connection-preview').remove()
+    
+    if (isConnecting && connectionStart) {
+      const sourceNode = nodes.find(n => n.id === connectionStart.nodeId)
+      if (sourceNode && connectionPreview) {
+        const previewPath = calculateConnectionPreviewPath(
+          sourceNode,
+          connectionStart.portId,
+          connectionPreview,
+          nodeVariant
+        )
+        
+        g.append('path')
+          .attr('class', 'connection-preview')
+          .attr('d', previewPath)
+          .attr('stroke', '#2196F3')
+          .attr('stroke-width', 2)
+          .attr('stroke-dasharray', '5,5')
+          .attr('fill', 'none')
+          .attr('marker-end', 'url(#arrowhead)')
+          .attr('pointer-events', 'none')
+          .style('opacity', 0.7)
+      }
+    }
+  }, [isConnecting, connectionStart, connectionPreview, nodeVariant, nodes, isInitialized])
+  
+  // Canvas state effect
+  useEffect(() => {
+    if (!svgRef.current || !isInitialized) return
+    
+    const svg = d3.select(svgRef.current)
+    const gridLayer = svg.select('.grid-layer')
+    
+    // Update grid and toolbar
+    const rect = svgRef.current.getBoundingClientRect()
+    createGrid(gridLayer as any, canvasTransform, rect.width, rect.height)
+    
+  }, [canvasTransform, createGrid, isInitialized])
+  
+  // Cleanup effect
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current)
+        rafIdRef.current = null
+      }
+      connectionPathCacheRef.current.clear()
+      gridCacheRef.current = null
+    }
+  }, [])
 
   return null // This component only manages D3 rendering
 }

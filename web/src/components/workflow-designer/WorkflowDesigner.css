@@ -245,14 +245,6 @@
 }
 
 /* Selection and interaction states */
-.node.selected {
-  filter: drop-shadow(0 0 8px rgba(33, 150, 243, 0.5));
-}
-
-.node.running {
-  filter: drop-shadow(0 0 8px rgba(255, 167, 38, 0.6));
-}
-
 .connection.selected path {
   stroke: #2196F3;
   stroke-width: 3;
@@ -277,12 +269,6 @@
 .output-port:hover circle {
   stroke-width: 3;
   filter: drop-shadow(0 0 4px rgba(33, 150, 243, 0.6));
-}
-
-/* Dragging states */
-.node.dragging {
-  opacity: 0.8;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
 }
 
 /* Connection preview - ปรับปรุงให้เส้นสีฟ้าเด่นชัดขึ้น */

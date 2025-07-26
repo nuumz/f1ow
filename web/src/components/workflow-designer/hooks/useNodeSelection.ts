@@ -61,27 +61,37 @@ export function useNodeSelection({
   }, [selectedNodes, selectedNode])
 
   const toggleNodeSelection = useCallback((nodeId: string, ctrlKey: boolean = false) => {
+    const node = nodes.find(n => n.id === nodeId)
+    if (!node) return
+
     if (ctrlKey || isMultiSelectMode) {
+      // Multi-select mode
       setSelectedNodes(prev => {
         const newSet = new Set(prev)
         if (newSet.has(nodeId)) {
           newSet.delete(nodeId)
+          // If removing the current selectedNode, pick another one or clear it
+          if (selectedNode?.id === nodeId) {
+            const remainingIds = Array.from(newSet)
+            if (remainingIds.length > 0) {
+              const nextNode = nodes.find(n => n.id === remainingIds[0])
+              setSelectedNode(nextNode || null)
+            } else {
+              setSelectedNode(null)
+            }
+          }
         } else {
           newSet.add(nodeId)
+          setSelectedNode(node) // Set as primary selected node
         }
         return newSet
       })
-      // Keep selectedNode for backwards compatibility
-      const node = nodes.find(n => n.id === nodeId)
-      if (node && !selectedNodes.has(nodeId)) {
-        setSelectedNode(node)
-      }
     } else {
-      // Single select mode
+      // Single select mode - clear previous selections
       setSelectedNodes(new Set([nodeId]))
-      setSelectedNode(nodes.find(n => n.id === nodeId) || null)
+      setSelectedNode(node)
     }
-  }, [isMultiSelectMode, selectedNodes, nodes])
+  }, [isMultiSelectMode, selectedNode, nodes])
 
   const clearSelection = useCallback(() => {
     setSelectedNodes(new Set())

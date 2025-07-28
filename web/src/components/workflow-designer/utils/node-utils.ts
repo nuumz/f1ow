@@ -3,7 +3,7 @@
  * Helper functions for working with workflow nodes using centralized types
  */
 
-import type { WorkflowNode, NodeDefinition, Position, SelectionArea } from '../types'
+import type { WorkflowNode, NodeDefinition, Position, SelectionArea, NodeShape } from '../types'
 import { 
   NodeTypes, 
   getNodeColor as getCentralizedNodeColor,
@@ -11,6 +11,13 @@ import {
   getPortColor as getCentralizedPortColor,
   getNodeDefinition as getCentralizedNodeDefinition
 } from '../types/nodes'
+import { 
+  getShapeDimensions, 
+  getShapePath, 
+  getNodeShape as getShapeFromType,
+  getPortPositions as getShapePortPositions,
+  isPointInShape
+} from './shape-utils'
 
 // Constants
 export const NODE_WIDTH = 200
@@ -21,6 +28,46 @@ export const PORT_RADIUS = 6
 export const getNodeColor = getCentralizedNodeColor
 export const getNodeIcon = getCentralizedNodeIcon
 export const getPortColor = getCentralizedPortColor
+
+/**
+ * Get node shape based on type
+ */
+export function getNodeShape(nodeType: string): NodeShape {
+  const nodeInfo = NodeTypes[nodeType]
+  return getShapeFromType(nodeType, nodeInfo)
+}
+
+/**
+ * Get shape-aware dimensions for a node
+ */
+export function getShapeAwareDimensions(node: WorkflowNode) {
+  const shape = getNodeShape(node.type)
+  const baseWidth = getNodeWidth(node)
+  const baseHeight = getNodeHeight(node)
+  
+  return getShapeDimensions(shape, baseWidth, baseHeight)
+}
+
+/**
+ * Get SVG path for node shape
+ */
+export function getNodeShapePath(node: WorkflowNode, borderRadius: number = 8) {
+  const shape = getNodeShape(node.type)
+  const dimensions = getShapeAwareDimensions(node)
+  
+  return getShapePath(shape, dimensions.width, dimensions.height, borderRadius)
+}
+
+/**
+ * Get port positions for a node based on its shape
+ */
+export function getPortPositions(node: WorkflowNode, portType: 'input' | 'output') {
+  const shape = getNodeShape(node.type)
+  const dimensions = getShapeAwareDimensions(node)
+  const portCount = portType === 'input' ? node.inputs.length : node.outputs.length
+  
+  return getShapePortPositions(shape, dimensions, portCount, portType)
+}
 
 /**
  * Get node definition (backward compatibility wrapper)
@@ -34,7 +81,10 @@ export function getNodeDefinition(type: string): NodeDefinition {
  */
 export function getNodeHeight(node: WorkflowNode): number {
   const portCount = Math.max(node.inputs.length, node.outputs.length)
-  return Math.max(NODE_MIN_HEIGHT, portCount * 30 + 60)
+  const baseHeight = Math.max(NODE_MIN_HEIGHT, portCount * 30 + 60)
+  // Bottom ports don't need extra height - they're positioned at the edge
+  const bottomPortsHeight = 0
+  return baseHeight + bottomPortsHeight
 }
 
 /**
@@ -67,7 +117,7 @@ export function createNode(type: string, position: Position): WorkflowNode {
   const nodeInfo = NodeTypes[type]
   
   return {
-    id: `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    id: `node-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
     type,
     label: nodeInfo?.label || 'New Node',
     x: position.x,
@@ -75,6 +125,7 @@ export function createNode(type: string, position: Position): WorkflowNode {
     config: definition.defaultConfig || {},
     inputs: definition.inputs,
     outputs: definition.outputs,
+    bottomPorts: definition.bottomPorts,
     status: 'idle'
   }
 }
@@ -95,7 +146,12 @@ export function canConnect(
   
   // Find ports
   const sourcePort = sourceNode.outputs.find(p => p.id === sourcePortId)
-  const targetPort = targetNode.inputs.find(p => p.id === targetPortId)
+  let targetPort = targetNode.inputs.find(p => p.id === targetPortId)
+  
+  // If not found in regular inputs, check bottom ports
+  if (!targetPort && targetNode.bottomPorts) {
+    targetPort = targetNode.bottomPorts.find(p => p.id === targetPortId)
+  }
   
   if (!sourcePort || !targetPort) {
     return false
@@ -172,18 +228,15 @@ export function findClosestNode(
 }
 
 /**
- * Check if a position is within a node's bounds
+ * Check if a position is within a node's bounds (shape-aware)
  */
 export function isPositionInNode(position: Position, node: WorkflowNode): boolean {
-  const nodeWidth = node.width || getNodeWidth(node)
-  const nodeHeight = node.height || getNodeHeight(node)
+  const dimensions = getShapeAwareDimensions(node)
+  const shape = getNodeShape(node.type)
+  const nodeCenter = { x: node.x, y: node.y }
   
-  return (
-    position.x >= node.x &&
-    position.x <= node.x + nodeWidth &&
-    position.y >= node.y &&
-    position.y <= node.y + nodeHeight
-  )
+  // Use shape-aware hit testing
+  return isPointInShape(shape, position, dimensions, nodeCenter)
 }
 
 /**

@@ -1,10 +1,10 @@
 import type { WorkflowNode, PortPosition, NodeVariant } from '../types'
-import { getNodeDimensions } from '../components/nodes/NodeRenderer'
+import { getPortPositions } from './node-utils'
 
 export type { PortPosition } from '../types'
 
 /**
- * Calculate port position based on node variant, size, and port configuration
+ * Calculate port position based on node shape, variant, and port configuration
  */
 export function calculatePortPosition(
   node: WorkflowNode,
@@ -12,7 +12,6 @@ export function calculatePortPosition(
   portType: 'input' | 'output',
   variant: NodeVariant = 'standard'
 ): PortPosition {
-  const dimensions = getNodeDimensions(node)
   const nodeX = node.x
   const nodeY = node.y
 
@@ -21,49 +20,18 @@ export function calculatePortPosition(
   const port = ports.find(p => p.id === portId)
   const portIndex = port ? ports.indexOf(port) : 0
 
-  let portX: number
-  let portY: number
+  // Get shape-aware port positions
+  const portPositions = getPortPositions(node, portType)
+  const portPosition = portPositions[portIndex] || { x: 0, y: 0 }
 
-  switch (variant) {
-    case 'compact': {
-      // Compact variant - ports aligned towards bottom/top
-      if (portType === 'input') {
-        portX = nodeX - dimensions.width / 2
-        const inputPortY = dimensions.height / 2
-        portY = nodeY + inputPortY - (node.inputs.length - 1) * 15 + portIndex * 30
-      } else {
-        portX = nodeX + dimensions.width / 2
-        const outputPortY = dimensions.height / 2
-        portY = nodeY + outputPortY - (node.outputs.length - 1) * 15 + portIndex * 30
-      }
-      break
-    }
-
-    case 'standard': {
-      // Standard variant - ports in content area
-      if (portType === 'input') {
-        portX = nodeX - dimensions.width / 2
-        const contentStartY = 10
-        portY = nodeY + contentStartY + portIndex * 25
-      } else {
-        portX = nodeX + dimensions.width / 2
-        const contentStartY = 10
-        portY = nodeY + contentStartY + portIndex * 25
-      }
-      break
-    }
-
-    default: {
-      // Fallback to standard
-      if (portType === 'input') {
-        portX = nodeX - dimensions.width / 2
-        portY = nodeY + 40 + portIndex * 30
-      } else {
-        portX = nodeX + dimensions.width / 2
-        portY = nodeY + 40 + portIndex * 30
-      }
-    }
+  // Adjust for variant scaling
+  let scale = 1
+  if (variant === 'compact') {
+    scale = 0.8
   }
+
+  const portX = nodeX + (portPosition.x * scale)
+  const portY = nodeY + (portPosition.y * scale)
 
   return { x: portX, y: portY }
 }

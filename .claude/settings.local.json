@@ -10,7 +10,9 @@
       "Bash(mkdir:*)",
       "Bash(touch:*)",
       "Bash(pnpm update:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(npm run build:*)",
+      "mcp__ide__getDiagnostics"
     ],
     "deny": []
   }

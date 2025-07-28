@@ -11,10 +11,11 @@ export const NodeTypes: Record<string, NodeTypeInfo> = {
   // Core/Control Flow nodes
   start: { 
     icon: '▶', 
-    color: '#4CAF50', 
+    color: '#3F51B5', 
     label: 'Start',
     category: 'Core/Control Flow',
-    description: 'Starting point of the workflow'
+    description: 'Starting point of the workflow',
+    shape: 'circle'
   },
   
   if: { 
@@ -22,7 +23,8 @@ export const NodeTypes: Record<string, NodeTypeInfo> = {
     color: '#FF9800', 
     label: 'IF',
     category: 'Core/Control Flow',
-    description: 'Conditional branching based on boolean expression'
+    description: 'Conditional branching based on boolean expression',
+    shape: 'diamond'
   },
   
   switch: { 
@@ -30,7 +32,8 @@ export const NodeTypes: Record<string, NodeTypeInfo> = {
     color: '#9C27B0', 
     label: 'Switch',
     category: 'Core/Control Flow',
-    description: 'Multiple conditional branches based on value'
+    description: 'Multiple conditional branches based on value',
+    shape: 'diamond'
   },
   
   merge: { 
@@ -70,7 +73,8 @@ export const NodeTypes: Record<string, NodeTypeInfo> = {
     color: '#F44336', 
     label: 'Stop and Error',
     category: 'Core/Control Flow',
-    description: 'Stop workflow execution with error'
+    description: 'Stop workflow execution with error',
+    shape: 'circle'
   },
   
   // Data Processing nodes
@@ -141,7 +145,6 @@ export const NodeTypes: Record<string, NodeTypeInfo> = {
   // Network nodes
   http: { 
     icon: '⌘', 
-    color: '#2196F3', 
     label: 'HTTP Request',
     category: 'Network',
     description: 'Make HTTP requests to APIs'
@@ -274,7 +277,6 @@ export const NodeTypes: Record<string, NodeTypeInfo> = {
   // AI/ML nodes
   aiagent: { 
     icon: '🤖', 
-    color: '#9C27B0', 
     label: 'AI Agent',
     category: 'AI/ML',
     description: 'AI agent processing'
@@ -326,7 +328,8 @@ export const NodeTypes: Record<string, NodeTypeInfo> = {
     color: '#4CAF50', 
     label: 'JSON',
     category: 'Utilities',
-    description: 'JSON processing'
+    description: 'JSON processing',
+    shape: 'square'
   },
   
   csv: { 
@@ -450,6 +453,11 @@ export const NodeDefinitions: Record<string, NodeDefinition> = {
   aiagent: {
     inputs: [{ id: 'main', type: 'input', dataType: 'any', label: 'Input', required: true }],
     outputs: [{ id: 'main', type: 'output', dataType: 'any', label: 'Output' }],
+    bottomPorts: [
+      { id: 'model', type: 'input', dataType: 'string', label: 'Chat Model*' },
+      { id: 'memory', type: 'input', dataType: 'object', label: 'Memory' },
+      { id: 'tool', type: 'input', dataType: 'array', label: 'Tool' }
+    ],
     defaultConfig: { 
       model: 'gpt-4',
       prompt: '',
@@ -487,7 +495,7 @@ export function getNodeColor(type: string, status?: string): string {
   if (status === 'error') return '#EF5350'
   if (status === 'warning') return '#FFCA28'
   
-  return NodeTypes[type]?.color || '#757575'
+  return NodeTypes[type]?.color || '#8d8d8d'
 }
 
 export function getNodeIcon(type: string): string {

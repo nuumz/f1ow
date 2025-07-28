@@ -3,6 +3,7 @@ import * as d3 from 'd3'
 import { Save, Play, ZoomIn, ZoomOut, Download, Upload, Maximize2, Trash2, RotateCcw } from 'lucide-react'
 import NodePalette from './NodePalette'
 import NodeEditor from './NodeEditor'
+import { getNodeDefinition } from './workflow-designer/types/nodes'
 
 // Enhanced interfaces
 interface NodePort {
@@ -26,6 +27,7 @@ interface WorkflowNode {
   config: any
   inputs: NodePort[]
   outputs: NodePort[]
+  bottomPorts?: NodePort[]
   status?: 'idle' | 'running' | 'completed' | 'error' | 'warning'
   data?: any
   locked?: boolean
@@ -82,7 +84,7 @@ const NodeTypes = {
   database: { icon: '🗄️', color: '#FF9800', label: 'Database' },
   conditional: { icon: '❓', color: '#9C27B0', label: 'Conditional' },
   loop: { icon: '🔁', color: '#00BCD4', label: 'Loop' },
-  ai: { icon: '🤖', color: '#F44336', label: 'AI Agent' },
+  aiagent: { icon: '🤖', color: '#9C27B0', label: 'AI Agent' },
   email: { icon: '📧', color: '#795548', label: 'Email' },
   slack: { icon: '💬', color: '#4A154B', label: 'Slack' },
   schedule: { icon: '⏰', color: '#FFC107', label: 'Schedule' },
@@ -163,147 +165,6 @@ export default function AdvancedWorkflowDesigner() {
   // WebSocket status
   const [wsStatus, setWsStatus] = useState<'connected' | 'connecting' | 'disconnected'>('disconnected')
 
-  // Enhanced node type definitions
-  const getNodeDefinition = useCallback((type: string) => {
-    const definitions: Record<string, {inputs: NodePort[], outputs: NodePort[], defaultConfig?: any}> = {
-      http: {
-        inputs: [
-          { id: 'trigger', type: 'input', dataType: 'any', label: 'Trigger' }
-        ],
-        outputs: [
-          { id: 'response', type: 'output', dataType: 'object', label: 'Response' },
-          { id: 'status', type: 'output', dataType: 'number', label: 'Status' },
-          { id: 'error', type: 'output', dataType: 'error', label: 'Error' }
-        ],
-        defaultConfig: { method: 'GET', url: '', timeout: 30000 }
-      },
-      transform: {
-        inputs: [
-          { id: 'input', type: 'input', dataType: 'any', label: 'Input', required: true }
-        ],
-        outputs: [
-          { id: 'output', type: 'output', dataType: 'any', label: 'Output' },
-          { id: 'error', type: 'output', dataType: 'error', label: 'Error' }
-        ],
-        defaultConfig: { language: 'javascript', script: 'return input;' }
-      },
-      conditional: {
-        inputs: [
-          { id: 'input', type: 'input', dataType: 'any', label: 'Input', required: true }
-        ],
-        outputs: [
-          { id: 'true', type: 'output', dataType: 'any', label: 'True' },
-          { id: 'false', type: 'output', dataType: 'any', label: 'False' }
-        ],
-        defaultConfig: { operator: 'equals', value: '' }
-      },
-      database: {
-        inputs: [
-          { id: 'query', type: 'input', dataType: 'string', label: 'Query', required: true },
-          { id: 'params', type: 'input', dataType: 'object', label: 'Parameters' }
-        ],
-        outputs: [
-          { id: 'results', type: 'output', dataType: 'array', label: 'Results' },
-          { id: 'count', type: 'output', dataType: 'number', label: 'Count' },
-          { id: 'error', type: 'output', dataType: 'error', label: 'Error' }
-        ],
-        defaultConfig: { connectionString: '', timeout: 30000 }
-      },
-      ai: {
-        inputs: [
-          { id: 'prompt', type: 'input', dataType: 'string', label: 'Prompt', required: true },
-          { id: 'context', type: 'input', dataType: 'any', label: 'Context' },
-          { id: 'history', type: 'input', dataType: 'array', label: 'History' }
-        ],
-        outputs: [
-          { id: 'response', type: 'output', dataType: 'string', label: 'Response' },
-          { id: 'tokens', type: 'output', dataType: 'object', label: 'Tokens' },
-          { id: 'error', type: 'output', dataType: 'error', label: 'Error' }
-        ],
-        defaultConfig: { model: 'gpt-4', temperature: 0.7, maxTokens: 2000 }
-      },
-      email: {
-        inputs: [
-          { id: 'to', type: 'input', dataType: 'string', label: 'To', required: true },
-          { id: 'subject', type: 'input', dataType: 'string', label: 'Subject', required: true },
-          { id: 'body', type: 'input', dataType: 'string', label: 'Body', required: true }
-        ],
-        outputs: [
-          { id: 'status', type: 'output', dataType: 'string', label: 'Status' },
-          { id: 'error', type: 'output', dataType: 'error', label: 'Error' }
-        ],
-        defaultConfig: { provider: 'smtp', host: '', port: 587 }
-      },
-      slack: {
-        inputs: [
-          { id: 'channel', type: 'input', dataType: 'string', label: 'Channel', required: true },
-          { id: 'message', type: 'input', dataType: 'string', label: 'Message', required: true }
-        ],
-        outputs: [
-          { id: 'status', type: 'output', dataType: 'string', label: 'Status' },
-          { id: 'error', type: 'output', dataType: 'error', label: 'Error' }
-        ],
-        defaultConfig: { token: '', channel: '#general' }
-      },
-      webhook: {
-        inputs: [
-          { id: 'payload', type: 'input', dataType: 'object', label: 'Payload', required: true }
-        ],
-        outputs: [
-          { id: 'response', type: 'output', dataType: 'object', label: 'Response' },
-          { id: 'error', type: 'output', dataType: 'error', label: 'Error' }
-        ],
-        defaultConfig: { url: '', method: 'POST' }
-      },
-      schedule: {
-        inputs: [],
-        outputs: [
-          { id: 'trigger', type: 'output', dataType: 'object', label: 'Trigger' }
-        ],
-        defaultConfig: { cron: '0 9 * * *', timezone: 'UTC' }
-      },
-      loop: {
-        inputs: [
-          { id: 'items', type: 'input', dataType: 'array', label: 'Items', required: true }
-        ],
-        outputs: [
-          { id: 'item', type: 'output', dataType: 'any', label: 'Current Item' },
-          { id: 'index', type: 'output', dataType: 'number', label: 'Index' },
-          { id: 'done', type: 'output', dataType: 'boolean', label: 'Done' }
-        ],
-        defaultConfig: { batchSize: 1, parallel: false }
-      },
-      parallel: {
-        inputs: [
-          { id: 'input1', type: 'input', dataType: 'any', label: 'Input 1' },
-          { id: 'input2', type: 'input', dataType: 'any', label: 'Input 2' },
-          { id: 'input3', type: 'input', dataType: 'any', label: 'Input 3' }
-        ],
-        outputs: [
-          { id: 'output', type: 'output', dataType: 'array', label: 'Combined Output' }
-        ],
-        defaultConfig: { waitForAll: true, timeout: 60000 }
-      },
-      subworkflow: {
-        inputs: [
-          { id: 'input', type: 'input', dataType: 'any', label: 'Input', required: true },
-          { id: 'params', type: 'input', dataType: 'object', label: 'Parameters' }
-        ],
-        outputs: [
-          { id: 'output', type: 'output', dataType: 'any', label: 'Output' },
-          { id: 'status', type: 'output', dataType: 'string', label: 'Status' },
-          { id: 'error', type: 'output', dataType: 'error', label: 'Error' }
-        ],
-        defaultConfig: { workflowId: '', async: false, timeout: 300000 }
-      }
-    }
-    
-    return definitions[type] || { 
-      inputs: [{ id: 'input', type: 'input', dataType: 'any', label: 'Input' }], 
-      outputs: [{ id: 'output', type: 'output', dataType: 'any', label: 'Output' }],
-      defaultConfig: {} 
-    }
-  }, [])
 
   // Color schemes
   const getNodeColor = useCallback((type: string, status?: string): string => {
@@ -335,7 +196,10 @@ export default function AdvancedWorkflowDesigner() {
   // Helper functions
   const getNodeHeight = useCallback((node: WorkflowNode): number => {
     const portCount = Math.max(node.inputs.length, node.outputs.length)
-    return Math.max(NODE_MIN_HEIGHT, portCount * 30 + 60)
+    const baseHeight = Math.max(NODE_MIN_HEIGHT, portCount * 30 + 60)
+    // Add extra height for bottom ports if they exist
+    const bottomPortsHeight = node.bottomPorts ? node.bottomPorts.length * 25 + 20 : 0
+    return baseHeight + bottomPortsHeight
   }, [])
 
   // 🚀 MULTI-SELECT UTILITIES
@@ -489,6 +353,7 @@ export default function AdvancedWorkflowDesigner() {
       config: definition.defaultConfig || {},
       inputs: definition.inputs,
       outputs: definition.outputs,
+      bottomPorts: definition.bottomPorts,
       status: 'idle'
     }
     setNodes(prev => [...prev, newNode])
@@ -1781,6 +1646,107 @@ export default function AdvancedWorkflowDesigner() {
           d3.select(this).text(nodeData.outputs[i].label)
         }
       })
+    })
+
+    // Bottom ports - เพิ่มเฉพาะ nodes ใหม่ที่มี bottomPorts
+    nodeEnter.filter(d => !!(d.bottomPorts && d.bottomPorts.length > 0))
+      .selectAll(".bottom-port")
+      .data(d => d.bottomPorts?.map(port => ({...port, nodeId: d.id})) || [])
+      .enter()
+      .append("g")
+      .attr("class", "bottom-port")
+      .style("cursor", "crosshair")
+      .style("pointer-events", "all")
+      .on("click", function(event, d) {
+        handlePortClick(event, d)
+      })
+      .on("mousedown", function(event, d) {
+        handlePortMouseDown(event, d)
+      })
+      .on("mouseup", function(event, d) {
+        handlePortMouseUp(event, d)
+      })
+
+    // Update bottom port positions สำหรับ nodes ทั้งหมด
+    nodeGroups.each(function(nodeData) {
+      if (nodeData.bottomPorts && nodeData.bottomPorts.length > 0) {
+        const nodeGroup = d3.select(this)
+        const nodeHeight = getNodeHeight(nodeData)
+        const bottomPortsStartY = nodeHeight - 40
+        
+        const bottomPorts = nodeGroup.selectAll(".bottom-port")
+          .data(nodeData.bottomPorts.map(port => ({...port, nodeId: nodeData.id})))
+        
+        // Enter new bottom ports for existing nodes
+        const bottomPortEnter = bottomPorts.enter()
+          .append("g")
+          .attr("class", "bottom-port")
+          .style("cursor", "crosshair")
+          .style("pointer-events", "all")
+          .on("click", function(event, d) {
+            handlePortClick(event, d)
+          })
+          .on("mousedown", function(event, d) {
+            handlePortMouseDown(event, d)
+          })
+          .on("mouseup", function(event, d) {
+            handlePortMouseUp(event, d)
+          })
+        
+        // Add circles to new bottom ports
+        bottomPortEnter.append("circle")
+          .attr("r", PORT_RADIUS)
+          
+        // Add text to new bottom ports
+        bottomPortEnter.append("text")
+          .attr("x", 0)
+          .attr("y", 20)
+          .attr("dy", "0.35em")
+          .attr("text-anchor", "middle")
+          .attr("font-size", "10px")
+          .attr("fill", "#666")
+        
+        // Update all bottom ports (new and existing)
+        const allBottomPorts = bottomPortEnter.merge(bottomPorts as any)
+        
+        allBottomPorts
+          .attr("transform", (_d, i) => {
+            const spacing = NODE_WIDTH / (nodeData.bottomPorts!.length + 1)
+            const x = -NODE_WIDTH/2 + spacing * (i + 1)
+            return `translate(${x}, ${bottomPortsStartY})`
+          })
+        
+        // Update bottom port circles
+        allBottomPorts.select("circle")
+          .attr("fill", () => getPortColor("any"))
+          .attr("stroke", () => {
+            if (isConnecting && connectionStart) {
+              if (connectionStart.type === 'output' && nodeData.id !== connectionStart.nodeId) {
+                return "#4CAF50"
+              }
+            }
+            return "#333"
+          })
+          .attr("stroke-width", () => {
+            if (isConnecting && connectionStart && connectionStart.type === 'output' && nodeData.id !== connectionStart.nodeId) {
+              return 3
+            }
+            return 2
+          })
+          .style("filter", () => {
+            if (isConnecting && connectionStart && connectionStart.type === 'output' && nodeData.id !== connectionStart.nodeId) {
+              return "drop-shadow(0 0 4px rgba(76, 175, 80, 0.6))"
+            }
+            return "none"
+          })
+        
+        // Update bottom port text
+        allBottomPorts.select("text")
+          .text(d => d.label)
+        
+        // Remove old bottom ports
+        bottomPorts.exit().remove()
+      }
     })
 
     // Canvas click handler

@@ -38,6 +38,9 @@ export type PortType = 'input' | 'output'
 // Node variant enumeration
 export type NodeVariant = 'compact' | 'standard'
 
+// Node shape enumeration
+export type NodeShape = 'rectangle' | 'circle' | 'diamond' | 'square'
+
 // Node category enumeration
 export type NodeCategory = 
   | 'Core/Control Flow'
@@ -64,6 +67,7 @@ export interface WorkflowNode {
   config: Record<string, any>
   inputs: NodePort[]
   outputs: NodePort[]
+  bottomPorts?: NodePort[]
   status?: NodeStatus
   data?: any
   locked?: boolean
@@ -105,11 +109,13 @@ export interface ConnectionStart {
 export interface NodeDefinition {
   inputs: NodePort[]
   outputs: NodePort[]
+  bottomPorts?: NodePort[]
   defaultConfig?: Record<string, any>
   category?: NodeCategory
   description?: string
   icon?: string
   color?: string
+  shape?: NodeShape
 }
 
 // Position interface
@@ -145,10 +151,11 @@ export interface PortPosition {
 // Node type information
 export interface NodeTypeInfo {
   icon: string
-  color: string
+  color?: string
   label: string
   category?: NodeCategory
   description?: string
+  shape?: NodeShape
 }
 
 // Execution state for workflow runs

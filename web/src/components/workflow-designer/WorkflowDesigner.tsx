@@ -305,6 +305,10 @@ function WorkflowDesignerContent({
                 
                 return !existingConnection
               }}
+              onPlusButtonClick={(nodeId: string, portId: string) => {
+                console.log('Plus button clicked:', { nodeId, portId })
+                // TODO: Implement action (e.g., show node selector modal)
+              }}
               onTransformChange={handlers.handleTransformChange}
               onZoomLevelChange={handlers.handleZoomLevelChange}
               onRegisterZoomBehavior={canvas.registerZoomBehavior}

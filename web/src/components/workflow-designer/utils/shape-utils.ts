@@ -106,7 +106,7 @@ export function getShapePath(
   shape: NodeShape, 
   width: number, 
   height: number,
-  rx: number = 8
+  rx: number | { topLeft?: number; topRight?: number; bottomLeft?: number; bottomRight?: number } = 8
 ): ShapePathData {
   const halfWidth = width / 2
   const halfHeight = height / 2
@@ -125,17 +125,30 @@ export function getShapePath(
 
     case 'square':
       const halfSize = Math.max(width, height) / 2 * 0.8
-      if (rx > 0) {
+      
+      // Handle both uniform and asymmetric border radius
+      let topLeftR = 0, topRightR = 0, bottomLeftR = 0, bottomRightR = 0
+      
+      if (typeof rx === 'number') {
+        topLeftR = topRightR = bottomLeftR = bottomRightR = rx
+      } else if (rx && typeof rx === 'object') {
+        topLeftR = rx.topLeft || 0
+        topRightR = rx.topRight || 0
+        bottomLeftR = rx.bottomLeft || 0
+        bottomRightR = rx.bottomRight || 0
+      }
+      
+      if (topLeftR > 0 || topRightR > 0 || bottomLeftR > 0 || bottomRightR > 0) {
         return {
-          d: `M ${-halfSize + rx} ${-halfSize} 
-              L ${halfSize - rx} ${-halfSize} 
-              Q ${halfSize} ${-halfSize} ${halfSize} ${-halfSize + rx} 
-              L ${halfSize} ${halfSize - rx} 
-              Q ${halfSize} ${halfSize} ${halfSize - rx} ${halfSize} 
-              L ${-halfSize + rx} ${halfSize} 
-              Q ${-halfSize} ${halfSize} ${-halfSize} ${halfSize - rx} 
-              L ${-halfSize} ${-halfSize + rx} 
-              Q ${-halfSize} ${-halfSize} ${-halfSize + rx} ${-halfSize} Z`
+          d: `M ${-halfSize + topLeftR} ${-halfSize} 
+              L ${halfSize - topRightR} ${-halfSize} 
+              ${topRightR > 0 ? `Q ${halfSize} ${-halfSize} ${halfSize} ${-halfSize + topRightR}` : `L ${halfSize} ${-halfSize}`}
+              L ${halfSize} ${halfSize - bottomRightR} 
+              ${bottomRightR > 0 ? `Q ${halfSize} ${halfSize} ${halfSize - bottomRightR} ${halfSize}` : `L ${halfSize} ${halfSize}`}
+              L ${-halfSize + bottomLeftR} ${halfSize} 
+              ${bottomLeftR > 0 ? `Q ${-halfSize} ${halfSize} ${-halfSize} ${halfSize - bottomLeftR}` : `L ${-halfSize} ${halfSize}`}
+              L ${-halfSize} ${-halfSize + topLeftR} 
+              ${topLeftR > 0 ? `Q ${-halfSize} ${-halfSize} ${-halfSize + topLeftR} ${-halfSize}` : `L ${-halfSize} ${-halfSize}`} Z`
         }
       } else {
         return {
@@ -145,17 +158,29 @@ export function getShapePath(
 
     case 'rectangle':
     default:
-      if (rx > 0) {
+      // Handle both uniform and asymmetric border radius for rectangles
+      let rectTopLeftR = 0, rectTopRightR = 0, rectBottomLeftR = 0, rectBottomRightR = 0
+      
+      if (typeof rx === 'number') {
+        rectTopLeftR = rectTopRightR = rectBottomLeftR = rectBottomRightR = rx
+      } else if (rx && typeof rx === 'object') {
+        rectTopLeftR = rx.topLeft || 0
+        rectTopRightR = rx.topRight || 0
+        rectBottomLeftR = rx.bottomLeft || 0
+        rectBottomRightR = rx.bottomRight || 0
+      }
+      
+      if (rectTopLeftR > 0 || rectTopRightR > 0 || rectBottomLeftR > 0 || rectBottomRightR > 0) {
         return {
-          d: `M ${-halfWidth + rx} ${-halfHeight} 
-              L ${halfWidth - rx} ${-halfHeight} 
-              Q ${halfWidth} ${-halfHeight} ${halfWidth} ${-halfHeight + rx} 
-              L ${halfWidth} ${halfHeight - rx} 
-              Q ${halfWidth} ${halfHeight} ${halfWidth - rx} ${halfHeight} 
-              L ${-halfWidth + rx} ${halfHeight} 
-              Q ${-halfWidth} ${halfHeight} ${-halfWidth} ${halfHeight - rx} 
-              L ${-halfWidth} ${-halfHeight + rx} 
-              Q ${-halfWidth} ${-halfHeight} ${-halfWidth + rx} ${-halfHeight} Z`
+          d: `M ${-halfWidth + rectTopLeftR} ${-halfHeight} 
+              L ${halfWidth - rectTopRightR} ${-halfHeight} 
+              ${rectTopRightR > 0 ? `Q ${halfWidth} ${-halfHeight} ${halfWidth} ${-halfHeight + rectTopRightR}` : `L ${halfWidth} ${-halfHeight}`}
+              L ${halfWidth} ${halfHeight - rectBottomRightR} 
+              ${rectBottomRightR > 0 ? `Q ${halfWidth} ${halfHeight} ${halfWidth - rectBottomRightR} ${halfHeight}` : `L ${halfWidth} ${halfHeight}`}
+              L ${-halfWidth + rectBottomLeftR} ${halfHeight} 
+              ${rectBottomLeftR > 0 ? `Q ${-halfWidth} ${halfHeight} ${-halfWidth} ${halfHeight - rectBottomLeftR}` : `L ${-halfWidth} ${halfHeight}`}
+              L ${-halfWidth} ${-halfHeight + rectTopLeftR} 
+              ${rectTopLeftR > 0 ? `Q ${-halfWidth} ${-halfHeight} ${-halfWidth + rectTopLeftR} ${-halfHeight}` : `L ${-halfWidth} ${-halfHeight}`} Z`
         }
       } else {
         return {

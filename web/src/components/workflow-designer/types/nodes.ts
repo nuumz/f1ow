@@ -10,12 +10,12 @@ import type { NodeSchema } from '../schemas'
 export const NodeTypes: Record<string, NodeTypeInfo> = {
   // Core/Control Flow nodes
   start: { 
-    icon: '▶', 
-    color: '#3F51B5', 
-    label: 'Start',
+    icon: '💬', 
+    color: '#00C853', 
+    label: 'When chat message received',
     category: 'Core/Control Flow',
-    description: 'Starting point of the workflow',
-    shape: 'circle'
+    description: 'Starting point when chat message is received',
+    shape: 'square'
   },
   
   if: { 
@@ -347,11 +347,14 @@ export const NodeDefinitions: Record<string, NodeDefinition> = {
   start: {
     inputs: [],
     outputs: [{ id: 'main', type: 'output', dataType: 'any', label: 'Main' }],
-    defaultConfig: {},
+    defaultConfig: {
+      triggerType: 'chat_message',
+      conditions: []
+    },
     category: 'Core/Control Flow',
-    description: 'Starting point of the workflow',
-    icon: '▶',
-    color: '#4CAF50'
+    description: 'Starting point when chat message is received',
+    icon: '💬',
+    color: '#00C853'
   },
   
   if: {

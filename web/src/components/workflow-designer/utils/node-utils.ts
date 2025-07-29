@@ -51,7 +51,7 @@ export function getShapeAwareDimensions(node: WorkflowNode) {
 /**
  * Get SVG path for node shape
  */
-export function getNodeShapePath(node: WorkflowNode, borderRadius: number = 8) {
+export function getNodeShapePath(node: WorkflowNode, borderRadius: number | { topLeft?: number; topRight?: number; bottomLeft?: number; bottomRight?: number } = 8) {
   const shape = getNodeShape(node.type)
   const dimensions = getShapeAwareDimensions(node)
   

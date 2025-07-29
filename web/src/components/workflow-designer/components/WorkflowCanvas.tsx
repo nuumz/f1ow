@@ -340,6 +340,16 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   const selectedNodesRef = useRef(selectedNodes)
   selectedNodesRef.current = selectedNodes
 
+  // Throttle drag updates for better performance
+  const lastDragUpdateRef = useRef(0)
+  const dragUpdateThrottle = 8 // ~120fps for smoother connections
+  
+  // Track last updated paths to prevent unnecessary redraws
+  const lastConnectionPathsRef = useRef<Map<string, string>>(new Map())
+  
+  // Track current drag positions to prevent position conflicts
+  const currentDragPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map())
+
 
   /**
    * Function to check if a bottom port can accept additional connections
@@ -391,16 +401,32 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   }, [nodeMap])
 
 
-  // Memoized connection path calculation
-  const getConnectionPath = useCallback((connection: Connection) => {
-    const cacheKey = `${connection.sourceNodeId}-${connection.sourcePortId}-${connection.targetNodeId}-${connection.targetPortId}-${nodeVariant}`
+  // Memoized connection path calculation with drag position support
+  const getConnectionPath = useCallback((connection: Connection, useDragPositions = false) => {
+    const cacheKey = `${connection.sourceNodeId}-${connection.sourcePortId}-${connection.targetNodeId}-${connection.targetPortId}-${nodeVariant}${useDragPositions ? '-drag' : ''}`
     
-    const cached = connectionPathCacheRef.current.get(cacheKey)
-    if (cached) return cached
+    // Skip cache for drag positions to ensure real-time updates
+    if (!useDragPositions) {
+      const cached = connectionPathCacheRef.current.get(cacheKey)
+      if (cached) return cached
+    }
     
-    const sourceNode = nodeMap.get(connection.sourceNodeId)
-    const targetNode = nodeMap.get(connection.targetNodeId)
+    let sourceNode = nodeMap.get(connection.sourceNodeId)
+    let targetNode = nodeMap.get(connection.targetNodeId)
     if (!sourceNode || !targetNode) return ''
+    
+    // Use current drag positions if available
+    if (useDragPositions) {
+      const sourceDragPos = currentDragPositionsRef.current.get(connection.sourceNodeId)
+      const targetDragPos = currentDragPositionsRef.current.get(connection.targetNodeId)
+      
+      if (sourceDragPos) {
+        sourceNode = { ...sourceNode, x: sourceDragPos.x, y: sourceDragPos.y }
+      }
+      if (targetDragPos) {
+        targetNode = { ...targetNode, x: targetDragPos.x, y: targetDragPos.y }
+      }
+    }
     
     const path = generateVariantAwareConnectionPath(
       sourceNode, 
@@ -410,7 +436,9 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       nodeVariant
     )
     
-    connectionPathCacheRef.current.set(cacheKey, path)
+    if (!useDragPositions) {
+      connectionPathCacheRef.current.set(cacheKey, path)
+    }
     return path
   }, [nodeMap, nodeVariant])
 
@@ -463,33 +491,70 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     })
   }, [scheduleRAF, isNodeSelected, nodeMap, getNodeColor])
 
-  const updateDraggedNodePosition = useCallback((nodeId: string, newX: number, newY: number) => {
-    scheduleRAF(() => {
-      // Update visual position
-      if (draggedElementRef.current) {
-        draggedElementRef.current.attr('transform', `translate(${newX}, ${newY})`)
+  // Memoized connection lookup for better drag performance
+  const nodeConnectionsMap = useMemo(() => {
+    const map = new Map<string, Connection[]>()
+    connections.forEach(conn => {
+      // Index by source node
+      if (!map.has(conn.sourceNodeId)) {
+        map.set(conn.sourceNodeId, [])
       }
-
-      // Clear connection cache for affected connections
-      connections.forEach(conn => {
-        if (conn.sourceNodeId === nodeId || conn.targetNodeId === nodeId) {
-          const cacheKey = `${conn.sourceNodeId}-${conn.sourcePortId}-${conn.targetNodeId}-${conn.targetPortId}-${nodeVariant}`
-          connectionPathCacheRef.current.delete(cacheKey)
+      map.get(conn.sourceNodeId)!.push(conn)
+      
+      // Index by target node (if different from source)
+      if (conn.targetNodeId !== conn.sourceNodeId) {
+        if (!map.has(conn.targetNodeId)) {
+          map.set(conn.targetNodeId, [])
         }
-      })
+        map.get(conn.targetNodeId)!.push(conn)
+      }
+    })
+    return map
+  }, [connections])
 
-      // Update connections in real-time (only affected ones)
+  const updateDraggedNodePosition = useCallback((nodeId: string, newX: number, newY: number) => {
+    // Always update node position immediately for smooth dragging
+    if (draggedElementRef.current) {
+      draggedElementRef.current.attr('transform', `translate(${newX}, ${newY})`)
+    }
+
+    // Store current drag position
+    currentDragPositionsRef.current.set(nodeId, { x: newX, y: newY })
+
+    // Throttle connection updates to improve performance
+    const now = Date.now()
+    if (now - lastDragUpdateRef.current < dragUpdateThrottle) {
+      return
+    }
+    lastDragUpdateRef.current = now
+
+    scheduleRAF(() => {
+      // Get affected connections more efficiently
+      const affectedConnections = nodeConnectionsMap.get(nodeId) || []
+      
+      if (affectedConnections.length === 0) return
+
+      // Update connections in real-time using drag positions
       const svg = d3.select(svgRef.current!)
       const connectionLayer = svg.select('.connection-layer')
+      
+      // Use drag positions for smooth updates
       connectionLayer.selectAll('.connection')
-        .filter((conn: any) => conn.sourceNodeId === nodeId || conn.targetNodeId === nodeId)
+        .filter((conn: any) => {
+          return affectedConnections.some(affected => affected.id === conn.id)
+        })
         .each(function(conn: any) {
           const connectionGroup = d3.select(this)
-          const newPath = getConnectionPath(conn)
-          connectionGroup.select('.connection-path').attr('d', newPath)
+          const pathElement = connectionGroup.select('.connection-path')
+          
+          // Use drag positions for real-time updates
+          const newPath = getConnectionPath(conn, true)
+          
+          // Always update during drag to ensure smooth movement
+          pathElement.attr('d', newPath)
         })
     })
-  }, [scheduleRAF, connections, nodeVariant, getConnectionPath])
+  }, [scheduleRAF, nodeConnectionsMap, nodeVariant, getConnectionPath])
 
   const resetNodeVisualStyle = useCallback((nodeElement: any, nodeId: string) => {
     const isSelected = isNodeSelected(nodeId)
@@ -519,7 +584,14 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   useEffect(() => {
     connectionPathCacheRef.current.clear()
     nodePositionCacheRef.current.clear()
+    lastConnectionPathsRef.current.clear()
+    currentDragPositionsRef.current.clear()
   }, [nodes])
+
+  // Clear connection paths when connections change
+  useEffect(() => {
+    lastConnectionPathsRef.current.clear()
+  }, [connections])
 
   // Immediate z-index organization for selection changes
   useEffect(() => {
@@ -741,6 +813,9 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       draggedNodeIdRef.current = null
       draggedNodeElementRef.current = null
 
+      // Clear drag position tracking
+      currentDragPositionsRef.current.delete(d.id)
+
       // Reset visual styles
       resetNodeVisualStyle(nodeElement, d.id)
 
@@ -920,7 +995,25 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     nodeGroups.select('.node-background')
       .attr('d', (d: any) => {
         const shape = getNodeShape(d.type)
-        const shapePath = getNodeShapePath(d, (shape === 'rectangle' || shape === 'square') ? 8 : 0)
+        let borderRadius: number | { topLeft?: number; topRight?: number; bottomLeft?: number; bottomRight?: number } = 0
+        
+        // Custom border radius for different node types
+        if (d.type === 'start') {
+          // Asymmetric border radius for start node: left 30%, right default
+          const dimensions = getShapeAwareDimensions(d)
+          const leftRadius = Math.min(dimensions.width, dimensions.height) * 0.3
+          const rightRadius = 8 // default radius
+          borderRadius = {
+            topLeft: leftRadius,
+            bottomLeft: leftRadius,
+            topRight: rightRadius,
+            bottomRight: rightRadius
+          }
+        } else if (shape === 'rectangle' || shape === 'square') {
+          borderRadius = 8
+        }
+        
+        const shapePath = getNodeShapePath(d, borderRadius)
         return shapePath.d
       })
       .attr('fill', '#ffffff')

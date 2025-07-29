@@ -77,6 +77,19 @@ export function useWorkflowOperations() {
       return existingConnection
     }
     
+    // Special handling for 'ai-model' port - only allow one connection
+    if (sourcePortId === 'ai-model') {
+      const existingAiModelConnection = state.connections.find(conn =>
+        conn.sourceNodeId === sourceNodeId &&
+        conn.sourcePortId === 'ai-model'
+      )
+      
+      if (existingAiModelConnection) {
+        console.log('Removing existing ai-model connection:', existingAiModelConnection)
+        dispatch({ type: 'DELETE_CONNECTION', payload: existingAiModelConnection.id })
+      }
+    }
+    
     const newConnection: Connection = {
       id: generateConnectionId(),
       sourceNodeId,

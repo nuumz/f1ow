@@ -307,7 +307,29 @@ function WorkflowDesignerContent({
               }}
               onPlusButtonClick={(nodeId: string, portId: string) => {
                 console.log('Plus button clicked:', { nodeId, portId })
-                // TODO: Implement action (e.g., show node selector modal)
+                
+                // For demo purposes, create a simple "Set" node and connect it
+                const sourceNode = state.nodes.find(n => n.id === nodeId)
+                if (sourceNode) {
+                  // Position the new node below the source node
+                  const newNodePosition = {
+                    x: sourceNode.x + (Math.random() - 0.5) * 100, // Small random offset
+                    y: sourceNode.y + 150 // Below the source node
+                  }
+                  
+                  // Create a new node (default to 'set' type for demo)
+                  const newNode = operations.addNode('set', newNodePosition)
+                  
+                  // Connect the source port to the new node's main input
+                  if (newNode && newNode.inputs.length > 0) {
+                    operations.createConnection(
+                      nodeId,
+                      portId,
+                      newNode.id,
+                      newNode.inputs[0].id
+                    )
+                  }
+                }
               }}
               onTransformChange={handlers.handleTransformChange}
               onZoomLevelChange={handlers.handleZoomLevelChange}

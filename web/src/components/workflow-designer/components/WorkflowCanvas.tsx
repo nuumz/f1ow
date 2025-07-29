@@ -118,6 +118,48 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   
   // Track current transform with ref for immediate access
   const currentTransformRef = useRef(canvasTransform)
+  
+  /**
+   * Helper function to determine connection direction and appropriate arrow marker
+   */
+  const getConnectionMarker = useCallback((connection: Connection, state: 'default' | 'selected' | 'hover' = 'default') => {
+    const sourceNode = nodes.find(n => n.id === connection.sourceNodeId)
+    const targetNode = nodes.find(n => n.id === connection.targetNodeId)
+    
+    if (!sourceNode || !targetNode) return 'url(#arrowhead)'
+    
+    // Check if source is a bottom port
+    const isSourceBottomPort = sourceNode.bottomPorts?.some(p => p.id === connection.sourcePortId)
+    
+    if (isSourceBottomPort) {
+      // Bottom ports typically connect horizontally to target nodes from the left
+      // Check if target is to the right of source (normal left-to-right flow)
+      const isLeftToRight = targetNode.x > sourceNode.x
+      
+      if (isLeftToRight) {
+        // Standard right-pointing arrow
+        switch (state) {
+          case 'selected': return 'url(#arrowhead-selected)'
+          case 'hover': return 'url(#arrowhead-hover)'
+          default: return 'url(#arrowhead)'
+        }
+      } else {
+        // Left-pointing arrow for right-to-left connections
+        switch (state) {
+          case 'selected': return 'url(#arrowhead-left-selected)'
+          case 'hover': return 'url(#arrowhead-left-hover)'
+          default: return 'url(#arrowhead-left)'
+        }
+      }
+    }
+    
+    // Regular connections use standard right-pointing arrows
+    switch (state) {
+      case 'selected': return 'url(#arrowhead-selected)'
+      case 'hover': return 'url(#arrowhead-hover)'
+      default: return 'url(#arrowhead)'
+    }
+  }, [nodes])
   useEffect(() => {
     currentTransformRef.current = canvasTransform
   }, [canvasTransform])
@@ -293,6 +335,61 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     nodes.forEach(node => map.set(node.id, node))
     return map
   }, [nodes])
+
+  // Stable reference for selectedNodes to prevent unnecessary re-renders
+  const selectedNodesRef = useRef(selectedNodes)
+  selectedNodesRef.current = selectedNodes
+
+
+  /**
+   * Function to check if a bottom port can accept additional connections
+   * Based on business rules for different port types:
+   * - ai-model: Single connection only (no plus button when connected)
+   * - memory: Single connection only (no plus button when connected)
+   * - tool: Multiple connections allowed (always show plus button)
+   * - Other array types: Multiple connections allowed
+   * - Other single types: Single connection only
+   */
+  const canBottomPortAcceptConnection = useCallback((nodeId: string, portId: string, connections: Connection[]) => {
+    // Get the node to check its bottom ports configuration
+    const node = nodeMap.get(nodeId)
+    if (!node || !node.bottomPorts) return false
+    
+    const port = node.bottomPorts.find(p => p.id === portId)
+    if (!port) return false
+    
+    // Count existing connections for this port
+    const existingConnections = connections.filter(conn => 
+      conn.sourceNodeId === nodeId && conn.sourcePortId === portId
+    )
+    
+    // Define connection rules based on port type/ID
+    switch (portId) {
+      case 'ai-model':
+        // AI Model port: Only allows 1 connection (can replace existing)
+        // Show plus button only when no connection exists
+        return existingConnections.length === 0
+        
+      case 'memory':
+        // Memory port: Typically allows only 1 connection
+        return existingConnections.length === 0
+        
+      case 'tool':
+        // Tool port: Allows multiple connections (array of tools)
+        return true
+        
+      default:
+        // For other ports, check if dataType suggests multiple connections
+        if (port.dataType === 'array') {
+          // Array types can accept multiple connections
+          return true
+        } else {
+          // Single value types typically allow only one connection
+          return existingConnections.length === 0
+        }
+    }
+  }, [nodeMap])
+
 
   // Memoized connection path calculation
   const getConnectionPath = useCallback((connection: Connection) => {
@@ -478,25 +575,43 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr('fill', '#fcfcfc')  
       .attr('class', 'svg-canvas-background')
 
-    // Arrow markers
-    const createArrowMarker = (id: string, color: string, size = 14) => {
-      defs.append('marker')
+    // Arrow markers with direction-aware positioning
+    const createArrowMarker = (id: string, color: string, size = 14, direction: 'right' | 'left' = 'right') => {
+      const marker = defs.append('marker')
         .attr('id', id)
         .attr('markerWidth', size)
         .attr('markerHeight', size)
-        .attr('refX', size - 1)
-        .attr('refY', size / 2)
-        .attr('orient', 'auto-start-reverse')
+        .attr('orient', 'auto')
         .attr('markerUnits', 'userSpaceOnUse')
-        .append('polygon')
-        .attr('points', `0,0 ${size - 1},${size / 2} 0,${size}`)
-        .attr('fill', color)
-        .attr('stroke', 'none')
+      
+      if (direction === 'right') {
+        // Right-pointing arrow (default)
+        marker
+          .attr('refX', size - 1)
+          .attr('refY', size / 2)
+          .append('polygon')
+          .attr('points', `0,0 ${size - 1},${size / 2} 0,${size}`)
+          .attr('fill', color)
+          .attr('stroke', 'none')
+      } else {
+        // Left-pointing arrow for connections entering from left
+        marker
+          .attr('refX', 1)
+          .attr('refY', size / 2)
+          .append('polygon')
+          .attr('points', `${size - 1},0 0,${size / 2} ${size - 1},${size}`)
+          .attr('fill', color)
+          .attr('stroke', 'none')
+      }
     }
     
+    // Create directional arrow markers
     createArrowMarker('arrowhead', '#666')
     createArrowMarker('arrowhead-selected', '#2196F3')
     createArrowMarker('arrowhead-hover', '#1976D2', 18)
+    createArrowMarker('arrowhead-left', '#666', 14, 'left')
+    createArrowMarker('arrowhead-left-selected', '#2196F3', 14, 'left')
+    createArrowMarker('arrowhead-left-hover', '#1976D2', 18, 'left')
 
     // Layer hierarchy
     const g = svg.append('g')
@@ -677,7 +792,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
             .interrupt() // Stop any ongoing transitions
             .attr('stroke', '#1976D2')
             .attr('stroke-width', 3)
-            .attr('marker-end', 'url(#arrowhead-hover)')
+            .attr('marker-end', getConnectionMarker(d, 'hover'))
         }
       })
       .on('mouseleave', function(this: any, _event: any, d: Connection) {
@@ -695,7 +810,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
               .interrupt() // Stop any ongoing transitions
               .attr('stroke', 'white')
               .attr('stroke-width', 2)
-              .attr('marker-end', 'url(#arrowhead)')
+              .attr('marker-end', getConnectionMarker(d, 'default'))
           }
         }, 50) // Small delay to prevent flicker on quick mouse movements
       })
@@ -707,7 +822,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr('d', (d: any) => getConnectionPath(d))
       .attr('stroke', 'white') // Default stroke - CSS will override for selection/hover
       .attr('stroke-width', 2) // Default width - CSS will override for selection/hover
-      .attr('marker-end', 'url(#arrowhead)') // Default marker - CSS will override for selection/hover
+      .attr('marker-end', (d: any) => getConnectionMarker(d, 'default')) // Dynamic marker based on direction
 
     // Render connection preview
     if (isConnecting && connectionStart) {
@@ -722,6 +837,15 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           nodeVariant
         )
         
+        // Determine preview marker based on source port type and direction
+        const isSourceBottomPort = sourceNode.bottomPorts?.some(p => p.id === connectionStart.portId)
+        const isLeftToRight = connectionPreview.x > sourceNode.x
+        let previewMarker = 'url(#arrowhead)'
+        
+        if (isSourceBottomPort && !isLeftToRight) {
+          previewMarker = 'url(#arrowhead-left)'
+        }
+        
         g.append('path')
           .attr('class', 'connection-preview')
           .attr('d', previewPath)
@@ -729,7 +853,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           .attr('stroke-width', 2)
           .attr('stroke-dasharray', '5,5')
           .attr('fill', 'none')
-          .attr('marker-end', 'url(#arrowhead)')
+          .attr('marker-end', previewMarker)
           .attr('pointer-events', 'none')
           .style('opacity', 0.7)
       } else {
@@ -1010,7 +1134,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       })
       .attr('stroke-width', 2)
 
-    console.log('🔵 Created', inputPortGroups.selectAll('circle').size(), 'input port circles')
+    //console.log('🔵 Created', inputPortGroups.selectAll('circle').size(), 'input port circles')
 
     // Output ports
     const outputPortGroups = nodeGroups.selectAll('.output-port-group')
@@ -1213,20 +1337,165 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr('stroke', '#333')
       .attr('stroke-width', 2)
 
-    console.log('🔴 Created', outputPortGroups.selectAll('circle').size(), 'output port circles')
+    //console.log('🔴 Created', outputPortGroups.selectAll('circle').size(), 'output port circles')
 
     // Bottom ports - สำหรับ AI Agent nodes ที่มี bottomPorts
     const bottomPortGroups = nodeGroups.filter((d: any) => d.bottomPorts && d.bottomPorts.length > 0)
       .selectAll('.bottom-port-group')
-      .data((d: any) => d.bottomPorts?.map((port: any) => ({ ...port, nodeId: d.id, nodeData: d })) || [])
+      .data((d: any) => {
+        if (!d.bottomPorts) return []
+        
+        // Return all bottom ports (both connected and unconnected) for the diamond shapes
+        // The connector lines and plus buttons will be handled separately
+        return d.bottomPorts.map((port: any) => ({ ...port, nodeId: d.id, nodeData: d }))
+      })
       .join('g')
       .attr('class', 'bottom-port-group')
       .style('cursor', 'crosshair')
       .style('pointer-events', 'all')
-      .on('click', (event: any, d: any) => {
-        event.stopPropagation()
-        onPortClick(d.nodeId, d.id, 'input') // Bottom ports are input ports
-      })
+      // Add drag behavior for bottom port diamonds
+      .call(d3.drag<any, any>()
+        .on('start', (event: any, d: any) => {
+          console.log('🚀 Bottom port diamond drag START:', d.nodeId, d.id)
+          event.sourceEvent.stopPropagation()
+          event.sourceEvent.preventDefault()
+          // Start connection drag as if it's an output port
+          onPortDragStart(d.nodeId, d.id, 'output')
+          
+          const [x, y] = d3.pointer(event.sourceEvent, event.sourceEvent.target.ownerSVGElement)
+          const transform = d3.zoomTransform(event.sourceEvent.target.ownerSVGElement)
+          const [canvasX, canvasY] = transform.invert([x, y])
+          onPortDrag(canvasX, canvasY)
+        })
+        .on('drag', (event: any) => {
+          const [x, y] = d3.pointer(event.sourceEvent, event.sourceEvent.target.ownerSVGElement)
+          const transform = d3.zoomTransform(event.sourceEvent.target.ownerSVGElement)
+          const [canvasX, canvasY] = transform.invert([x, y])
+          console.log('🚀 Bottom port diamond DRAGGING to:', canvasX, canvasY)
+          onPortDrag(canvasX, canvasY)
+        })
+        .on('end', (event: any) => {
+          console.log('🚀 Bottom port diamond drag END')
+          
+          // Get correct SVG element and apply zoom transform
+          const svgElement = event.sourceEvent.target.ownerSVGElement
+          const svgSelection = d3.select(svgElement)
+          
+          // Get current zoom transform to correct coordinates
+          const currentTransform = d3.zoomTransform(svgElement)
+          
+          // Get mouse position in screen coordinates first
+          const [screenX, screenY] = d3.pointer(event.sourceEvent, svgElement)
+          
+          // Apply inverse transform to get canvas coordinates
+          const [canvasX, canvasY] = currentTransform.invert([screenX, screenY])
+          
+          let targetNodeId: string | undefined
+          let targetPortId: string | undefined
+          
+          // Find target input port by checking all input port circles and bottom port diamonds
+          const allInputPorts = svgSelection.selectAll('.input-port-circle')
+          const allBottomPorts = svgSelection.selectAll('.bottom-port-diamond')
+          let minDistance = Infinity
+          
+          // Check input ports
+          allInputPorts.each(function(portData: any) {
+            const circle = d3.select(this)
+            const element = this as SVGElement
+            
+            // Get port position in SVG coordinates
+            const portGroup = d3.select(element.parentNode as SVGElement)
+            const nodeGroup = d3.select(portGroup.node()?.closest('g[data-node-id]') as SVGElement)
+            
+            if (nodeGroup.empty()) return
+            
+            const nodeId = nodeGroup.attr('data-node-id')
+            const transform = nodeGroup.attr('transform')
+            let nodeSvgX = 0, nodeSvgY = 0
+            
+            if (transform) {
+              const match = /translate\(([^,]+),([^)]+)\)/.exec(transform)
+              if (match) {
+                nodeSvgX = parseFloat(match[1])
+                nodeSvgY = parseFloat(match[2])
+              }
+            }
+            
+            const cx = parseFloat(circle.attr('cx') || '0')
+            const cy = parseFloat(circle.attr('cy') || '0')
+            const r = parseFloat(circle.attr('r') || '8')
+            
+            // Port position in SVG coordinates (this is already in canvas space)
+            const portCanvasX = nodeSvgX + cx
+            const portCanvasY = nodeSvgY + cy
+            
+            // Calculate distance directly in canvas coordinates
+            const distance = Math.sqrt((canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2)
+            const tolerance = r + 15 // Increased tolerance for easier dropping
+            
+            // Use closest valid input port with tolerance
+            if (distance <= tolerance && distance < minDistance) {
+              minDistance = distance
+              targetNodeId = nodeId
+              targetPortId = portData.id
+            }
+          })
+          
+          // Also check bottom ports (diamond shapes)
+          allBottomPorts.each(function(portData: any) {
+            const diamond = d3.select(this)
+            const element = this as SVGElement
+            
+            // Get port position in SVG coordinates
+            const portGroup = d3.select(element.parentNode as SVGElement)
+            const nodeGroup = d3.select(portGroup.node()?.closest('g[data-node-id]') as SVGElement)
+            
+            if (nodeGroup.empty()) return
+            
+            const nodeId = nodeGroup.attr('data-node-id')
+            const nodeTransform = nodeGroup.attr('transform')
+            let nodeSvgX = 0, nodeSvgY = 0
+            
+            if (nodeTransform) {
+              const match = /translate\(([^,]+),([^)]+)\)/.exec(nodeTransform)
+              if (match) {
+                nodeSvgX = parseFloat(match[1])
+                nodeSvgY = parseFloat(match[2])
+              }
+            }
+            
+            // Get diamond position from its transform
+            const diamondTransform = diamond.attr('transform')
+            let diamondX = 0, diamondY = 0
+            
+            if (diamondTransform) {
+              const match = /translate\(([^,]+),([^)]+)\)/.exec(diamondTransform)
+              if (match) {
+                diamondX = parseFloat(match[1])
+                diamondY = parseFloat(match[2])
+              }
+            }
+            
+            // Port position in SVG coordinates (this is already in canvas space)
+            const portCanvasX = nodeSvgX + diamondX
+            const portCanvasY = nodeSvgY + diamondY
+            
+            // Calculate distance directly in canvas coordinates
+            const distance = Math.sqrt((canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2)
+            const tolerance = 15 // Tolerance for diamond shape
+            
+            // Use closest valid bottom port with tolerance
+            if (distance <= tolerance && distance < minDistance) {
+              minDistance = distance
+              targetNodeId = nodeId
+              targetPortId = portData.id
+            }
+          })
+
+          console.log('🏁 Bottom port diamond drag final target:', { targetNodeId, targetPortId, minDistance })
+          onPortDragEnd(targetNodeId, targetPortId)
+        })
+      )
 
     // Create bottom port diamonds
     bottomPortGroups.selectAll('path').remove()
@@ -1255,14 +1524,34 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       })
       .attr('stroke', 'none') // No border
 
-    // Add connector lines from bottom ports
+    // Add connector lines from bottom ports (only for ports without connections OR when node is selected)
     bottomPortGroups.selectAll('line').remove()
     bottomPortGroups.append('line')
       .attr('class', 'bottom-port-connector')
       .attr('x1', 0)
       .attr('y1', 0)
       .attr('x2', 0)
-      .attr('y2', 28) // 28px line length (stop before plus button)
+      .attr('y2', (d: any) => {
+        // Check if this bottom port has a connection
+        const hasConnection = connections.some(conn => 
+          conn.sourceNodeId === d.nodeId && conn.sourcePortId === d.id
+        )
+        const nodeIsSelected = isNodeSelected(d.nodeId)
+        
+        // Show line if: 
+        // 1. No connection (always show for unconnected ports), OR
+        // 2. Node is selected AND port can accept additional connections
+        let shouldShowLine = false
+        
+        if (!hasConnection) {
+          shouldShowLine = true // Always show for unconnected ports
+        } else if (nodeIsSelected) {
+          // Only show for connected ports if they can accept more connections
+          shouldShowLine = canBottomPortAcceptConnection(d.nodeId, d.id, connections)
+        }
+        
+        return shouldShowLine ? 28 : 0
+      })
       .attr('transform', (d: any, i: number) => {
         const dimensions = getConfigurableDimensions(d.nodeData)
         const nodeWidth = dimensions.width || 200
@@ -1272,30 +1561,81 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const y = nodeHeight/2 // อยู่กึ่งกลางของเส้นล่าง
         return `translate(${x}, ${y})`
       })
-      .attr('stroke', '#A8A9B4') // Same pastel gray color as ports
-      .attr('stroke-width', 2)
+      .attr('stroke', (d: any) => {
+        // Different colors for selected nodes based on connection capability
+        const nodeIsSelected = isNodeSelected(d.nodeId)
+        const hasConnection = connections.some(conn => 
+          conn.sourceNodeId === d.nodeId && conn.sourcePortId === d.id
+        )
+        
+        if (nodeIsSelected && hasConnection) {
+          const canAcceptMore = canBottomPortAcceptConnection(d.nodeId, d.id, connections)
+          if (canAcceptMore) {
+            return '#4CAF50' // Green for ports that can accept more connections (like 'tool')
+          }
+        }
+        return '#A8A9B4' // Default pastel gray
+      })
+      .attr('stroke-width', (d: any) => {
+        const nodeIsSelected = isNodeSelected(d.nodeId)
+        const hasConnection = connections.some(conn => 
+          conn.sourceNodeId === d.nodeId && conn.sourcePortId === d.id
+        )
+        
+        if (nodeIsSelected && hasConnection) {
+          return 3 // Thicker line for selected nodes with connections
+        }
+        return 2 // Default thickness
+      })
       .style('pointer-events', 'none')
 
     // Add plus buttons at the end of connector lines (separate from bottomPortGroups to avoid event bubbling)
     const existingPlusButtons = mainNodeLayer.selectAll('.plus-button-container')
     existingPlusButtons.remove()
     
-    const plusButtonData: any[] = []
+    // Calculate plus button data inline to avoid circular dependencies
+    const currentPlusButtonData: any[] = []
     nodeGroups.each(function(nodeData: any) {
       if (nodeData.bottomPorts && nodeData.bottomPorts.length > 0) {
         nodeData.bottomPorts.forEach((port: any, i: number) => {
-          plusButtonData.push({
-            ...port,
-            nodeId: nodeData.id,
-            nodeData: nodeData,
-            index: i
-          })
+          // Check if this bottom port already has a connection
+          const hasConnection = connections.some(conn => 
+            conn.sourceNodeId === nodeData.id && conn.sourcePortId === port.id
+          )
+          
+          const nodeIsSelected = isNodeSelected(nodeData.id)
+          
+          // New logic: Show plus button based on selection state and connection capability
+          let shouldShowButton = false
+          
+          if (nodeIsSelected) {
+            // When node is selected, show plus button only for ports that can accept additional connections
+            shouldShowButton = canBottomPortAcceptConnection(nodeData.id, port.id, connections)
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`🔍 Port ${port.id} on selected node ${nodeData.id}: canAccept=${shouldShowButton}, hasConnection=${hasConnection}`)
+            }
+          } else {
+            // When node is not selected, show only for unconnected ports (original behavior)
+            shouldShowButton = !hasConnection
+          }
+          
+          if (shouldShowButton) {
+            currentPlusButtonData.push({
+              ...port,
+              nodeId: nodeData.id,
+              nodeData: nodeData,
+              index: i,
+              hasConnection: hasConnection,
+              isNodeSelected: nodeIsSelected,
+              canAcceptConnection: canBottomPortAcceptConnection(nodeData.id, port.id, connections)
+            })
+          }
         })
       }
     })
     
     const plusButtonGroups = mainNodeLayer.selectAll('.plus-button-container')
-      .data(plusButtonData, (d: any) => `${d.nodeId}-${d.id}`)
+      .data(currentPlusButtonData, (d: any) => `${d.nodeId}-${d.id}`)
       .enter()
       .append('g')
       .attr('class', 'plus-button-container')
@@ -1313,27 +1653,178 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       })
       .append('g')
       .attr('class', 'plus-button')
-      .style('cursor', 'pointer')
+      .style('cursor', 'crosshair') // Change cursor to crosshair like ports
       .style('pointer-events', 'all') // Ensure this element can receive pointer events
+      // Add drag behavior for plus button - works like output port drag
+      .call(d3.drag<any, any>()
+        .on('start', (event: any, d: any) => {
+          console.log('🚀 Plus button drag START:', d.nodeId, d.id)
+          event.sourceEvent.stopPropagation()
+          event.sourceEvent.preventDefault()
+          // Start connection drag as if it's an output port
+          onPortDragStart(d.nodeId, d.id, 'output')
+          
+          const [x, y] = d3.pointer(event.sourceEvent, event.sourceEvent.target.ownerSVGElement)
+          const transform = d3.zoomTransform(event.sourceEvent.target.ownerSVGElement)
+          const [canvasX, canvasY] = transform.invert([x, y])
+          onPortDrag(canvasX, canvasY)
+        })
+        .on('drag', (event: any) => {
+          const [x, y] = d3.pointer(event.sourceEvent, event.sourceEvent.target.ownerSVGElement)
+          const transform = d3.zoomTransform(event.sourceEvent.target.ownerSVGElement)
+          const [canvasX, canvasY] = transform.invert([x, y])
+          console.log('🚀 Plus button DRAGGING to:', canvasX, canvasY)
+          onPortDrag(canvasX, canvasY)
+        })
+        .on('end', (event: any) => {
+          console.log('🚀 Plus button drag END')
+          
+          // Get correct SVG element and apply zoom transform
+          const svgElement = event.sourceEvent.target.ownerSVGElement
+          const svgSelection = d3.select(svgElement)
+          
+          // Get current zoom transform to correct coordinates
+          const currentTransform = d3.zoomTransform(svgElement)
+          
+          // Get mouse position in screen coordinates first
+          const [screenX, screenY] = d3.pointer(event.sourceEvent, svgElement)
+          
+          // Apply inverse transform to get canvas coordinates
+          const [canvasX, canvasY] = currentTransform.invert([screenX, screenY])
+          
+          let targetNodeId: string | undefined
+          let targetPortId: string | undefined
+          
+          // Find target input port by checking all input port circles and bottom port diamonds
+          const allInputPorts = svgSelection.selectAll('.input-port-circle')
+          const allBottomPorts = svgSelection.selectAll('.bottom-port-diamond')
+          let minDistance = Infinity
+          
+          // Check input ports
+          allInputPorts.each(function(portData: any) {
+            const circle = d3.select(this)
+            const element = this as SVGElement
+            
+            // Get port position in SVG coordinates
+            const portGroup = d3.select(element.parentNode as SVGElement)
+            const nodeGroup = d3.select(portGroup.node()?.closest('g[data-node-id]') as SVGElement)
+            
+            if (nodeGroup.empty()) return
+            
+            const nodeId = nodeGroup.attr('data-node-id')
+            const transform = nodeGroup.attr('transform')
+            let nodeSvgX = 0, nodeSvgY = 0
+            
+            if (transform) {
+              const match = /translate\(([^,]+),([^)]+)\)/.exec(transform)
+              if (match) {
+                nodeSvgX = parseFloat(match[1])
+                nodeSvgY = parseFloat(match[2])
+              }
+            }
+            
+            const cx = parseFloat(circle.attr('cx') || '0')
+            const cy = parseFloat(circle.attr('cy') || '0')
+            const r = parseFloat(circle.attr('r') || '8')
+            
+            // Port position in SVG coordinates (this is already in canvas space)
+            const portCanvasX = nodeSvgX + cx
+            const portCanvasY = nodeSvgY + cy
+            
+            // Calculate distance directly in canvas coordinates
+            const distance = Math.sqrt((canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2)
+            const tolerance = r + 15 // Increased tolerance for easier dropping
+            
+            // Use closest valid input port with tolerance
+            if (distance <= tolerance && distance < minDistance) {
+              minDistance = distance
+              targetNodeId = nodeId
+              targetPortId = portData.id
+            }
+          })
+          
+          // Also check bottom ports (diamond shapes)
+          allBottomPorts.each(function(portData: any) {
+            const diamond = d3.select(this)
+            const element = this as SVGElement
+            
+            // Get port position in SVG coordinates
+            const portGroup = d3.select(element.parentNode as SVGElement)
+            const nodeGroup = d3.select(portGroup.node()?.closest('g[data-node-id]') as SVGElement)
+            
+            if (nodeGroup.empty()) return
+            
+            const nodeId = nodeGroup.attr('data-node-id')
+            const nodeTransform = nodeGroup.attr('transform')
+            let nodeSvgX = 0, nodeSvgY = 0
+            
+            if (nodeTransform) {
+              const match = /translate\(([^,]+),([^)]+)\)/.exec(nodeTransform)
+              if (match) {
+                nodeSvgX = parseFloat(match[1])
+                nodeSvgY = parseFloat(match[2])
+              }
+            }
+            
+            // Get diamond position from its transform
+            const diamondTransform = diamond.attr('transform')
+            let diamondX = 0, diamondY = 0
+            
+            if (diamondTransform) {
+              const match = /translate\(([^,]+),([^)]+)\)/.exec(diamondTransform)
+              if (match) {
+                diamondX = parseFloat(match[1])
+                diamondY = parseFloat(match[2])
+              }
+            }
+            
+            // Port position in SVG coordinates (this is already in canvas space)
+            const portCanvasX = nodeSvgX + diamondX
+            const portCanvasY = nodeSvgY + diamondY
+            
+            // Calculate distance directly in canvas coordinates
+            const distance = Math.sqrt((canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2)
+            const tolerance = 15 // Tolerance for diamond shape
+            
+            // Use closest valid bottom port with tolerance
+            if (distance <= tolerance && distance < minDistance) {
+              minDistance = distance
+              targetNodeId = nodeId
+              targetPortId = portData.id
+            }
+          })
+
+          console.log('🏁 Plus button drag final target:', { targetNodeId, targetPortId, minDistance })
+          onPortDragEnd(targetNodeId, targetPortId)
+        })
+      )
       .on('click', function(event: any, d: any) {
         console.log('🟡 Plus button CLICKED - stopping all events')
         event.stopPropagation() // Prevent node click
         event.stopImmediatePropagation() // Stop all other handlers
         event.preventDefault()
         console.log('🟡 Plus button clicked for port:', d.id, 'on node:', d.nodeId)
-        // TODO: Implement plus button action (e.g., add new connection node)
+        // Only trigger click if not dragging
         onPlusButtonClick?.(d.nodeId, d.id)
         return false // Extra safety to prevent event bubbling
       }, true) // Use capture phase to handle event before others
-      .on('mouseenter', function() {
+      .on('mouseenter', function(_event: any, d: any) {
         // Add hover effect
-        d3.select(this).select('.plus-button-bg')
-          .attr('fill', '#3A7BD5') // Darker blue on hover
+        const bg = d3.select(this).select('.plus-button-bg')
+        if (d.hasConnection) {
+          bg.attr('fill', '#2E7D32') // Darker green on hover for multi-connection ports
+        } else {
+          bg.attr('fill', '#3A7BD5') // Blue on hover for unconnected ports
+        }
       })
-      .on('mouseleave', function() {
-        // Remove hover effect
-        d3.select(this).select('.plus-button-bg')
-          .attr('fill', '#8A8B96') // More intense gray
+      .on('mouseleave', function(_event: any, d: any) {
+        // Remove hover effect - restore original color
+        const bg = d3.select(this).select('.plus-button-bg')
+        if (d.hasConnection) {
+          bg.attr('fill', '#4CAF50') // Green for multi-connection ports
+        } else {
+          bg.attr('fill', '#8A8B96') // Gray for unconnected ports
+        }
       })
 
     // Plus button background (square with rounded corners)
@@ -1345,8 +1836,27 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr('height', 16)
       .attr('rx', 2)
       .attr('ry', 2)
-      .attr('fill', '#8A8B96') // More intense gray for plus buttons
-      .attr('stroke', 'none')
+      .attr('fill', (d: any) => {
+        // Different colors based on port type and connection capability
+        if (d.hasConnection) {
+          // For connected ports that still allow more connections (like 'tool')
+          return '#4CAF50' // Green for ports that can accept multiple connections
+        }
+        return '#8A8B96' // Gray for unconnected ports
+      })
+      .attr('stroke', (d: any) => {
+        // Add border for connected ports to make them more visible
+        if (d.hasConnection && d.isNodeSelected) {
+          return '#388E3C' // Darker green border for multi-connection ports
+        }
+        return 'none'
+      })
+      .attr('stroke-width', (d: any) => {
+        if (d.hasConnection && d.isNodeSelected) {
+          return 1
+        }
+        return 0
+      })
 
     // Plus symbol (horizontal line)
     plusButtonGroups.append('line')
@@ -1443,7 +1953,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .style('user-select', 'none') // Prevent text selection
       .text((d: any) => d.label)
 
-    console.log('🟡 Created', bottomPortGroups.selectAll('path').size(), 'bottom port diamonds')
+    //console.log('🟡 Created', bottomPortGroups.selectAll('path').size(), 'bottom port diamonds')
 
     // Canvas event handlers
     svg.on('click', () => {
@@ -1469,7 +1979,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       allNodeElementsRef.current.clear()
     }
 
-  }, [nodes, connections, showGrid, nodeVariant])
+  }, [nodes, connections, showGrid, nodeVariant, selectedNodes])
   
   // Remove duplicate CSS since hover styles are already in globals.css
   
@@ -1523,12 +2033,12 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
             pathElement
               .attr('stroke', '#2196F3')
               .attr('stroke-width', 3)
-              .attr('marker-end', 'url(#arrowhead-selected)')
+              .attr('marker-end', getConnectionMarker(d, 'selected'))
           } else {
             pathElement
               .attr('stroke', 'white')
               .attr('stroke-width', 2)
-              .attr('marker-end', 'url(#arrowhead)')
+              .attr('marker-end', getConnectionMarker(d, 'default'))
           }
         }
       })
@@ -1557,6 +2067,15 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           nodeVariant
         )
         
+        // Determine preview marker based on source port type and direction
+        const isSourceBottomPort = sourceNode.bottomPorts?.some(p => p.id === connectionStart.portId)
+        const isLeftToRight = connectionPreview.x > sourceNode.x
+        let previewMarker = 'url(#arrowhead)'
+        
+        if (isSourceBottomPort && !isLeftToRight) {
+          previewMarker = 'url(#arrowhead-left)'
+        }
+        
         g.append('path')
           .attr('class', 'connection-preview')
           .attr('d', previewPath)
@@ -1564,7 +2083,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           .attr('stroke-width', 2)
           .attr('stroke-dasharray', '5,5')
           .attr('fill', 'none')
-          .attr('marker-end', 'url(#arrowhead)')
+          .attr('marker-end', previewMarker)
           .attr('pointer-events', 'none')
           .style('opacity', 0.7)
       } else {

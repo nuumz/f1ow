@@ -171,8 +171,10 @@ const validateConnections = (connections: Connection[], nodes: WorkflowNode[]): 
     
     if (!sourceNode || !targetNode) return false
     
-    const sourcePortExists = sourceNode.outputs.some(p => p.id === conn.sourcePortId)
-    const targetPortExists = targetNode.inputs.some(p => p.id === conn.targetPortId)
+    const sourcePortExists = sourceNode.outputs.some(p => p.id === conn.sourcePortId) ||
+                             (sourceNode.bottomPorts && sourceNode.bottomPorts.some(p => p.id === conn.sourcePortId))
+    const targetPortExists = targetNode.inputs.some(p => p.id === conn.targetPortId) ||
+                             (targetNode.bottomPorts && targetNode.bottomPorts.some(p => p.id === conn.targetPortId))
     
     if (!sourcePortExists || !targetPortExists) {
       console.warn('Invalid connection - missing port:', conn)
@@ -325,7 +327,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
         return newState
       }
       
-      console.log('✅ All connections are valid')
+      //console.log('✅ All connections are valid')
       return state
     }
     

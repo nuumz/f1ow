@@ -454,7 +454,7 @@ export const NodeDefinitions: Record<string, NodeDefinition> = {
     inputs: [{ id: 'main', type: 'input', dataType: 'any', label: 'Input', required: true }],
     outputs: [{ id: 'main', type: 'output', dataType: 'any', label: 'Output' }],
     bottomPorts: [
-      { id: 'model', type: 'input', dataType: 'string', label: 'Chat Model*' },
+      { id: 'ai-model', type: 'input', dataType: 'string', label: 'Chat Model*' },
       { id: 'memory', type: 'input', dataType: 'object', label: 'Memory' },
       { id: 'tool', type: 'input', dataType: 'array', label: 'Tool' }
     ],

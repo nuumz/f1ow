@@ -137,7 +137,7 @@ body {
   border: 1px solid #e0e0e0;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  z-index: 1000;
+  z-index: var(--z-dropdown, 9010);
   min-width: 200px;
   margin-top: 0.5rem;
   overflow: hidden;
@@ -378,24 +378,24 @@ body {
   color: #721c24;
 }
 
-.status-indicator {
+.connection-status__indicator {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: 8px;
   background: #ccc;
 }
 
-.connection-status.connected .status-indicator {
+.connection-status--connected .connection-status__indicator {
   background: #4caf50;
   animation: pulse 2s infinite;
 }
 
-.connection-status.connecting .status-indicator {
+.connection-status--connecting .connection-status__indicator {
   background: #ffc107;
   animation: pulse 1s infinite;
 }
 
-.connection-status.disconnected .status-indicator {
+.connection-status--disconnected .connection-status__indicator {
   background: #dc3545;
 }
 
@@ -1945,22 +1945,22 @@ body {
   color: #d32f2f;
 }
 
-.status-indicator {
+.connection-status .connection-status__indicator {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: 8px;
   animation: statusPulse 2s infinite;
 }
 
-.connection-status.connected .status-indicator {
+.connection-status--connected .connection-status__indicator {
   background: #4caf50;
 }
 
-.connection-status.connecting .status-indicator {
+.connection-status--connecting .connection-status__indicator {
   background: #ff9800;
 }
 
-.connection-status.disconnected .status-indicator {
+.connection-status--disconnected .connection-status__indicator {
   background: #f44336;
 }
 
@@ -3032,22 +3032,22 @@ body {
   padding: 1rem 0;
 }
 
-.status-indicator {
+.workflow-status__indicator {
   width: 12px;
   height: 12px;
-  border-radius: 50%;
+  border-radius: 12px;
 }
 
-.status-item.running .status-indicator {
+.status-item--running .workflow-status__indicator {
   background: #f59e0b;
   animation: pulse 2s infinite;
 }
 
-.status-item.completed .status-indicator {
+.status-item--completed .workflow-status__indicator {
   background: #10b981;
 }
 
-.status-item.failed .status-indicator {
+.status-item--failed .workflow-status__indicator {
   background: #ef4444;
 }
 

@@ -11,6 +11,18 @@ import type {
   UIState
 } from '../types'
 
+// Import draft storage utilities
+import { 
+  type DraftWorkflow,
+  saveDraftWorkflow,
+  autoSaveDraftWorkflow,
+  loadDraftWorkflow,
+  listDraftWorkflows,
+  deleteDraftWorkflow,
+  getWorkflowStorageStats,
+  setAutoSaveCallback
+} from '../utils/workflow-storage'
+
 // Workflow state interface (extends centralized types)
 interface WorkflowState {
   // Core data
@@ -37,6 +49,13 @@ interface WorkflowState {
   // Workflow metadata
   lastSaved: number
   isDirty: boolean
+  
+  // Auto-save state
+  autoSaveState: {
+    isAutoSaving: boolean
+    lastAutoSaveAttempt: number
+    autoSaveError: string | null
+  }
 }
 
 // Action types
@@ -90,6 +109,15 @@ type WorkflowAction =
   | { type: 'MARK_CLEAN' }
   | { type: 'SET_LAST_SAVED'; payload: number }
   | { type: 'TOGGLE_AUTO_SAVE'; payload: boolean }
+  
+  // Draft workflow actions
+  | { type: 'SAVE_DRAFT'; payload: { draftId: string; name?: string } }
+  | { type: 'LOAD_DRAFT'; payload: { draft: DraftWorkflow } }
+  | { type: 'AUTO_SAVE_DRAFT' }
+  | { type: 'AUTO_SAVE_STARTED' }
+  | { type: 'AUTO_SAVE_COMPLETED' }
+  | { type: 'AUTO_SAVE_FAILED'; payload: { error: string } }
+  | { type: 'DELETE_DRAFT'; payload: string }
 
 // Initial state
 const initialState: WorkflowState = {
@@ -121,7 +149,12 @@ const initialState: WorkflowState = {
     nodeVariant: 'standard'
   },
   lastSaved: Date.now(),
-  isDirty: false
+  isDirty: false,
+  autoSaveState: {
+    isAutoSaving: false,
+    lastAutoSaveAttempt: 0,
+    autoSaveError: null
+  }
 }
 
 // Helper functions for connection management
@@ -198,7 +231,7 @@ const markStateAsDirty = (state: WorkflowState): WorkflowState => ({
 function workflowReducer(state: WorkflowState, action: WorkflowAction): WorkflowState {
   switch (action.type) {
     case 'SET_WORKFLOW_NAME':
-      return { ...state, workflowName: action.payload }
+      return markStateAsDirty({ ...state, workflowName: action.payload })
     
     case 'LOAD_WORKFLOW':
       return {
@@ -214,20 +247,20 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
       }
     
     case 'ADD_NODE':
-      return { ...state, nodes: [...state.nodes, action.payload] }
+      return markStateAsDirty({ ...state, nodes: [...state.nodes, action.payload] })
     
     case 'UPDATE_NODE':
-      return {
+      return markStateAsDirty({
         ...state,
         nodes: state.nodes.map(node =>
           node.id === action.payload.nodeId
             ? { ...node, ...action.payload.updates }
             : node
         )
-      }
+      })
     
     case 'DELETE_NODE':
-      return {
+      return markStateAsDirty({
         ...state,
         nodes: state.nodes.filter(node => node.id !== action.payload),
         connections: state.connections.filter(conn =>
@@ -235,17 +268,17 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
         ),
         selectedNodes: new Set([...state.selectedNodes].filter(id => id !== action.payload)),
         selectedNode: state.selectedNode?.id === action.payload ? null : state.selectedNode
-      }
+      })
     
     case 'UPDATE_NODE_POSITION':
-      return {
+      return markStateAsDirty({
         ...state,
         nodes: state.nodes.map(node =>
           node.id === action.payload.nodeId
             ? { ...node, x: action.payload.x, y: action.payload.y }
             : node
         )
-      }
+      })
     
     case 'ADD_CONNECTION': {
       const newConnections = [...state.connections, action.payload]
@@ -501,6 +534,113 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
         }
       }
     
+    case 'SAVE_DRAFT': {
+      const { draftId, name } = action.payload
+      const draftData = {
+        id: draftId,
+        name: name || state.workflowName,
+        nodes: state.nodes,
+        connections: state.connections,
+        canvasTransform: state.canvasTransform
+      }
+      
+      const success = saveDraftWorkflow(draftData)
+      if (success) {
+        console.log('✅ Draft saved successfully:', draftId)
+        return {
+          ...state,
+          lastSaved: Date.now(),
+          isDirty: false
+        }
+      }
+      return state
+    }
+    
+    case 'LOAD_DRAFT': {
+      const { draft } = action.payload
+      console.log('✅ Loading draft:', draft.name)
+      return {
+        ...state,
+        workflowName: draft.name,
+        nodes: draft.nodes,
+        connections: draft.connections,
+        canvasTransform: draft.canvasTransform,
+        selectedNodes: new Set(),
+        selectedNode: null,
+        connectionState: {
+          ...state.connectionState,
+          selectedConnection: null
+        },
+        isDirty: false,
+        lastSaved: draft.metadata.updatedAt
+      }
+    }
+    
+    case 'AUTO_SAVE_DRAFT': {
+      const draftId = `auto-save-${state.workflowName}`
+      const draftData = {
+        id: draftId,
+        name: state.workflowName,
+        nodes: state.nodes,
+        connections: state.connections,
+        canvasTransform: state.canvasTransform
+      }
+      
+        autoSaveDraftWorkflow(draftData)
+      
+      return {
+        ...state,
+        autoSaveState: {
+          ...state.autoSaveState,
+          lastAutoSaveAttempt: Date.now()
+        }
+      }
+    }
+    
+    case 'AUTO_SAVE_STARTED': {
+      return {
+        ...state,
+        autoSaveState: {
+          ...state.autoSaveState,
+          isAutoSaving: true,
+          autoSaveError: null
+        }
+      }
+    }
+    
+    case 'AUTO_SAVE_COMPLETED': {
+      return {
+        ...state,
+        isDirty: false,
+        lastSaved: Date.now(),
+        autoSaveState: {
+          ...state.autoSaveState,
+          isAutoSaving: false,
+          autoSaveError: null
+        }
+      }
+    }
+    
+    case 'AUTO_SAVE_FAILED': {
+      console.error('❌ Auto-save failed:', action.payload.error)
+      return {
+        ...state,
+        autoSaveState: {
+          ...state.autoSaveState,
+          isAutoSaving: false,
+          autoSaveError: action.payload.error
+        }
+      }
+    }
+    
+    case 'DELETE_DRAFT': {
+      const success = deleteDraftWorkflow(action.payload)
+      if (success) {
+        console.log('✅ Draft deleted successfully:', action.payload)
+      }
+      return state
+    }
+    
     default:
       return state
   }
@@ -529,6 +669,21 @@ interface WorkflowContextType {
   saveConnectionsToStorage: () => void
   loadConnectionsFromStorage: () => void
   toggleAutoSave: (enabled: boolean) => void
+  
+  // Draft management
+  saveDraft: (draftId: string, name?: string) => void
+  loadDraft: (draftId: string) => boolean
+  autoSaveDraft: () => void
+  deleteDraft: (draftId: string) => void
+  listDrafts: () => Array<Pick<DraftWorkflow, 'id' | 'name' | 'metadata'>>
+  getStorageStats: () => ReturnType<typeof getWorkflowStorageStats>
+  
+  // Auto-save status
+  getAutoSaveStatus: () => {
+    isAutoSaving: boolean
+    lastAttempt: number
+    error: string | null
+  }
 }
 
 // Context
@@ -623,7 +778,72 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
   const toggleAutoSave = useCallback((enabled: boolean) => {
     dispatch({ type: 'TOGGLE_AUTO_SAVE', payload: enabled })
   }, [dispatch])
+
+  // Draft management functions
+  const saveDraft = useCallback((draftId: string, name?: string) => {
+    dispatch({ type: 'SAVE_DRAFT', payload: { draftId, name } })
+  }, [dispatch])
+
+  const loadDraft = useCallback((draftId: string): boolean => {
+    const draft = loadDraftWorkflow(draftId)
+    if (draft) {
+      dispatch({ type: 'LOAD_DRAFT', payload: { draft } })
+      return true
+    }
+    return false
+  }, [dispatch])
+
+  const autoSaveDraft = useCallback(() => {
+    console.log('📝 Auto-save dispatch triggered')
+    dispatch({ type: 'AUTO_SAVE_DRAFT' })
+  }, [dispatch])
+
+  const deleteDraft = useCallback((draftId: string) => {
+    dispatch({ type: 'DELETE_DRAFT', payload: draftId })
+  }, [dispatch])
+
+  const listDrafts = useCallback(() => {
+    return listDraftWorkflows()
+  }, [])
+
+  const getStorageStats = useCallback(() => {
+    return getWorkflowStorageStats()
+  }, [])
   
+  const getAutoSaveStatus = useCallback(() => {
+    return {
+      isAutoSaving: state.autoSaveState.isAutoSaving,
+      lastAttempt: state.autoSaveState.lastAutoSaveAttempt,
+      error: state.autoSaveState.autoSaveError
+    }
+  }, [state.autoSaveState])
+  
+  // Set up auto-save state callback
+  useEffect(() => {
+    const callback = (status: 'started' | 'completed' | 'failed', error?: string) => {
+      switch (status) {
+        case 'started':
+          dispatch({ type: 'AUTO_SAVE_STARTED' })
+          break
+        case 'completed':
+          dispatch({ type: 'AUTO_SAVE_COMPLETED' })
+          break
+        case 'failed':
+          dispatch({ 
+            type: 'AUTO_SAVE_FAILED', 
+            payload: { error: error || 'Unknown error' }
+          })
+          break
+      }
+    }
+    
+    setAutoSaveCallback(callback)
+    
+    return () => {
+      setAutoSaveCallback(() => {})
+    }
+  }, [dispatch])
+
   // Auto-load connections when workflow name changes
   useEffect(() => {
     if (state.workflowName && state.workflowName !== 'New Workflow') {
@@ -640,6 +860,13 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
       validateConnections()
     }
   }, [state.nodes, validateConnections])
+
+  // Auto-save draft when workflow changes
+  useEffect(() => {
+    if (state.isDirty && state.nodes.length > 0) {
+      dispatch({ type: 'AUTO_SAVE_DRAFT' })
+    }
+  }, [state.isDirty, state.nodes, state.connections, state.workflowName, dispatch])
   
   const contextValue: WorkflowContextType = useMemo(() => ({
     state,
@@ -653,8 +880,15 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     validateConnections,
     saveConnectionsToStorage,
     loadConnectionsFromStorage: loadConnectionsFromStorageHandler,
-    toggleAutoSave
-  }), [state, svgRef, containerRef, dispatch, isNodeSelected, getSelectedNodesList, canDropOnPort, canDropOnNode, validateConnections, saveConnectionsToStorage, loadConnectionsFromStorageHandler, toggleAutoSave])
+    toggleAutoSave,
+    saveDraft,
+    loadDraft,
+    autoSaveDraft,
+    deleteDraft,
+    listDrafts,
+    getStorageStats,
+    getAutoSaveStatus
+  }), [state, svgRef, containerRef, dispatch, isNodeSelected, getSelectedNodesList, canDropOnPort, canDropOnNode, validateConnections, saveConnectionsToStorage, loadConnectionsFromStorageHandler, toggleAutoSave, saveDraft, loadDraft, autoSaveDraft, deleteDraft, listDrafts, getStorageStats, getAutoSaveStatus])
   
   return (
     <WorkflowContext.Provider value={contextValue}>

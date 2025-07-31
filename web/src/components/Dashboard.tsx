@@ -175,22 +175,22 @@ export default function Dashboard() {
         <div className="overview-card">
           <h3>Execution Status</h3>
           <div className="status-grid">
-            <div className="status-item running">
-              <div className="status-indicator"></div>
+            <div className="status-item--running">
+              <div className="workflow-status__indicator"></div>
               <div className="status-content">
                 <span className="status-count">{stats.runningExecutions}</span>
                 <span className="status-label">Running</span>
               </div>
             </div>
-            <div className="status-item completed">
-              <div className="status-indicator"></div>
+            <div className="status-item--completed">
+              <div className="workflow-status__indicator"></div>
               <div className="status-content">
                 <span className="status-count">{stats.successfulExecutions}</span>
                 <span className="status-label">Completed</span>
               </div>
             </div>
-            <div className="status-item failed">
-              <div className="status-indicator"></div>
+            <div className="status-item--failed">
+              <div className="workflow-status__indicator"></div>
               <div className="status-content">
                 <span className="status-count">{stats.failedExecutions}</span>
                 <span className="status-label">Failed</span>

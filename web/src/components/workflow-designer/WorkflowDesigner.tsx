@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, useState } from 'react'
-import { Save, Play, Download, Upload } from 'lucide-react'
+import { Save, Play, Download, Upload, Clock } from 'lucide-react'
 
 // Import CSS styles
 import './WorkflowDesigner.css'
@@ -13,6 +13,8 @@ import { useWorkflowEventHandlers } from './hooks/useWorkflowEventHandlers'
 // Import components
 import WorkflowCanvas from './components/WorkflowCanvas'
 import CanvasToolbar from './components/CanvasToolbar'
+import DraftManager from './components/DraftManager'
+import { AutoSaveStatus } from './components/AutoSaveStatus'
 import NodePalette from '../NodePalette'
 import NodeEditor from '../NodeEditor'
 
@@ -67,6 +69,7 @@ function WorkflowDesignerContent({
   // File operations
   const [isLoading, setIsLoading] = useState(false)
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [showDraftManager, setShowDraftManager] = useState(false)
 
   const showNotification = useCallback((type: 'success' | 'error', message: string) => {
     setNotification({ type, message })
@@ -206,6 +209,16 @@ function WorkflowDesignerContent({
             >
               <Download size={16} />
               Export
+            </button>
+
+            <button 
+              onClick={() => setShowDraftManager(true)}
+              className="action-button draft-button"
+              title="Manage Drafts"
+              disabled={isLoading}
+            >
+              <Clock size={16} />
+              Drafts
             </button>
             
             {!readOnly && (
@@ -401,8 +414,12 @@ function WorkflowDesignerContent({
             )}
           </div>
           
+          <div className="status-save-info">
+            <AutoSaveStatus showFullStatus={false} />
+          </div>
+          
           <div className="execution-status">
-            <span className={`status-indicator ${state.executionState.status}`}>
+            <span className={`execution-status__indicator execution-status__indicator--${state.executionState.status}`}>
               {state.executionState.status.toUpperCase()}
             </span>
             {state.executionState.currentNode && (
@@ -433,6 +450,12 @@ function WorkflowDesignerContent({
           </div>
         </div>
       )}
+
+      {/* Draft Manager */}
+      <DraftManager 
+        isOpen={showDraftManager} 
+        onClose={() => setShowDraftManager(false)} 
+      />
     </div>
   )
 }

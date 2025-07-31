@@ -1,9 +1,10 @@
 /* Canvas Toolbar Styles */
+@import '../WorkflowDesigner.css';
 .canvas-toolbar {
   position: absolute;
   top: 16px;
   left: 16px;
-  z-index: 100;
+  z-index: var(--z-canvas-toolbar);
   display: flex;
   align-items: center;
   gap: 12px;

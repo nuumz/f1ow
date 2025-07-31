@@ -1,5 +1,5 @@
 {
-  "name": "workflow-engine-web",
+  "name": "f1ow-web",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -11,28 +11,32 @@
     "lint": "eslint src --ext ts,tsx"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^6.20.0",
-    "axios": "^1.6.2",
-    "d3": "^7.8.5",
+    "@tanstack/react-router": "^1.129.8",
+    "@tanstack/react-router-devtools": "^1.129.8",
+    "@types/dagre": "^0.7.53",
+    "axios": "^1.11.0",
+    "d3": "^7.9.0",
+    "dagre": "^0.8.5",
     "lodash": "^4.17.21",
     "lucide-react": "^0.294.0",
-    "mathjs": "^12.2.0"
+    "mathjs": "^12.4.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@types/react": "^18.2.43",
-    "@types/react-dom": "^18.2.17",
     "@types/d3": "^7.4.3",
-    "@types/lodash": "^4.14.202",
-    "@typescript-eslint/eslint-plugin": "^6.14.0",
-    "@typescript-eslint/parser": "^6.14.0",
-    "@vitejs/plugin-react": "^4.2.1",
-    "eslint": "^8.55.0",
-    "eslint-plugin-react": "^7.33.2",
-    "eslint-plugin-react-hooks": "^4.6.0",
-    "typescript": "^5.2.2",
-    "vite": "^5.0.8",
-    "vitest": "^1.0.4"
+    "@types/lodash": "^4.17.20",
+    "@types/node": "^24.1.0",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "@typescript-eslint/eslint-plugin": "^8.38.0",
+    "@typescript-eslint/parser": "^8.38.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "eslint": "^9.32.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "typescript": "^5.8.3",
+    "vite": "^5.4.19",
+    "vitest": "^1.6.1"
   }
 }

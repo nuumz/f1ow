@@ -1,18 +1,24 @@
-# Workflow Engine
+# f1ow
 
 A high-performance, open-source workflow automation platform with AI capabilities, built with Go and React.
+
+![Workflow Designer](docs/images/workflow-designer-screenshot.png)
+*Visual workflow designer showing AI agent integration with HTTP requests and chat message triggers*
+
+🌐 [f1ow.io](https://f1ow.io)
 
 ## ✨ Features
 
 - 🚀 **High Performance**: Handle 10,000+ workflows/second
-- 🤖 **AI-Native**: Built-in LangChain integration and multi-agent orchestration
-- 🔄 **Sub-workflows**: Modular workflow composition
-- 📊 **Visual Designer**: Drag-and-drop workflow creation
-- 🔌 **50+ Node Types**: Extensive integration capabilities
-- 🗄️ **Multi-Database**: PostgreSQL & MySQL support with auto-detection
-- 🏗️ **Cloud-Native**: Kubernetes-ready with horizontal scaling
-- 🔒 **Enterprise-Ready**: RBAC, audit logs, and monitoring
-- 📝 **100% Open Source**: MIT licensed
+- 🤖 **AI-Native**: Built-in AI agent nodes with multi-agent orchestration  
+- 🔄 **Sub-workflows**: Modular workflow composition and reusability
+- 📊 **Visual Designer**: Interactive drag-and-drop workflow creation with real-time preview
+- 🔌 **Rich Node Library**: HTTP requests, data transformations, conditionals, AI agents, and more
+- 🗄️ **Multi-Database**: PostgreSQL & MySQL support with automatic detection
+- 🏗️ **Cloud-Native**: Kubernetes-ready with Docker containers and horizontal scaling
+- 📈 **Monitoring**: Built-in metrics with Prometheus integration
+- 🔒 **Enterprise-Ready**: Authentication, credential management, and audit capabilities
+- 📝 **100% Open Source**: MIT licensed with active community development
 
 ## 🚀 Quick Start
 
@@ -29,8 +35,8 @@ A high-performance, open-source workflow automation platform with AI capabilitie
 
 ```bash
 # Clone and setup
-git clone https://github.com/yourusername/workflow-engine.git
-cd workflow-engine
+git clone https://github.com/nuumz/f1ow.git
+cd f1ow
 
 # Start MySQL environment
 make dev-up-mysql
@@ -111,10 +117,10 @@ make run-with-env
 #### Connection Formats
 ```bash
 # PostgreSQL
-DATABASE_URL="postgres://user:password@localhost:5432/workflow_engine?sslmode=disable"
+DATABASE_URL="postgres://user:password@localhost:5432/f1ow?sslmode=disable"
 
 # MySQL  
-DATABASE_URL="mysql://user:password@tcp(localhost:3306)/workflow_engine?parseTime=true"
+DATABASE_URL="mysql://user:password@tcp(localhost:3306)/f1ow?parseTime=true"
 ```
 
 See [MySQL Setup Guide](docs/MYSQL_SETUP.md) for detailed MySQL configuration.
@@ -123,8 +129,8 @@ See [MySQL Setup Guide](docs/MYSQL_SETUP.md) for detailed MySQL configuration.
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/workflow-engine.git
-cd workflow-engine
+git clone https://github.com/nuumz/f1ow.git
+cd f1ow
 
 # Copy environment variables
 cp .env.example .env
@@ -155,22 +161,85 @@ make build
 ./bin/worker
 ```
 
-## Architecture
+## 🖥 Frontend Development
+
+The frontend is built with modern React and TypeScript, located in the `web/` directory:
+
+```bash
+# Navigate to frontend directory
+cd web
+
+# Install dependencies
+npm install
+
+# Start development server (with hot reload)
+npm run dev
+
+# Build for production
+npm run build
+
+# Run linting
+npm run lint
+
+# Run tests
+npm test
+```
+
+### Frontend Tech Stack
+- **React 18**: Modern React with hooks and functional components
+- **TypeScript**: Full type safety throughout the application
+- **Vite**: Fast build tool and development server
+- **TanStack Router**: Type-safe routing with devtools
+- **D3.js & Dagre**: Advanced graph visualization for workflow designer
+- **Axios**: HTTP client for API communication
+- **Lucide React**: Modern icon library
+
+## 🏗 Architecture
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Frontend  │────▶│  API Server │────▶│  PostgreSQL │
-│   (React)   │     │    (Gin)    │     │  + pgvector │
-└─────────────┘     └─────────────┘     └─────────────┘
-                           │
-                           ▼
-                    ┌─────────────┐     ┌─────────────┐
-                    │    Redis    │────▶│   Workers   │
-                    │   (Queue)   │     │     (Go)    │
-                    └─────────────┘     └─────────────┘
+┌─────────────────┐     ┌─────────────┐     ┌─────────────┐
+│    Frontend     │────▶│ API Server  │────▶│  Database   │
+│ React + Vite +  │     │ (Go + Gin)  │     │ PostgreSQL  │
+│ TypeScript      │     │             │     │ OR MySQL    │
+└─────────────────┘     └─────────────┘     └─────────────┘
+                               │
+                               ▼
+                        ┌─────────────┐     ┌─────────────┐
+                        │    Redis    │────▶│   Workers   │
+                        │   (Queue)   │     │   (Go)      │
+                        └─────────────┘     └─────────────┘
 ```
 
-## Node Types
+### Key Components
+
+- **Frontend**: React 18 + TypeScript + Vite with modern workflow designer
+- **Backend**: Go with Gin framework for high-performance API
+- **Database**: PostgreSQL or MySQL with auto-detection
+- **Queue**: Redis for job scheduling and workflow execution
+- **Workers**: Go-based workers for distributed execution
+- **Monitoring**: Prometheus metrics and observability
+
+## 🎨 Visual Workflow Designer
+
+The f1ow workflow designer provides an intuitive drag-and-drop interface for building complex automation workflows:
+
+### Designer Features
+- **Node Palette**: Easy access to all node types including Start, HTTP Request, Set, IF, AI Agent, OpenAI, MySQL, Email, Schedule, JSON, and Sub-workflow nodes
+- **Visual Canvas**: Interactive workspace with zoom, pan, and grid snapping
+- **Smart Connections**: Automatic connection routing between nodes with visual feedback
+- **Live Preview**: Real-time workflow validation and execution status
+- **Auto-Save**: Automatic draft saving with version management
+- **Multiple Styles**: Standard and compact node views for different workflow complexities
+
+### Supported Node Types
+- **Triggers**: Start nodes and scheduled triggers
+- **Integrations**: HTTP requests, database queries, email sending
+- **Logic**: Conditional branches, loops, and data transformations  
+- **AI**: OpenAI integration and custom AI agent nodes
+- **Data**: JSON processing, variable setting, and data mapping
+- **Control Flow**: Sub-workflows and parallel execution paths
+
+## 📋 Node Types Reference
 
 - **HTTP**: Make HTTP requests to any API
 - **Transform**: JavaScript code execution
@@ -185,13 +254,52 @@ make build
 - **S3**: Upload/download files from S3
 - **And 40+ more...**
 
-## Documentation
+## 📚 Documentation
 
-- [Getting Started](docs/getting-started.md)
-- [API Documentation](docs/api.md)
-- [Node Reference](docs/nodes.md)
-- [Deployment Guide](docs/deployment.md)
-- [AI Integration](docs/ai-integration.md)
+- [Quick Start Guide](docs/QUICKSTART.md)
+- [MySQL Setup Guide](docs/MYSQL_SETUP.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Workflow Engine Knowledge Base](docs/workflow-engine-knowledge.md)
+- [MySQL Examples](docs/mysql-examples.md)
+- [Redis Sentinel Setup](docs/redis-sentinel.md)
+
+## 🛠 Development
+
+### Project Structure
+```
+f1ow/
+├── cmd/                    # Application entry points
+│   ├── server/            # API server
+│   └── worker/            # Background workers
+├── internal/              # Private application code
+│   ├── engine/           # Workflow execution engine
+│   ├── nodes/            # Node type implementations
+│   ├── storage/          # Database and Redis clients
+│   └── api/              # REST API handlers
+├── web/                   # Frontend React application
+│   ├── src/
+│   │   ├── components/   # React components
+│   │   └── services/     # API client services
+├── migrations/           # Database schema migrations
+├── deployments/         # Docker and Kubernetes manifests
+├── examples/            # Sample workflow files
+└── scripts/             # Development and deployment scripts
+```
+
+### Running Tests
+```bash
+# Run Go unit tests
+make test
+
+# Run integration tests
+make test-integration
+
+# Run frontend tests
+cd web && npm test
+
+# Run end-to-end tests
+make test-e2e
+```
 
 ## Performance
 
@@ -210,10 +318,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-- 📚 [Documentation](https://docs.workflow-engine.io)
-- 💬 [Discord Community](https://discord.gg/workflow-engine)
-- 🐛 [Issue Tracker](https://github.com/yourusername/workflow-engine/issues)
+- 📚 [Documentation](https://docs.f1ow.io)
+- 💬 [Discord Community](https://discord.gg/f1ow)
+- 🐛 [Issue Tracker](https://github.com/nuumz/f1ow/issues)
 
 ---
 
-Built with ❤️ by the Workflow Engine Team
+Built with ❤️ by the f1ow Team

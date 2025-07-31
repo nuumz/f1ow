@@ -1,13 +1,13 @@
 #!/bin/bash
 
-# Complete demo script for Workflow Engine with MySQL
+# Complete demo script for f1ow with MySQL
 
-echo "🚀 Workflow Engine MySQL Demo"
+echo "🚀 f1ow MySQL Demo"
 echo "============================="
 echo ""
 echo "This demo will:"
 echo "1. Set up MySQL development environment"
-echo "2. Build and start the workflow engine"
+echo "2. Build and start f1ow"
 echo "3. Create sample workflows"
 echo "4. Execute workflows and show results"
 echo ""
@@ -74,12 +74,12 @@ echo ""
 echo "📊 Step 6: Database inspection..."
 echo "-------------------------------"
 echo "Database content:"
-docker exec workflow-mysql mysql -u user -ppassword workflow_engine -e "
+docker exec workflow-mysql mysql -u user -ppassword f1ow -e "
 SELECT 'Workflows' as table_name, COUNT(*) as count FROM workflows
 UNION ALL
 SELECT 'Executions' as table_name, COUNT(*) as count FROM executions
 UNION ALL  
-SELECT 'Nodes' as table_name, COUNT(*) as count FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='workflow_engine';
+SELECT 'Nodes' as table_name, COUNT(*) as count FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='f1ow';
 " 2>/dev/null || echo "Could not access database"
 
 echo ""
@@ -93,7 +93,7 @@ echo "- Adminer (MySQL GUI): http://localhost:8081"
 echo "  - Server: mysql"
 echo "  - Username: user"
 echo "  - Password: password"
-echo "  - Database: workflow_engine"
+echo "  - Database: f1ow"
 echo ""
 echo "📝 Example API Calls:"
 echo "curl http://localhost:8080/health"

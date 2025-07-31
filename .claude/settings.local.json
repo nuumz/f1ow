@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm remove:*)",
+      "Bash(pnpm add:*)",
+      "Bash(curl:*)",
+      "Bash(pnpm run lint:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run lint)",
+      "Bash(mkdir:*)",
+      "Bash(touch:*)",
+      "Bash(pnpm update:*)",
+      "Bash(grep:*)",
+      "Bash(npm run build:*)",
+      "mcp__ide__getDiagnostics"
+    ],
+    "deny": []
+  }
+}

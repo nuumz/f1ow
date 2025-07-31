@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"workflow-engine/internal/engine"
+	"github.com/nuumz/f1ow/internal/engine"
 
 	"github.com/dop251/goja"
 )

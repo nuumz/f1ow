@@ -1,4 +1,4 @@
-module workflow-engine
+module github.com/nuumz/f1ow
 
 go 1.21.0
 

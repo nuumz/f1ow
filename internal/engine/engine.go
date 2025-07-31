@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"workflow-engine/internal/models"
-	"workflow-engine/internal/storage"
+	"github.com/nuumz/f1ow/internal/models"
+	"github.com/nuumz/f1ow/internal/storage"
 
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"workflow-engine/internal/models"
+	"github.com/nuumz/f1ow/internal/models"
 
 	"github.com/sirupsen/logrus"
 )

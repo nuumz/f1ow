@@ -1,6 +1,6 @@
-# Workflow Engine API Examples with MySQL
+# f1ow API Examples with MySQL
 
-This document provides examples of using the Workflow Engine API with MySQL backend.
+This document provides examples of using the f1ow API with MySQL backend.
 
 ## Prerequisites
 
@@ -229,7 +229,7 @@ curl -X POST http://localhost:8080/api/workflows \
 
 Connect to MySQL container:
 ```bash
-docker exec -it workflow-mysql mysql -u user -ppassword workflow_engine
+docker exec -it workflow-mysql mysql -u user -ppassword f1ow
 ```
 
 Query workflows:
@@ -283,12 +283,12 @@ make run
 
 PostgreSQL:
 ```bash
-export DATABASE_URL="postgres://user:password@localhost:5432/workflow_engine?sslmode=disable"
+export DATABASE_URL="postgres://user:password@localhost:5432/f1ow?sslmode=disable"
 ```
 
 MySQL:
 ```bash
-export DATABASE_URL="mysql://user:password@tcp(localhost:3306)/workflow_engine?parseTime=true"
+export DATABASE_URL="mysql://user:password@tcp(localhost:3306)/f1ow?parseTime=true"
 ```
 
 ## Troubleshooting
@@ -317,7 +317,7 @@ export DATABASE_URL="mysql://user:password@tcp(localhost:3306)/workflow_engine?p
 make dev-down
 
 # Remove volumes (caution: deletes all data)
-docker volume rm workflow-engine_mysql_data
+docker volume rm f1ow_mysql_data
 
 # Start fresh
 make dev-up-mysql

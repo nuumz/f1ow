@@ -1,4 +1,4 @@
-# Workflow Engine - Complete Project Knowledge
+# f1ow - Complete Project Knowledge
 
 ## Table of Contents
 
@@ -23,7 +23,7 @@
 
 ## Project Overview
 
-**Workflow Engine** is a high-performance, open-source workflow automation platform designed to compete with solutions like n8n, Zapier, and Make.com. Built with Go for the backend and React for the frontend, it offers superior performance, AI-native capabilities, and complete flexibility through its MIT license.
+**f1ow** is a high-performance, open-source workflow automation platform designed to compete with solutions like n8n, Zapier, and Make.com. Built with Go for the backend and React for the frontend, it offers superior performance, AI-native capabilities, and complete flexibility through its MIT license.
 
 ### Key Differentiators
 
@@ -954,8 +954,8 @@ WITH (lists = 100);
 #### Using Docker Compose
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/workflow-engine.git
-cd workflow-engine
+git clone https://github.com/yourusername/f1ow.git
+cd f1ow
 
 # Setup environment
 cp .env.example .env
@@ -983,7 +983,7 @@ npm install
 npm run dev
 
 # Database
-psql -U postgres -c "CREATE DATABASE workflow_engine;"
+psql -U postgres -c "CREATE DATABASE f1ow;"
 migrate -path ./migrations -database $DATABASE_URL up
 ```
 
@@ -996,7 +996,7 @@ migrate -path ./migrations -database $DATABASE_URL up
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: workflow-engine
+  name: f1ow
 ```
 
 **2. Deploy PostgreSQL**
@@ -1005,7 +1005,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgres
-  namespace: workflow-engine
+  namespace: f1ow
 spec:
   serviceName: postgres
   replicas: 1
@@ -1022,7 +1022,7 @@ spec:
         image: pgvector/pgvector:pg15
         env:
         - name: POSTGRES_DB
-          value: workflow_engine
+          value: f1ow
         - name: POSTGRES_USER
           valueFrom:
             secretKeyRef:
@@ -1052,7 +1052,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: redis
-  namespace: workflow-engine
+  namespace: f1ow
 spec:
   replicas: 1
   selector:
@@ -1084,7 +1084,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: workflow-api
-  namespace: workflow-engine
+  namespace: f1ow
 spec:
   replicas: 3
   selector:
@@ -1097,7 +1097,7 @@ spec:
     spec:
       containers:
       - name: api
-        image: workflow-engine/api:latest
+        image: f1ow/api:latest
         ports:
         - containerPort: 8080
         env:
@@ -1133,7 +1133,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: workflow-worker
-  namespace: workflow-engine
+  namespace: f1ow
 spec:
   replicas: 10
   selector:
@@ -1146,7 +1146,7 @@ spec:
     spec:
       containers:
       - name: worker
-        image: workflow-engine/worker:latest
+        image: f1ow/worker:latest
         env:
         - name: DATABASE_URL
           valueFrom:
@@ -1172,7 +1172,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: workflow-ingress
-  namespace: workflow-engine
+  namespace: f1ow
   annotations:
     kubernetes.io/ingress.class: nginx
     cert-manager.io/cluster-issuer: letsencrypt-prod
@@ -1211,14 +1211,14 @@ replicaCount:
   frontend: 2
 
 image:
-  repository: workflow-engine
+  repository: f1ow
   tag: latest
   pullPolicy: IfNotPresent
 
 postgresql:
   enabled: true
   auth:
-    database: workflow_engine
+    database: f1ow
     username: workflow
     password: changeme
   persistence:
@@ -1273,7 +1273,7 @@ autoscaling:
 
 ```bash
 # Database
-DATABASE_URL=postgres://user:pass@localhost:5432/workflow_engine?sslmode=disable
+DATABASE_URL=postgres://user:pass@localhost:5432/f1ow?sslmode=disable
 DATABASE_MAX_CONNECTIONS=100
 DATABASE_MAX_IDLE_CONNECTIONS=10
 
@@ -1328,7 +1328,7 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USERNAME=...
 SMTP_PASSWORD=...
-SMTP_FROM=noreply@workflow-engine.com
+SMTP_FROM=noreply@f1ow.com
 
 # External Services
 SLACK_BOT_TOKEN=xoxb-...
@@ -1381,7 +1381,7 @@ func GenerateToken(user *User) (string, error) {
             ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
             IssuedAt:  jwt.NewNumericDate(time.Now()),
             NotBefore: jwt.NewNumericDate(time.Now()),
-            Issuer:    "workflow-engine",
+            Issuer:    "f1ow",
             Subject:   user.ID,
         },
     }
@@ -1569,7 +1569,7 @@ logger.Info("workflow executed",
 ### Tracing (OpenTelemetry)
 
 ```go
-tracer := otel.Tracer("workflow-engine")
+tracer := otel.Tracer("f1ow")
 
 ctx, span := tracer.Start(ctx, "execute_workflow",
     trace.WithAttributes(
@@ -1641,7 +1641,7 @@ groups:
     
     - alert: DatabaseConnectionsHigh
       expr: |
-        pg_stat_database_numbackends{datname="workflow_engine"} 
+        pg_stat_database_numbackends{datname="f1ow"} 
         / pg_settings_max_connections > 0.8
       for: 5m
       labels:
@@ -1657,7 +1657,7 @@ groups:
 ### Project Structure
 
 ```
-workflow-engine/
+f1ow/
 ├── cmd/                      # Application entrypoints
 │   ├── server/              # API server
 │   ├── worker/              # Background worker
@@ -1849,7 +1849,7 @@ export const MyNodeConfig: React.FC<NodeConfigProps> = ({ node, onChange }) => {
 
 #### Go SDK
 ```go
-import "github.com/workflow-engine/go-sdk"
+import "github.com/f1ow/go-sdk"
 
 client := sdk.NewClient("http://localhost:8080", "api-key")
 
@@ -1878,7 +1878,7 @@ result, err := client.Workflows.Execute(workflow.ID, map[string]interface{}{
 
 #### JavaScript/TypeScript SDK
 ```typescript
-import { WorkflowClient } from '@workflow-engine/sdk';
+import { WorkflowClient } from '@f1ow/sdk';
 
 const client = new WorkflowClient({
     baseURL: 'http://localhost:8080',
@@ -1929,7 +1929,7 @@ const result = await client.workflows.execute(workflow.id, {
 
 ### Feature Comparison
 
-| Feature | Workflow Engine | n8n | Zapier | Make.com | Temporal |
+| Feature | f1ow | n8n | Zapier | Make.com | Temporal |
 |---------|----------------|-----|--------|----------|----------|
 | **Performance** | 10,000+ wf/s | 220 wf/s | N/A | N/A | 1000+ wf/s |
 | **Open Source** | ✅ (MIT) | ⚠️ (Fair-code) | ❌ | ❌ | ✅ (MIT) |
@@ -1963,9 +1963,9 @@ const result = await client.workflows.execute(workflow.id, {
    - Built-in integrations
    - AI capabilities
 
-### When to Choose Workflow Engine
+### When to Choose f1ow
 
-✅ **Choose Workflow Engine when:**
+✅ **Choose f1ow when:**
 - Performance is critical (>1000 workflows/sec)
 - Need AI/LLM integration
 - Want complete control and customization
@@ -2022,25 +2022,25 @@ const result = await client.workflows.execute(workflow.id, {
 ## Resources
 
 ### Documentation
-- [Official Docs](https://docs.workflow-engine.io)
-- [API Reference](https://api.workflow-engine.io)
-- [Node Catalog](https://nodes.workflow-engine.io)
+- [Official Docs](https://docs.f1ow.io)
+- [API Reference](https://api.f1ow.io)
+- [Node Catalog](https://nodes.f1ow.io)
 
 ### Community
-- [GitHub](https://github.com/workflow-engine/workflow-engine)
-- [Discord](https://discord.gg/workflow-engine)
-- [Forum](https://forum.workflow-engine.io)
-- [Stack Overflow](https://stackoverflow.com/questions/tagged/workflow-engine)
+- [GitHub](https://github.com/nuumz/f1ow)
+- [Discord](https://discord.gg/f1ow)
+- [Forum](https://forum.f1ow.io)
+- [Stack Overflow](https://stackoverflow.com/questions/tagged/f1ow)
 
 ### Learning
-- [Video Tutorials](https://youtube.com/workflow-engine)
-- [Blog](https://blog.workflow-engine.io)
-- [Example Workflows](https://examples.workflow-engine.io)
-- [Certification Program](https://cert.workflow-engine.io)
+- [Video Tutorials](https://youtube.com/f1ow)
+- [Blog](https://blog.f1ow.io)
+- [Example Workflows](https://examples.f1ow.io)
+- [Certification Program](https://cert.f1ow.io)
 
 ### Support
 - Community Support: Free via Discord/Forum
-- Professional Support: support@workflow-engine.io
+- Professional Support: support@f1ow.io
 - Enterprise Support: Custom SLA available
 - Consulting: Available for implementation
 
@@ -2053,7 +2053,7 @@ This project is licensed under the MIT License:
 ```
 MIT License
 
-Copyright (c) 2024 Workflow Engine Team
+Copyright (c) 2024 f1ow Team
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

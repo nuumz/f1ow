@@ -3,7 +3,7 @@ package storage
 import (
 	"testing"
 
-	"workflow-engine/internal/storage"
+	"github.com/nuumz/f1ow/internal/storage"
 
 	"github.com/stretchr/testify/assert"
 )

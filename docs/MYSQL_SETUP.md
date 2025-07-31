@@ -23,7 +23,7 @@ cp .env.mysql .env
 make run-with-env
 
 # Method 3: Manual export
-export DATABASE_URL="mysql://user:password@tcp(localhost:3306)/workflow_engine?parseTime=true"
+export DATABASE_URL="mysql://user:password@tcp(localhost:3306)/f1ow?parseTime=true"
 export REDIS_URL="redis://localhost:6379"
 export PORT="8080"
 export DEBUG="true"
@@ -37,7 +37,7 @@ export DEBUG="true"
 make migrate-up-mysql
 
 # Or manually
-migrate -path ./migrations/mysql -database "mysql://user:password@tcp(localhost:3306)/workflow_engine" up
+migrate -path ./migrations/mysql -database "mysql://user:password@tcp(localhost:3306)/f1ow" up
 ```
 
 ## Database Connection Formats
@@ -46,27 +46,27 @@ migrate -path ./migrations/mysql -database "mysql://user:password@tcp(localhost:
 
 ```bash
 # Standard format
-mysql://user:password@tcp(localhost:3306)/workflow_engine?parseTime=true
+mysql://user:password@tcp(localhost:3306)/f1ow?parseTime=true
 
 # With additional parameters
-mysql://user:password@tcp(localhost:3306)/workflow_engine?parseTime=true&charset=utf8mb4&collation=utf8mb4_unicode_ci
+mysql://user:password@tcp(localhost:3306)/f1ow?parseTime=true&charset=utf8mb4&collation=utf8mb4_unicode_ci
 
 # Local socket (Unix)
-mysql://user:password@unix(/tmp/mysql.sock)/workflow_engine?parseTime=true
+mysql://user:password@unix(/tmp/mysql.sock)/f1ow?parseTime=true
 ```
 
 ### PostgreSQL (for comparison)
 
 ```bash
-postgres://user:password@localhost:5432/workflow_engine?sslmode=disable
-postgresql://user:password@localhost:5432/workflow_engine?sslmode=disable
+postgres://user:password@localhost:5432/f1ow?sslmode=disable
+postgresql://user:password@localhost:5432/f1ow?sslmode=disable
 ```
 
 ## Environment Files
 
 ### .env.mysql (MySQL configuration)
 ```env
-DATABASE_URL=mysql://user:password@tcp(localhost:3306)/workflow_engine?parseTime=true
+DATABASE_URL=mysql://user:password@tcp(localhost:3306)/f1ow?parseTime=true
 REDIS_URL=redis://localhost:6379
 PORT=8080
 DEBUG=true
@@ -74,7 +74,7 @@ DEBUG=true
 
 ### .env.development (PostgreSQL configuration)
 ```env
-DATABASE_URL=postgres://user:password@localhost:5432/workflow_engine?sslmode=disable
+DATABASE_URL=postgres://user:password@localhost:5432/f1ow?sslmode=disable
 REDIS_URL=redis://localhost:6379
 PORT=8080
 DEBUG=true
@@ -107,27 +107,27 @@ make migrate-up-mysql  # MySQL migrations
 
 ### Adminer (Web Interface)
 - URL: http://localhost:8081
-- **MySQL**: Server: `mysql`, User: `user`, Password: `password`, Database: `workflow_engine`
-- **PostgreSQL**: Server: `postgres`, User: `user`, Password: `password`, Database: `workflow_engine`
+- **MySQL**: Server: `mysql`, User: `user`, Password: `password`, Database: `f1ow`
+- **PostgreSQL**: Server: `postgres`, User: `user`, Password: `password`, Database: `f1ow`
 
 ### Direct Database Access
 
 #### MySQL
 ```bash
 # Using Docker
-docker exec -it workflow-mysql mysql -u user -p workflow_engine
+docker exec -it workflow-mysql mysql -u user -p f1ow
 
 # Using local MySQL client
-mysql -h localhost -P 3306 -u user -p workflow_engine
+mysql -h localhost -P 3306 -u user -p f1ow
 ```
 
 #### PostgreSQL
 ```bash
 # Using Docker
-docker exec -it workflow-postgres psql -U user -d workflow_engine
+docker exec -it workflow-postgres psql -U user -d f1ow
 
 # Using local psql client
-psql -h localhost -p 5432 -U user -d workflow_engine
+psql -h localhost -p 5432 -U user -d f1ow
 ```
 
 ## Schema Differences

@@ -10,10 +10,10 @@ import (
 	"syscall"
 	"time"
 
-	"workflow-engine/internal/api"
-	"workflow-engine/internal/engine"
-	"workflow-engine/internal/nodes"
-	"workflow-engine/internal/storage"
+	"github.com/nuumz/f1ow/internal/api"
+	"github.com/nuumz/f1ow/internal/engine"
+	"github.com/nuumz/f1ow/internal/nodes"
+	"github.com/nuumz/f1ow/internal/storage"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"

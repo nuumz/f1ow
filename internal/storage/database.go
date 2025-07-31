@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"workflow-engine/internal/models"
+	"github.com/nuumz/f1ow/internal/models"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"

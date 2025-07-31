@@ -2,7 +2,7 @@
 
 A high-performance, open-source workflow automation platform with AI capabilities, built with Go and React.
 
-![Workflow Designer](docs/images/workflow-designer-screenshot.png)
+![Workflow Designer](https://raw.githubusercontent.com/nuumz/f1ow/main/docs/images/workflow-designer-screenshot.png)
 *Visual workflow designer showing AI agent integration with HTTP requests and chat message triggers*
 
 🌐 [f1ow.io](https://f1ow.io)

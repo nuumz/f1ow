@@ -1349,6 +1349,31 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         }
       }
     })
+
+    // Add hover events for architecture mode port visibility
+    nodeGroups
+      .on('mouseenter', function() {
+        const nodeElement = d3.select(this)
+        const isArchitectureMode = workflowContextState.designerMode === 'architecture'
+        
+        if (isArchitectureMode) {
+          // Show ports on hover in architecture mode
+          nodeElement.selectAll('.input-port-group, .output-port-group')
+            .style('opacity', 1)
+            .style('pointer-events', 'all')
+        }
+      })
+      .on('mouseleave', function() {
+        const nodeElement = d3.select(this)
+        const isArchitectureMode = workflowContextState.designerMode === 'architecture'
+        
+        if (isArchitectureMode) {
+          // Hide ALL ports when not hovering in architecture mode (including connected ones)
+          nodeElement.selectAll('.input-port-group, .output-port-group')
+            .style('opacity', 0)
+            .style('pointer-events', 'none')
+        }
+      })
     
     // Update positions for non-dragging nodes
     nodeGroups
@@ -1567,7 +1592,13 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     const inputPortGroups = nodeGroups.selectAll('.input-port-group')
       .data((d: any) => d.inputs.map((input: any) => ({ ...input, nodeId: d.id, nodeData: d })))
       .join('g')
-      .attr('class', 'input-port-group')
+      .attr('class', (d: any) => {
+        // Check if this port has any connections
+        const hasConnection = connections.some(conn => 
+          conn.targetNodeId === d.nodeId && conn.targetPortId === d.id
+        )
+        return hasConnection ? 'input-port-group connected' : 'input-port-group'
+      })
       .style('cursor', 'crosshair')
       .style('pointer-events', 'all')
       .on('click', (event: any, d: any) => {
@@ -1678,7 +1709,13 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     const outputPortGroups = nodeGroups.selectAll('.output-port-group')
       .data((d: any) => d.outputs.map((output: any) => ({ ...output, nodeId: d.id, nodeData: d })))
       .join('g')
-      .attr('class', 'output-port-group')
+      .attr('class', (d: any) => {
+        // Check if this port has any connections
+        const hasConnection = connections.some(conn => 
+          conn.sourceNodeId === d.nodeId && conn.sourcePortId === d.id
+        )
+        return hasConnection ? 'output-port-group connected' : 'output-port-group'
+      })
       .style('cursor', 'crosshair')
       .style('pointer-events', 'all')
       .on('click', (event: any, d: any) => {

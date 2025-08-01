@@ -1799,6 +1799,15 @@
 }
 
 /* Architecture Mode Port Styles */
+.canvas-container.architecture-mode .input-port-group,
+.canvas-container.architecture-mode .output-port-group {
+  opacity: 0; /* Hidden by default in architecture mode */
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+/* Show all ports when hovering over node - this will be controlled by JavaScript */
+
 .canvas-container.architecture-mode .input-port circle,
 .canvas-container.architecture-mode .output-port circle {
   fill: #faf5ff;

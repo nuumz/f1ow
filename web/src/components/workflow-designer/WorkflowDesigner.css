@@ -48,6 +48,49 @@
 }
 
 /* Layout Fixes */
+
+/* ===== MODE-SPECIFIC STYLES ===== */
+
+/* Architecture Mode Styles */
+.canvas-container.architecture-mode {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+}
+
+.canvas-container.architecture-mode .workflow-canvas {
+  background: transparent;
+}
+
+.canvas-container.architecture-mode .workflow-canvas.architecture-canvas {
+  background: transparent;
+}
+
+/* Architecture Toolbar */
+.architecture-toolbar {
+  position: absolute;
+  top: 0;
+  left: 220px; /* After node palette */
+  right: 0;
+  height: 60px;
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  z-index: var(--z-toolbar);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Workflow Mode Styles */
+.canvas-container.workflow-mode {
+  background: #fcfcfc;
+}
+
+/* Canvas container adjustments for architecture mode */
+.workflow-designer-content .architecture-toolbar + .canvas-container {
+  margin-top: 60px; /* Account for architecture toolbar height */
+}
+
+/* Layout Fixes */
 .workflow-designer-header {
   display: flex;
   justify-content: space-between;
@@ -286,6 +329,32 @@
   cursor: not-allowed;
   background: #f3f4f6;
   color: #9ca3af;
+}
+
+/* Mode Switch Button */
+.mode-switch-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.mode-switch-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+  border-color: transparent;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.mode-switch-button.active {
+  background: linear-gradient(135deg, #ff6b6b 0%, #feca57 100%);
+  box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
+}
+
+.mode-switch-button.active:hover:not(:disabled) {
+  background: linear-gradient(135deg, #ff5252 0%, #ffb74d 100%);
+  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4);
 }
 
 /* Specific button styles */

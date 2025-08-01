@@ -54,6 +54,10 @@ interface WorkflowState {
     currentPosition: { x: number; y: number } | null
   }
   
+  // Mode state
+  designerMode: 'workflow' | 'architecture'
+  architectureMode: 'context' | 'api-flow' | 'service-mesh' | 'domain-driven'
+  
   // Workflow metadata
   lastSaved: number
   isDirty: boolean
@@ -112,6 +116,10 @@ type WorkflowAction =
   | { type: 'SET_DRAG_OVER'; payload: boolean }
   | { type: 'SET_NODE_VARIANT'; payload: NodeVariant }
   
+  // Mode actions
+  | { type: 'SET_DESIGNER_MODE'; payload: 'workflow' | 'architecture' }
+  | { type: 'SET_ARCHITECTURE_MODE'; payload: 'context' | 'api-flow' | 'service-mesh' | 'domain-driven' }
+  
   // Dragging actions
   | { type: 'START_DRAGGING'; payload: { nodeId: string; startPosition: { x: number; y: number } } }
   | { type: 'UPDATE_DRAG_POSITION'; payload: { x: number; y: number } }
@@ -167,6 +175,8 @@ const initialState: WorkflowState = {
     dragStartPosition: null,
     currentPosition: null
   },
+  designerMode: 'workflow',
+  architectureMode: 'context',
   lastSaved: Date.now(),
   isDirty: false,
   autoSaveState: {
@@ -518,6 +528,18 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
       return {
         ...state,
         uiState: { ...state.uiState, nodeVariant: action.payload }
+      }
+    
+    case 'SET_DESIGNER_MODE':
+      return {
+        ...state,
+        designerMode: action.payload
+      }
+    
+    case 'SET_ARCHITECTURE_MODE':
+      return {
+        ...state,
+        architectureMode: action.payload
       }
     
     case 'START_DRAGGING':

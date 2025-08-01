@@ -1,0 +1,392 @@
+/**
+ * Architecture Toolbar - Modern Design System
+ * Consistent with BaseNodePalette and unified design principles
+ */
+
+.architecture-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border-bottom: 1px solid #e2e8f0;
+  border-radius: 0;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  min-height: 64px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  position: relative;
+  animation: slideInDown 0.3s ease-out;
+}
+
+.architecture-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Disabled state */
+.architecture-toolbar.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Toolbar Groups */
+.toolbar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: max-content;
+}
+
+.toolbar-group-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 4px;
+}
+
+/* Button Groups */
+.toolbar-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.toolbar-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 120px;
+}
+
+/* Primary Buttons */
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  position: relative;
+  overflow: hidden;
+  min-height: 36px;
+}
+
+.toolbar-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.toolbar-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+}
+
+.toolbar-btn.primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border-color: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 2px 4px -1px rgba(59, 130, 246, 0.4);
+}
+
+.toolbar-btn.primary:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.5);
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+  animation: pulse 2s infinite;
+}
+
+.toolbar-btn svg {
+  flex-shrink: 0;
+}
+
+.btn-label {
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* Toggle Controls */
+.toggle-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  padding: 6px 0;
+  transition: opacity 0.2s ease;
+}
+
+.toggle-control:hover {
+  opacity: 0.8;
+}
+
+.toggle-control input[type="checkbox"] {
+  display: none;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: #cbd5e1;
+  border-radius: 11px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toggle-control input:checked + .toggle-switch {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+
+.toggle-control input:checked + .toggle-switch .toggle-slider {
+  transform: translateX(18px);
+}
+
+.toggle-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #475569;
+}
+
+.toggle-text svg {
+  opacity: 0.7;
+}
+
+/* Layout Elements */
+.toolbar-separator {
+  width: 1px;
+  height: 32px;
+  background: linear-gradient(to bottom, transparent, #e2e8f0, transparent);
+  margin: 0 8px;
+  flex-shrink: 0;
+}
+
+.toolbar-spacer {
+  flex: 1;
+  min-width: 16px;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .architecture-toolbar {
+    gap: 20px;
+    padding: 14px 16px;
+  }
+  
+  .btn-label {
+    display: none;
+  }
+  
+  .toolbar-btn {
+    padding: 10px;
+    min-width: 36px;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 968px) {
+  .architecture-toolbar {
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 12px 16px;
+    min-height: auto;
+  }
+  
+  .toolbar-group {
+    min-width: auto;
+  }
+  
+  .toolbar-buttons {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  
+  .toolbar-toggles {
+    flex-direction: row;
+    gap: 12px;
+    min-width: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .architecture-toolbar {
+    padding: 10px 12px;
+    gap: 12px;
+  }
+  
+  .toolbar-group-label {
+    font-size: 9px;
+  }
+  
+  .toolbar-btn {
+    padding: 8px;
+    min-height: 32px;
+    font-size: 12px;
+  }
+  
+  .toggle-switch {
+    width: 32px;
+    height: 18px;
+  }
+  
+  .toggle-slider {
+    width: 14px;
+    height: 14px;
+  }
+  
+  .toggle-control input:checked + .toggle-switch .toggle-slider {
+    transform: translateX(14px);
+  }
+  
+  .toggle-text {
+    font-size: 11px;
+  }
+}
+
+/* Focus States for Accessibility */
+.toolbar-btn:focus,
+.toggle-control:focus-within {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  .toolbar-btn {
+    border-width: 2px;
+  }
+  
+  .toolbar-btn.primary {
+    border-color: #000000;
+  }
+  
+  .toggle-switch {
+    border: 1px solid #000000;
+  }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  .architecture-toolbar {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border-bottom-color: #334155;
+  }
+  
+  .toolbar-btn {
+    background: #334155;
+    border-color: #475569;
+    color: #e2e8f0;
+  }
+  
+  .toolbar-btn:hover {
+    background: #475569;
+    border-color: #64748b;
+  }
+  
+  .toggle-text {
+    color: #e2e8f0;
+  }
+  
+  .toolbar-group-label {
+    color: #94a3b8;
+  }
+  
+  .toggle-switch {
+    background: #475569;
+  }
+}
+
+/* Loading Animation */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Smooth entrance animation */
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Hover effects */
+.toolbar-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.toolbar-btn:hover::before {
+  left: 100%;
+}
+
+.toolbar-btn.primary::before {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+}
+
+/* Tooltip enhancement */
+.toolbar-btn[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 8px;
+  background: #1f2937;
+  color: #ffffff;
+  font-size: 11px;
+  border-radius: 4px;
+  white-space: nowrap;
+  z-index: 1000;
+  opacity: 0;
+  animation: fadeInTooltip 0.2s ease-out 0.5s forwards;
+}
+
+@keyframes fadeInTooltip {
+  to { opacity: 1; }
+}

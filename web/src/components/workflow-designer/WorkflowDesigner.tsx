@@ -1,5 +1,5 @@
-import React, { useEffect, useCallback, useState } from 'react'
-import { Save, Play, Download, Upload, Clock } from 'lucide-react'
+import { useEffect, useCallback, useState } from 'react'
+import { Save, Play, Download, Upload, Clock, Layers } from 'lucide-react'
 
 // Import CSS styles
 import './WorkflowDesigner.css'
@@ -15,20 +15,35 @@ import WorkflowCanvas from './components/WorkflowCanvas'
 import CanvasToolbar from './components/CanvasToolbar'
 import DraftManager from './components/DraftManager'
 import { AutoSaveStatus } from './components/AutoSaveStatus'
-import NodePalette from '../NodePalette'
+import WorkflowNodePalette from './components/WorkflowNodePalette'
 import NodeEditor from '../NodeEditor'
+
+// Import Architecture Components
+import ArchitectureNodePalette from './components/ArchitectureNodePalette'
+import ArchitectureToolbar from './components/ArchitectureToolbar'
+import { ArchitectureNodeDefinitions } from './types/architecture'
+
+// Import types
+import type { WorkflowNode, Connection } from './types'
+
+// Workflow data interface
+interface WorkflowData {
+  readonly name: string
+  readonly nodes: WorkflowNode[]
+  readonly connections: Connection[]
+}
 
 // Types
 interface WorkflowDesignerProps {
   readonly initialWorkflow?: {
     readonly name?: string
-    readonly nodes?: any[]
-    readonly connections?: any[]
+    readonly nodes?: WorkflowNode[]
+    readonly connections?: Connection[]
   }
-  readonly onSave?: (workflow: any) => Promise<void>
-  readonly onExecute?: (workflow: any) => Promise<void>
-  readonly onExport?: (workflow: any) => void
-  readonly onImport?: (workflow: any) => void
+  readonly onSave?: (workflow: WorkflowData) => Promise<void>
+  readonly onExecute?: (workflow: WorkflowData) => Promise<void>
+  readonly onExport?: (workflow: WorkflowData) => void
+  readonly onImport?: (workflow: WorkflowData) => void
   readonly className?: string
   readonly showToolbar?: boolean
   readonly showNodePalette?: boolean
@@ -38,10 +53,10 @@ interface WorkflowDesignerProps {
 
 // Content component props interface
 interface WorkflowDesignerContentProps {
-  readonly onSave?: (workflow: any) => Promise<void>
-  readonly onExecute?: (workflow: any) => Promise<void>
-  readonly onExport?: (workflow: any) => void
-  readonly onImport?: (workflow: any) => void
+  readonly onSave?: (workflow: WorkflowData) => Promise<void>
+  readonly onExecute?: (workflow: WorkflowData) => Promise<void>
+  readonly onExport?: (workflow: WorkflowData) => void
+  readonly onImport?: (workflow: WorkflowData) => void
   readonly className?: string
   readonly showToolbar?: boolean
   readonly showNodePalette?: boolean
@@ -61,13 +76,53 @@ function WorkflowDesignerContent({
   showStatusBar = true,
   readOnly = false
 }: WorkflowDesignerContentProps) {
-  const { state, svgRef, containerRef } = useWorkflowContext()
+  const { state, svgRef, containerRef, dispatch } = useWorkflowContext()
   const operations = useWorkflowOperations()
   const canvas = useWorkflowCanvas()
   const handlers = useWorkflowEventHandlers()
 
   // File operations
   const [isLoading, setIsLoading] = useState(false)
+
+  // Mode switching handler
+  const handleModeSwitch = useCallback(() => {
+    const newMode = state.designerMode === 'workflow' ? 'architecture' : 'workflow'
+    dispatch({ type: 'SET_DESIGNER_MODE', payload: newMode })
+  }, [state.designerMode, dispatch])
+
+  // Simple ID generator utility for architecture nodes
+  const generateId = useCallback((): string => {
+    return Math.random().toString(36).substring(2, 11)
+  }, [])
+
+  // Handle adding new architecture nodes
+  const handleAddArchitectureNode = useCallback((type: string, position?: { x: number; y: number }) => {
+    const definition = ArchitectureNodeDefinitions[type]
+    if (!definition) return
+
+    const nodePosition = position || { x: 300, y: 200 }
+    
+    const newNode = {
+      id: generateId(),
+      type,
+      label: definition.defaultConfig?.serviceName || type.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      x: nodePosition.x,
+      y: nodePosition.y,
+      config: definition.defaultConfig || {},
+      inputs: definition.inputs || [],
+      outputs: definition.outputs || [],
+      bottomPorts: definition.bottomPorts || [],
+      category: (definition.category as 'Cloud Infrastructure' | 'System/Internal Service' | 'Database/Storage' | 'External Service' | 'Security' | 'Monitoring/Analytics' | 'DevOps/CI-CD' | 'Communication' | 'Business Logic' | 'Data Processing' | 'UI/Frontend' | 'Integration' | 'Platform Service' | 'Development Tool' | 'Network/Gateway' | 'Authentication' | 'Configuration') || 'System/Internal Service',
+      metadata: {
+        description: definition.description,
+        category: definition.category
+      },
+      status: 'idle' as const
+    }
+
+    dispatch({ type: 'ADD_NODE', payload: newNode })
+  }, [dispatch, generateId])
+
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [showDraftManager, setShowDraftManager] = useState(false)
 
@@ -83,7 +138,11 @@ function WorkflowDesignerContent({
         setIsLoading(true)
         const result = await operations.importWorkflow(file)
         showNotification('success', 'Workflow imported successfully!')
-        onImport?.(result)
+        onImport?.({ 
+          name: state.workflowName, 
+          nodes: result.nodes, 
+          connections: result.connections 
+        })
       } catch (error) {
         console.error('Import failed:', error)
         showNotification('error', 'Failed to import workflow')
@@ -93,12 +152,18 @@ function WorkflowDesignerContent({
     }
     // Reset file input
     event.target.value = ''
-  }, [operations, onImport, showNotification])
+  }, [operations, onImport, showNotification, state.workflowName])
 
   const handleSave = useCallback(async () => {
     try {
       setIsLoading(true)
-      const workflow = await operations.saveWorkflow()
+      const workflowData = await operations.saveWorkflow()
+      // Convert to WorkflowData format
+      const workflow: WorkflowData = {
+        name: workflowData.name,
+        nodes: state.nodes,
+        connections: state.connections
+      }
       await onSave?.(workflow)
       showNotification('success', 'Workflow saved successfully!')
     } catch (error) {
@@ -107,7 +172,7 @@ function WorkflowDesignerContent({
     } finally {
       setIsLoading(false)
     }
-  }, [operations, onSave, showNotification])
+  }, [operations, onSave, showNotification, state.nodes, state.connections])
 
   const handleExecute = useCallback(async () => {
     try {
@@ -177,6 +242,16 @@ function WorkflowDesignerContent({
           </div>
           
           <div className="workflow-actions">
+            {/* Mode Switch Button */}
+            <button
+              onClick={handleModeSwitch}
+              className={`action-button mode-switch-button ${state.designerMode === 'architecture' ? 'active' : ''}`}
+              title={state.designerMode === 'workflow' ? 'Switch to Architecture Mode' : 'Switch to Workflow Mode'}
+            >
+              <Layers size={16} />
+              {state.designerMode === 'workflow' ? 'Architecture' : 'Workflow'}
+            </button>
+
             {!readOnly && (
               <>
                 <button 
@@ -240,27 +315,39 @@ function WorkflowDesignerContent({
 
       {/* Main Content */}
       <div className="workflow-designer-content">
-        {/* Node Palette */}
+        {/* Node Palette - Different based on mode */}
         {showNodePalette && !readOnly && (
           <div className="node-palette-container">
-            <NodePalette onAddNode={operations.addNode} />
+            {state.designerMode === 'workflow' ? (
+              <WorkflowNodePalette onAddNode={operations.addNode} />
+            ) : (
+              <ArchitectureNodePalette
+                onAddNode={handleAddArchitectureNode}
+              />
+            )}
           </div>
         )}
 
-        {/* Canvas Container */}
-        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex */}
-        <section 
+        {/* Architecture Layout Toolbar - Only show in architecture mode */}
+        {state.designerMode === 'architecture' && (
+          <ArchitectureToolbar
+            onAutoLayout={() => console.log('Auto layout triggered')}
+            onGridToggle={(enabled) => console.log('Grid toggle:', enabled)}
+            onLayerToggle={(layer, visible) => console.log('Layer toggle:', layer, visible)}
+            onAlignNodes={(direction) => console.log('Align nodes:', direction)}
+            onZoom={(factor) => console.log('Zoom:', factor)}
+            onResetView={() => console.log('Reset view')}
+            onSave={() => handleSave()}
+            onExport={() => console.log('Export')}
+            onShare={() => console.log('Share')}
+            onSettings={() => console.log('Settings')}
+          />
+        )}
+
+        {/* Canvas Container - Shared for both modes */}
+        <div 
           ref={containerRef}
-          className={`canvas-container ${state.uiState.isDragOver ? 'drag-over' : ''}`}
-          aria-label="Workflow canvas - interactive workspace"
-          // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault()
-              handlers.handleCanvasClick(e as any)
-            }
-          }}
+          className={`canvas-container ${state.uiState.isDragOver ? 'drag-over' : ''} ${state.designerMode === 'architecture' ? 'architecture-mode' : 'workflow-mode'}`}
           onClick={handlers.handleCanvasClick}
           onDragOver={handlers.handleCanvasDragOver}
           onDragLeave={handlers.handleCanvasDragLeave}
@@ -268,7 +355,7 @@ function WorkflowDesignerContent({
         >
           <svg 
             ref={svgRef} 
-            className="workflow-canvas"
+            className={`workflow-canvas ${state.designerMode}-canvas`}
             width="100%" 
             height="100%"
           >
@@ -321,26 +408,37 @@ function WorkflowDesignerContent({
               onPlusButtonClick={(nodeId: string, portId: string) => {
                 console.log('Plus button clicked:', { nodeId, portId })
                 
-                // For demo purposes, create a simple "Set" node and connect it
-                const sourceNode = state.nodes.find(n => n.id === nodeId)
-                if (sourceNode) {
-                  // Position the new node below the source node
-                  const newNodePosition = {
-                    x: sourceNode.x + (Math.random() - 0.5) * 100, // Small random offset
-                    y: sourceNode.y + 150 // Below the source node
+                if (state.designerMode === 'workflow') {
+                  // Workflow mode: Create automation nodes
+                  const sourceNode = state.nodes.find(n => n.id === nodeId)
+                  if (sourceNode) {
+                    const newNodePosition = {
+                      x: sourceNode.x + (Math.random() - 0.5) * 100,
+                      y: sourceNode.y + 150
+                    }
+                    
+                    const newNode = operations.addNode('set', newNodePosition)
+                    
+                    if (newNode && newNode.inputs.length > 0) {
+                      operations.createConnection(
+                        nodeId,
+                        portId,
+                        newNode.id,
+                        newNode.inputs[0].id
+                      )
+                    }
                   }
-                  
-                  // Create a new node (default to 'set' type for demo)
-                  const newNode = operations.addNode('set', newNodePosition)
-                  
-                  // Connect the source port to the new node's main input
-                  if (newNode && newNode.inputs.length > 0) {
-                    operations.createConnection(
-                      nodeId,
-                      portId,
-                      newNode.id,
-                      newNode.inputs[0].id
-                    )
+                } else {
+                  // Architecture mode: Create connected services
+                  const sourceNode = state.nodes.find(n => n.id === nodeId)
+                  if (sourceNode) {
+                    const newNodePosition = {
+                      x: sourceNode.x + (Math.random() - 0.5) * 100,
+                      y: sourceNode.y + 150
+                    }
+                    
+                    // Create a generic service node
+                    handleAddArchitectureNode('internal-service', newNodePosition)
                   }
                 }
               }}
@@ -370,14 +468,14 @@ function WorkflowDesignerContent({
                 operations.clearSelection()
               } : undefined}
             />
-        </section>
+        </div>
 
-        {/* Node Editor */}
-        {state.uiState.showNodeEditor && state.selectedNode && (
+        {/* Node Editor - Only show in workflow mode */}
+        {state.designerMode === 'workflow' && state.uiState.showNodeEditor && state.selectedNode && (
           <div className="node-editor-container">
             <NodeEditor
               node={state.selectedNode}
-              onUpdate={(config: any) => {
+              onUpdate={(config: Record<string, unknown>) => {
                 operations.updateNode(state.selectedNode!.id, { config })
                 operations.setShowNodeEditor(false)
               }}

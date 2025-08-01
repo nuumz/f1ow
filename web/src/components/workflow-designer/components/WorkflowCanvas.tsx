@@ -643,8 +643,6 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
       const nodeElement = d3.select(element)
       const nodeBackground = nodeElement.select('.node-background')
-      const node = nodeMap.get(nodeId)
-      const isSelected = isNodeSelected(nodeId)
       
       // Apply drag visual style
       nodeElement
@@ -657,12 +655,11 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     
     visualUpdateQueueRef.current.clear()
     batchedVisualUpdateRef.current = null
-  }, [nodeMap, isNodeSelected, getNodeColor])
+  }, [])
 
   const applyDragVisualStyle = useCallback((nodeElement: any, nodeId: string) => {
     // CRITICAL: Apply visual styling IMMEDIATELY during drag start for stable feedback
     const nodeBackground = nodeElement.select('.node-background')
-    const node = nodeMap.get(nodeId)
     
     // Apply drag visual style immediately
     nodeElement
@@ -681,7 +678,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     if (!batchedVisualUpdateRef.current) {
       batchedVisualUpdateRef.current = requestAnimationFrame(processBatchedVisualUpdates)
     }
-  }, [processBatchedVisualUpdates, nodeMap])
+  }, [processBatchedVisualUpdates])
 
   // Memoized connection lookup for better drag performance
   const nodeConnectionsMap = useMemo(() => {

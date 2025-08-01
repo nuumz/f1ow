@@ -4,7 +4,6 @@ import React from 'react'
 // Component imports
 import RootLayout from './components/RootLayout'
 import Dashboard from './components/Dashboard'
-import AdvancedWorkflowDesigner from './components/AdvancedWorkflowDesigner'
 import WorkflowDesigner from './components/workflow-designer/WorkflowDesigner'
 import WorkflowList from './components/WorkflowList'
 import ExecutionHistory from './components/ExecutionHistory'
@@ -46,12 +45,6 @@ const designerIdRoute = createRoute({
   component: WorkflowDesigner
 })
 
-// Legacy designer route for comparison
-const designerLegacyRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/designer-legacy',
-  component: AdvancedWorkflowDesigner
-})
 
 // Templates route
 const templatesRoute = createRoute({
@@ -118,7 +111,7 @@ const expressionEditorRoute = createRoute({
         },
         onTest: async (expr: string) => {
           try {
-            return eval(expr)
+            return new Function('return ' + expr)()
           } catch (error) {
             throw new Error(`Expression error: ${error instanceof Error ? error.message : String(error)}`)
           }
@@ -160,7 +153,6 @@ const routeTree = rootRoute.addChildren([
   workflowsRoute,
   designerRoute,
   designerIdRoute,
-  designerLegacyRoute,
   templatesRoute,
   credentialsRoute,
   executionsRoute,

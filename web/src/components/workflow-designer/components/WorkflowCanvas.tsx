@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import * as d3 from 'd3'
 import type { WorkflowNode, Connection, NodeVariant } from '../types'
+import { useWorkflowContext } from '../contexts/WorkflowContext'
 import { getVisibleCanvasBounds } from '../utils/canvas-utils'
 import { 
   getNodeColor, 
@@ -13,7 +14,7 @@ import {
   NodeTypes
 } from '../utils/node-utils'
 // Removed unused import: getNodeDimensions
-import { generateVariantAwareConnectionPath, calculateConnectionPreviewPath } from '../utils/connection-utils'
+import { generateVariantAwareConnectionPath, calculateConnectionPreviewPath, calculatePortPosition } from '../utils/connection-utils'
 
 export interface WorkflowCanvasProps {
   // SVG ref
@@ -95,7 +96,16 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   onTransformChange,
   onZoomLevelChange,
   onRegisterZoomBehavior,
-}: WorkflowCanvasProps) {
+}: WorkflowCanvasProps) {  
+  // Get dragging state from context
+  const { 
+    isDragging: isContextDragging, 
+    getDraggedNodeId, 
+    startDragging, 
+    updateDragPosition, 
+    endDragging 
+  } = useWorkflowContext()
+  
   // Remove hover state from React - manage it directly in D3
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -104,7 +114,13 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   const rafIdRef = useRef<number | null>(null)
   const rafScheduledRef = useRef<boolean>(false)
   
-  // Cleanup timeouts on unmount
+  // Enhanced drag performance state
+  const connectionUpdateQueueRef = useRef<Set<string>>(new Set())
+  const batchedConnectionUpdateRef = useRef<number | null>(null)
+  const visualUpdateQueueRef = useRef<Set<string>>(new Set())
+  const batchedVisualUpdateRef = useRef<number | null>(null)
+  
+  // Cleanup timeouts and RAF callbacks on unmount
   useEffect(() => {
     return () => {
       if (hoverTimeoutRef.current) {
@@ -112,6 +128,15 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       }
       if (updateTimeoutRef.current) {
         clearTimeout(updateTimeoutRef.current)
+      }
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current)
+      }
+      if (batchedConnectionUpdateRef.current) {
+        cancelAnimationFrame(batchedConnectionUpdateRef.current)
+      }
+      if (batchedVisualUpdateRef.current) {
+        cancelAnimationFrame(batchedVisualUpdateRef.current)
       }
     }
   }, [])
@@ -166,18 +191,27 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   
   
   
-  // Drag state
+  // Drag state with context integration
   const draggedElementRef = useRef<d3.Selection<any, any, any, any> | null>(null)
-  const isDraggingRef = useRef<boolean>(false)
-  const draggedNodeIdRef = useRef<string | null>(null)
   const draggedNodeElementRef = useRef<SVGGElement | null>(null)
   const nodeLayerRef = useRef<SVGGElement | null>(null)
   const allNodeElementsRef = useRef<Map<string, SVGGElement>>(new Map())
   
-  // Cache refs for performance
+  // Enhanced dragging state management for stability with context integration
+  const dragStateCleanupRef = useRef<NodeJS.Timeout | null>(null)
+  
+  // Use context-based dragging state
+  const isDragging = isContextDragging()
+  const draggedNodeId = getDraggedNodeId()
+  
+  // Cache refs for performance with size limits to prevent memory leaks
   const connectionPathCacheRef = useRef<Map<string, string>>(new Map())
   const gridCacheRef = useRef<{ transform: string; lines: any[] } | null>(null)
   const nodePositionCacheRef = useRef<Map<string, { x: number; y: number }>>(new Map())
+  
+  // Cache size limits to prevent memory issues
+  const MAX_CACHE_SIZE = 1000
+  const CACHE_CLEANUP_THRESHOLD = 1200
 
   // Optimized grid creation with caching
   const createGrid = useCallback((
@@ -259,19 +293,63 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     }
   }, [showGrid])
 
-  // Debounced RAF utility
-  const scheduleRAF = useCallback((callback: () => void) => {
-    if (rafScheduledRef.current) return
-    
-    rafScheduledRef.current = true
-    rafIdRef.current = requestAnimationFrame(() => {
-      callback()
+  // Enhanced RAF scheduling system with priority queues
+  const rafCallbackQueueRef = useRef<Array<{ callback: () => void; priority: 'high' | 'normal' | 'low' }>>([])
+  
+  const processRAFQueue = useCallback(() => {
+    if (rafCallbackQueueRef.current.length === 0) {
       rafScheduledRef.current = false
       rafIdRef.current = null
+      return
+    }
+
+    // Sort callbacks by priority (high -> normal -> low)
+    const sortedCallbacks = rafCallbackQueueRef.current.sort((a, b) => {
+      const priorities = { high: 3, normal: 2, low: 1 }
+      return priorities[b.priority] - priorities[a.priority]
     })
+
+    // Process high priority callbacks first, with a limit to prevent blocking
+    const highPriorityCallbacks = sortedCallbacks.filter(item => item.priority === 'high').slice(0, 3)
+    const otherCallbacks = sortedCallbacks.filter(item => item.priority !== 'high').slice(0, 2)
+    
+    const callbacksToProcess = [...highPriorityCallbacks, ...otherCallbacks]
+    
+    // Execute callbacks
+    callbacksToProcess.forEach(item => {
+      try {
+        item.callback()
+      } catch (error) {
+        console.warn('RAF callback error:', error)
+      }
+    })
+
+    // Remove processed callbacks
+    rafCallbackQueueRef.current = rafCallbackQueueRef.current.filter(
+      item => !callbacksToProcess.includes(item)
+    )
+
+    // Schedule next frame if there are more callbacks
+    if (rafCallbackQueueRef.current.length > 0) {
+      rafIdRef.current = requestAnimationFrame(processRAFQueue)
+    } else {
+      rafScheduledRef.current = false
+      rafIdRef.current = null
+    }
   }, [])
 
-  // Optimized Z-Index Management - now with immediate execution when needed
+  const scheduleRAF = useCallback((callback: () => void, priority: 'high' | 'normal' | 'low' = 'normal') => {
+    rafCallbackQueueRef.current.push({ callback, priority })
+    
+    if (!rafScheduledRef.current) {
+      rafScheduledRef.current = true
+      rafIdRef.current = requestAnimationFrame(processRAFQueue)
+    }
+  }, [processRAFQueue])
+
+  // Enhanced Z-Index Management with change detection to reduce DOM manipulation
+  const lastZIndexStateRef = useRef<Map<string, 'normal' | 'selected' | 'dragging'>>(new Map())
+
   const organizeNodeZIndex = useCallback((immediate = false) => {
     const nodeLayer = nodeLayerRef.current
     if (!nodeLayer || allNodeElementsRef.current.size === 0) return
@@ -280,50 +358,66 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       const normalNodes: SVGGElement[] = []
       const selectedNodes: SVGGElement[] = []
       const draggingNodes: SVGGElement[] = []
+      const currentState = new Map<string, 'normal' | 'selected' | 'dragging'>()
+      let hasChanges = false
 
       allNodeElementsRef.current.forEach((element, nodeId) => {
         if (!nodeLayer.contains(element)) return
         
-        const isDragging = isDraggingRef.current && nodeId === draggedNodeIdRef.current
+        const isNodeDragging = isDragging && nodeId === draggedNodeId
         const isSelected = isNodeSelected(nodeId)
-
-        if (isDragging) {
+        
+        let state: 'normal' | 'selected' | 'dragging'
+        if (isNodeDragging) {
           draggingNodes.push(element)
+          state = 'dragging'
         } else if (isSelected) {
           selectedNodes.push(element)
+          state = 'selected'
         } else {
           normalNodes.push(element)
+          state = 'normal'
+        }
+        
+        currentState.set(nodeId, state)
+        
+        // Check if state changed
+        if (lastZIndexStateRef.current.get(nodeId) !== state) {
+          hasChanges = true
         }
       })
 
-      // Reorder DOM elements: normal → selected → dragging
-      const orderedElements = [...normalNodes, ...selectedNodes, ...draggingNodes]
-      
-      orderedElements.forEach(element => {
-        if (nodeLayer.contains(element) && nodeLayer.lastChild !== element) {
-          nodeLayer.appendChild(element)
-        }
-      })
+      // Only reorder DOM if there are actual changes
+      if (hasChanges || lastZIndexStateRef.current.size !== currentState.size) {
+        // Reorder DOM elements: normal → selected → dragging
+        const orderedElements = [...normalNodes, ...selectedNodes, ...draggingNodes]
+        
+        // Use document fragment for batch DOM operations
+        const fragment = document.createDocumentFragment()
+        orderedElements.forEach(element => {
+          fragment.appendChild(element)
+        })
+        nodeLayer.appendChild(fragment)
+        
+        lastZIndexStateRef.current = currentState
+      }
     }
 
     if (immediate) {
       executeZIndexUpdate()
     } else {
-      scheduleRAF(executeZIndexUpdate)
+      scheduleRAF(executeZIndexUpdate, 'high') // Z-index updates are high priority for visual feedback
     }
-  }, [isNodeSelected, scheduleRAF])
+  }, [isNodeSelected, scheduleRAF, isDragging, draggedNodeId])
 
-  // Immediate node dragging z-index management
+  // Optimized immediate node dragging z-index management
   const setNodeAsDragging = useCallback((nodeId: string) => {
     const element = allNodeElementsRef.current.get(nodeId)
     const nodeLayer = nodeLayerRef.current
     
     if (element && nodeLayer) {
-      // Immediately move to top for dragging to ensure proper layering
-      if (nodeLayer.lastChild !== element) {
-        nodeLayer.appendChild(element)
-      }
-      // Also trigger full z-index organization to ensure proper order
+      // Mark state as changed and trigger immediate z-index organization
+      lastZIndexStateRef.current.set(nodeId, 'dragging')
       organizeNodeZIndex(true) // Use immediate execution
     }
   }, [organizeNodeZIndex])
@@ -342,7 +436,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
   // Throttle drag updates for better performance
   const lastDragUpdateRef = useRef(0)
-  const dragUpdateThrottle = 8 // ~120fps for smoother connections
+  const dragUpdateThrottle = 16 // ~60fps for better performance balance
+  const connectionBatchSize = 10 // Maximum connections to update per batch
   
   // Track last updated paths to prevent unnecessary redraws
   const lastConnectionPathsRef = useRef<Map<string, string>>(new Map())
@@ -401,7 +496,19 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   }, [nodeMap])
 
 
-  // Memoized connection path calculation with drag position support
+  // Cache cleanup utility to prevent memory leaks
+  const cleanupConnectionCache = useCallback(() => {
+    const cache = connectionPathCacheRef.current
+    if (cache.size > CACHE_CLEANUP_THRESHOLD) {
+      // Remove oldest entries (first 200) to keep cache at reasonable size
+      const entries = Array.from(cache.entries())
+      const entriesToKeep = entries.slice(-MAX_CACHE_SIZE)
+      cache.clear()
+      entriesToKeep.forEach(([key, value]) => cache.set(key, value))
+    }
+  }, [MAX_CACHE_SIZE, CACHE_CLEANUP_THRESHOLD])
+
+  // Memoized connection path calculation with drag position support and memory management
   const getConnectionPath = useCallback((connection: Connection, useDragPositions = false) => {
     const cacheKey = `${connection.sourceNodeId}-${connection.sourcePortId}-${connection.targetNodeId}-${connection.targetPortId}-${nodeVariant}${useDragPositions ? '-drag' : ''}`
     
@@ -438,9 +545,14 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     
     if (!useDragPositions) {
       connectionPathCacheRef.current.set(cacheKey, path)
+      
+      // Periodic cache cleanup to prevent memory leaks
+      if (connectionPathCacheRef.current.size > CACHE_CLEANUP_THRESHOLD) {
+        cleanupConnectionCache()
+      }
     }
     return path
-  }, [nodeMap, nodeVariant])
+  }, [nodeMap, nodeVariant, cleanupConnectionCache, CACHE_CLEANUP_THRESHOLD])
 
   // Memoized configurable dimensions calculation (shape-aware)
   const getConfigurableDimensions = useMemo(() => {
@@ -471,25 +583,105 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     }
   }, [nodeVariant])
 
-  // Component-level optimized handlers
-  const applyDragVisualStyle = useCallback((nodeElement: any, nodeId: string) => {
-    scheduleRAF(() => {
+  // Helper function to calculate optimal bottom port positioning
+  // Uses either 80% of node width OR node width minus 40px (whichever is smaller)
+  const calculateBottomPortLayout = useCallback((nodeData: any, portIndex: number) => {
+    const dimensions = getConfigurableDimensions(nodeData)
+    const nodeWidth = dimensions.width || 200
+    const nodeHeight = dimensions.height || 80
+    const portCount = nodeData.bottomPorts?.length || 0
+    
+    if (portCount === 0) return { x: 0, y: nodeHeight / 2 }
+    
+    // Use the smaller of: 80% width OR (width - 40px)
+    // This ensures proper spacing for both narrow and wide nodes
+    const usableWidth = Math.min(nodeWidth * 0.8, nodeWidth - 70)
+    
+    if (portCount === 1) {
+      // Single port: center it
+      return {
+        x: 0,
+        y: nodeHeight / 2
+      }
+    } else if (portCount === 2) {
+      // Two ports: optimized positioning for visual balance
+      const spacing = usableWidth / 3 // Divide available space into thirds
+      const positions = [-spacing, spacing] // Place at 1/3 and 2/3 positions
+      return {
+        x: positions[portIndex] || 0,
+        y: nodeHeight / 2
+      }
+    } else if (portCount === 3) {
+      // Three ports: center one, balance others
+      const halfWidth = usableWidth / 2
+      const positions = [-halfWidth, 0, halfWidth]
+      return {
+        x: positions[portIndex] || 0,
+        y: nodeHeight / 2
+      }
+    } else {
+      // Multiple ports (4+): distribute evenly with optimal spacing
+      const spacing = usableWidth / (portCount - 1)
+      const x = -usableWidth / 2 + spacing * portIndex
+      return {
+        x: x,
+        y: nodeHeight / 2
+      }
+    }
+  }, [getConfigurableDimensions])
+
+  // Enhanced visual feedback system with batching and caching
+  const processBatchedVisualUpdates = useCallback(() => {
+    if (visualUpdateQueueRef.current.size === 0) return
+
+    const nodesToProcess = Array.from(visualUpdateQueueRef.current)
+    
+    // Process visual updates in batches
+    nodesToProcess.forEach(nodeId => {
+      const element = allNodeElementsRef.current.get(nodeId)
+      if (!element) return
+
+      const nodeElement = d3.select(element)
+      const nodeBackground = nodeElement.select('.node-background')
+      const node = nodeMap.get(nodeId)
+      const isSelected = isNodeSelected(nodeId)
+      
+      // Apply drag visual style
       nodeElement
         .style('opacity', 0.9)
         .style('filter', 'drop-shadow(0 6px 12px rgba(0, 0, 0, 0.3))')
       
-      const nodeBackground = nodeElement.select('.node-background')
-      const isSelected = isNodeSelected(nodeId)
-      if (isSelected) {
-        nodeBackground.attr('stroke', '#2196F3').attr('stroke-width', 3)
-      } else {
-        const node = nodeMap.get(nodeId)
-        if (node) {
-          nodeBackground.attr('stroke', getNodeColor(node.type, node.status)).attr('stroke-width', 3)
-        }
-      }
+      // Always use blue border for drag visual style (consistent with immediate styling)
+      nodeBackground.attr('stroke', '#2196F3').attr('stroke-width', 3)
     })
-  }, [scheduleRAF, isNodeSelected, nodeMap, getNodeColor])
+    
+    visualUpdateQueueRef.current.clear()
+    batchedVisualUpdateRef.current = null
+  }, [nodeMap, isNodeSelected, getNodeColor])
+
+  const applyDragVisualStyle = useCallback((nodeElement: any, nodeId: string) => {
+    // CRITICAL: Apply visual styling IMMEDIATELY during drag start for stable feedback
+    const nodeBackground = nodeElement.select('.node-background')
+    const node = nodeMap.get(nodeId)
+    
+    // Apply drag visual style immediately
+    nodeElement
+      .style('opacity', 0.9)
+      .style('filter', 'drop-shadow(0 6px 12px rgba(0, 0, 0, 0.3))')
+    
+    // Always use blue border when dragging (regardless of selection state)
+    nodeBackground.attr('stroke', '#2196F3').attr('stroke-width', 3)
+    
+    // Applied blue drag visual style immediately
+    
+    // Also queue for batched processing as backup
+    visualUpdateQueueRef.current.add(nodeId)
+    
+    // Start batched processing if not already running
+    if (!batchedVisualUpdateRef.current) {
+      batchedVisualUpdateRef.current = requestAnimationFrame(processBatchedVisualUpdates)
+    }
+  }, [processBatchedVisualUpdates, nodeMap])
 
   // Memoized connection lookup for better drag performance
   const nodeConnectionsMap = useMemo(() => {
@@ -512,6 +704,44 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     return map
   }, [connections])
 
+  // Batched connection update system for better performance
+  const processBatchedConnectionUpdates = useCallback(() => {
+    if (connectionUpdateQueueRef.current.size === 0) return
+
+    const svg = d3.select(svgRef.current!)
+    const connectionLayer = svg.select('.connection-layer')
+    
+    // Process connections in batches to avoid blocking the main thread
+    const nodesToProcess = Array.from(connectionUpdateQueueRef.current)
+    const batchSize = Math.min(connectionBatchSize, nodesToProcess.length)
+    
+    for (let i = 0; i < batchSize; i++) {
+      const nodeId = nodesToProcess[i]
+      const affectedConnections = nodeConnectionsMap.get(nodeId) || []
+      
+      if (affectedConnections.length === 0) continue
+
+      // Update connections using cached selections for better performance
+      affectedConnections.forEach(conn => {
+        const connectionElement = connectionLayer.select(`[data-connection-id="${conn.id}"]`)
+        if (!connectionElement.empty()) {
+          const pathElement = connectionElement.select('.connection-path')
+          const newPath = getConnectionPath(conn, true)
+          pathElement.attr('d', newPath)
+        }
+      })
+      
+      connectionUpdateQueueRef.current.delete(nodeId)
+    }
+
+    // Schedule next batch if there are more connections to process
+    if (connectionUpdateQueueRef.current.size > 0) {
+      batchedConnectionUpdateRef.current = requestAnimationFrame(processBatchedConnectionUpdates)
+    } else {
+      batchedConnectionUpdateRef.current = null
+    }
+  }, [nodeConnectionsMap, getConnectionPath, connectionBatchSize])
+
   const updateDraggedNodePosition = useCallback((nodeId: string, newX: number, newY: number) => {
     // Always update node position immediately for smooth dragging
     if (draggedElementRef.current) {
@@ -528,33 +758,17 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     }
     lastDragUpdateRef.current = now
 
-    scheduleRAF(() => {
-      // Get affected connections more efficiently
-      const affectedConnections = nodeConnectionsMap.get(nodeId) || []
+    // Queue connection updates for batched processing
+    const affectedConnections = nodeConnectionsMap.get(nodeId) || []
+    if (affectedConnections.length > 0) {
+      connectionUpdateQueueRef.current.add(nodeId)
       
-      if (affectedConnections.length === 0) return
-
-      // Update connections in real-time using drag positions
-      const svg = d3.select(svgRef.current!)
-      const connectionLayer = svg.select('.connection-layer')
-      
-      // Use drag positions for smooth updates
-      connectionLayer.selectAll('.connection')
-        .filter((conn: any) => {
-          return affectedConnections.some(affected => affected.id === conn.id)
-        })
-        .each(function(conn: any) {
-          const connectionGroup = d3.select(this)
-          const pathElement = connectionGroup.select('.connection-path')
-          
-          // Use drag positions for real-time updates
-          const newPath = getConnectionPath(conn, true)
-          
-          // Always update during drag to ensure smooth movement
-          pathElement.attr('d', newPath)
-        })
-    })
-  }, [scheduleRAF, nodeConnectionsMap, nodeVariant, getConnectionPath])
+      // Start batched processing if not already running
+      if (!batchedConnectionUpdateRef.current) {
+        batchedConnectionUpdateRef.current = requestAnimationFrame(processBatchedConnectionUpdates)
+      }
+    }
+  }, [nodeConnectionsMap, processBatchedConnectionUpdates, dragUpdateThrottle])
 
   const resetNodeVisualStyle = useCallback((nodeElement: any, nodeId: string) => {
     const isSelected = isNodeSelected(nodeId)
@@ -580,13 +794,37 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     }
   }, [isNodeSelected, nodeMap, getNodeColor])
 
-  // Clear caches when nodes change
-  useEffect(() => {
+  // Enhanced cache management with memory optimization
+  const clearAllCaches = useCallback(() => {
     connectionPathCacheRef.current.clear()
     nodePositionCacheRef.current.clear()
     lastConnectionPathsRef.current.clear()
     currentDragPositionsRef.current.clear()
-  }, [nodes])
+    connectionUpdateQueueRef.current.clear()
+    visualUpdateQueueRef.current.clear()
+    lastZIndexStateRef.current.clear()
+    rafCallbackQueueRef.current = []
+    
+    // Cancel any pending batched updates and RAF callbacks
+    if (batchedConnectionUpdateRef.current) {
+      cancelAnimationFrame(batchedConnectionUpdateRef.current)
+      batchedConnectionUpdateRef.current = null
+    }
+    if (batchedVisualUpdateRef.current) {
+      cancelAnimationFrame(batchedVisualUpdateRef.current)
+      batchedVisualUpdateRef.current = null
+    }
+    if (rafIdRef.current) {
+      cancelAnimationFrame(rafIdRef.current)
+      rafIdRef.current = null
+    }
+    rafScheduledRef.current = false
+  }, [])
+
+  // Clear caches when nodes change
+  useEffect(() => {
+    clearAllCaches()
+  }, [nodes, clearAllCaches])
 
   // Clear connection paths when connections change
   useEffect(() => {
@@ -595,7 +833,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
   // Immediate z-index organization for selection changes
   useEffect(() => {
-    if (!isDraggingRef.current && isInitialized) {
+    if (!isDragging && isInitialized) {
       // Use immediate update for selection changes to ensure proper layering
       const nodeLayer = nodeLayerRef.current
       if (!nodeLayer || allNodeElementsRef.current.size === 0) return
@@ -607,10 +845,10 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       allNodeElementsRef.current.forEach((element, nodeId) => {
         if (!nodeLayer.contains(element)) return
         
-        const isDragging = isDraggingRef.current && nodeId === draggedNodeIdRef.current
+        const isNodeDragging = isDragging && nodeId === draggedNodeId
         const isSelected = isNodeSelected(nodeId)
 
-        if (isDragging) {
+        if (isNodeDragging) {
           draggingNodes.push(element)
         } else if (isSelected) {
           selectedNodes.push(element)
@@ -628,7 +866,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         }
       })
     }
-  }, [selectedNodes, isNodeSelected, isInitialized])
+  }, [selectedNodes, isNodeSelected, isInitialized, isDragging, draggedNodeId])
 
   // Main D3 rendering effect - split into smaller, focused effects
   useEffect(() => {
@@ -690,7 +928,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     const gridLayer = g.append('g').attr('class', 'grid-layer').style('pointer-events', 'none')
     const connectionLayer = g.append('g').attr('class', 'connection-layer')
     const mainNodeLayer = g.append('g').attr('class', 'node-layer')
-    const labelLayer = g.append('g').attr('class', 'label-layer')
+    // const labelLayer = g.append('g').attr('class', 'label-layer') // No longer needed
     
     // Store node layer reference
     nodeLayerRef.current = mainNodeLayer.node() as SVGGElement
@@ -737,11 +975,25 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       const dragData = d as any
       const domNode = this as SVGGElement
       
-      // Set persistent drag state
+      // Clear any pending state cleanup
+      if (dragStateCleanupRef.current) {
+        clearTimeout(dragStateCleanupRef.current)
+        dragStateCleanupRef.current = null
+      }
+      
+      const svgElement = svgRef.current!
+      const [mouseX, mouseY] = d3.pointer(event.sourceEvent, svgElement)
+      const transform = d3.zoomTransform(svgElement)
+      const [canvasX, canvasY] = transform.invert([mouseX, mouseY])
+      
+      // Use context-based dragging state
+      startDragging(d.id, { x: canvasX, y: canvasY })
+      
+      // Force apply dragging class with protection against removal
       nodeElement.classed('dragging', true)
+      
+      // Store reference to prevent class removal during updates
       draggedElementRef.current = nodeElement
-      isDraggingRef.current = true
-      draggedNodeIdRef.current = d.id
       draggedNodeElementRef.current = domNode
       
       // Apply dragging visual style and ensure proper z-index
@@ -749,10 +1001,12 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       // Set z-index immediately to ensure dragged node is on top
       setNodeAsDragging(d.id)
       
-      const svgElement = svgRef.current!
-      const [mouseX, mouseY] = d3.pointer(event.sourceEvent, svgElement)
-      const transform = d3.zoomTransform(svgElement)
-      const [canvasX, canvasY] = transform.invert([mouseX, mouseY])
+      // Additional protection: force class persistence
+      setTimeout(() => {
+        if (draggedElementRef.current && getDraggedNodeId() === d.id) {
+          draggedElementRef.current.classed('dragging', true)
+        }
+      }, 0)
       
       dragData.dragStartX = canvasX
       dragData.dragStartY = canvasY
@@ -776,9 +1030,18 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       const deltaX = currentCanvasX - dragData.dragStartX
       const deltaY = currentCanvasY - dragData.dragStartY
 
+      // Update context with current drag position
+      updateDragPosition(currentCanvasX, currentCanvasY)
+
       // Mark as dragged if movement is significant - increase threshold for better click detection
       if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
         dragData.hasDragged = true
+      }
+
+      // Ensure dragging class is maintained during drag operation
+      const nodeElement = d3.select(this)
+      if (!nodeElement.classed('dragging')) {
+        nodeElement.classed('dragging', true)
       }
 
       const newX = dragData.initialX + deltaX
@@ -806,15 +1069,14 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       delete dragData.hasDragged
       delete dragData.dragStartTime
 
-      // Clear persistent drag state
+      // End dragging in context
+      endDragging()
       nodeElement.classed('dragging', false)
-      draggedElementRef.current = null
-      isDraggingRef.current = false
-      draggedNodeIdRef.current = null
-      draggedNodeElementRef.current = null
 
-      // Clear drag position tracking
+      // Clear drag position tracking and remove from update queues
       currentDragPositionsRef.current.delete(d.id)
+      connectionUpdateQueueRef.current.delete(d.id)
+      visualUpdateQueueRef.current.delete(d.id)
 
       // Reset visual styles
       resetNodeVisualStyle(nodeElement, d.id)
@@ -956,6 +1218,14 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .each(function(d: any) {
         // Register node element in our centralized management
         allNodeElementsRef.current.set(d.id, this)
+        
+        // Essential: Preserve dragging state for newly created elements
+        if (isDragging && draggedNodeId === d.id) {
+          const nodeElement = d3.select(this)
+          nodeElement.classed('dragging', true)
+          // Update draggedElementRef to point to the new element
+          draggedElementRef.current = nodeElement
+        }
       })
       .call(d3.drag<any, WorkflowNode>()
         .container(g.node() as any)
@@ -965,6 +1235,23 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         .on('end', dragEnded) as any)
 
     const nodeGroups = nodeEnter.merge(nodeSelection as any)
+    
+    // Enhanced: Immediately preserve dragging state after merge operation 
+    // This must happen before any other node operations to prevent class removal
+    nodeGroups.each(function(d: any) {
+      const nodeElement = d3.select(this)
+      const currentDraggedNodeId = getDraggedNodeId()
+      const isCurrentlyDragging = isContextDragging()
+      
+      if (isCurrentlyDragging && currentDraggedNodeId === d.id) {
+        // Force apply dragging class immediately after merge
+        nodeElement.classed('dragging', true)
+        // Ensure draggedElementRef points to the correct merged element
+        if (draggedElementRef.current === null || draggedElementRef.current.node() !== this) {
+          draggedElementRef.current = nodeElement
+        }
+      }
+    })
     
     // Update positions for non-dragging nodes
     nodeGroups
@@ -979,7 +1266,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr('class', 'node-background')
       .on('click', (event: any, d: any) => {
         // Fallback click handler for node background
-        if (!isDraggingRef.current) {
+        if (!isDragging) {
           event.stopPropagation()
           const ctrlKey = event.ctrlKey || event.metaKey
           onNodeClick(d, ctrlKey)
@@ -1017,14 +1304,71 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         return shapePath.d
       })
       .attr('fill', '#ffffff')
-      .attr('stroke', (d: any) => getNodeColor(d.type, d.status))
-      .attr('stroke-width', 2)
+      .attr('stroke', (d: any) => {
+        // CRITICAL: Skip stroke color update for actively dragged node to preserve blue border
+        const currentDraggedNodeId = getDraggedNodeId()
+        const isCurrentlyDragging = isContextDragging()
+        
+        if (isCurrentlyDragging && currentDraggedNodeId === d.id) {
+          // Return blue color for dragged node
+          return '#2196F3'
+        }
+        
+        return getNodeColor(d.type, d.status)
+      })
+      .attr('stroke-width', (d: any) => {
+        // CRITICAL: Skip stroke width update for actively dragged node
+        const currentDraggedNodeId = getDraggedNodeId() 
+        const isCurrentlyDragging = isContextDragging()
+        
+        if (isCurrentlyDragging && currentDraggedNodeId === d.id) {
+          // Return thicker width for dragged node
+          return 3
+        }
+        
+        return 2
+      })
 
-    // Apply visual styling to all nodes using centralized system
+    // Apply visual styling to all nodes using centralized system with improved stability
     nodeGroups.each(function(d: any) {
       const nodeElement = d3.select(this)
       const isSelected = isNodeSelected(d.id)
-      const isDragging = nodeElement.classed('dragging')
+      
+      // Enhanced dragging state detection with context-based state
+      let isNodeDragging = false
+      const currentDraggedNodeId = getDraggedNodeId()
+      const isCurrentlyDragging = isContextDragging()
+      
+      // Check current DOM state first to preserve existing dragging class
+      const hasExistingDraggingClass = nodeElement.classed('dragging')
+      
+      if (isCurrentlyDragging && currentDraggedNodeId === d.id) {
+        // Force apply dragging class for the dragged node - no stale checks during active drag
+        if (!hasExistingDraggingClass) {
+          nodeElement.classed('dragging', true)
+        }
+        isNodeDragging = true
+        
+        // Ensure we maintain the correct draggedElementRef reference
+        const currentDraggedElement = draggedElementRef.current
+        if (!currentDraggedElement || currentDraggedElement.node() !== this) {
+          draggedElementRef.current = nodeElement
+        }
+      } else if (isCurrentlyDragging && currentDraggedNodeId !== d.id) {
+        // For other nodes during drag, ensure dragging class is removed
+        if (hasExistingDraggingClass) {
+          nodeElement.classed('dragging', false)
+        }
+      } else if (!isCurrentlyDragging) {
+        // Only clean up when not dragging at all
+        if (hasExistingDraggingClass) {
+          nodeElement.classed('dragging', false)
+        }
+      } else {
+        // Preserve existing dragging state if conditions are unclear
+        isNodeDragging = hasExistingDraggingClass
+      }
+      
       const nodeBackground = nodeElement.select('.node-background')
       
       // Apply CSS classes
@@ -1036,7 +1380,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       let strokeColor = getNodeColor(d.type, d.status)
       let strokeWidth = 2
       
-      if (isDragging) {
+      if (isNodeDragging) {
         opacity = 0.9
         filter = 'drop-shadow(0 6px 12px rgba(0, 0, 0, 0.3))'
         if (isSelected) {
@@ -1066,7 +1410,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       setIsInitialized(true)
       // Initial z-index organization - use immediate execution for initial setup
       setTimeout(() => {
-        if (!isDraggingRef.current) {
+        if (!isDragging) {
           organizeNodeZIndex(true) // Immediate execution for initialization
         }
       }, 0)
@@ -1599,14 +1943,11 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         // Create diamond shape: move to top, line to right, line to bottom, line to left, close
         return `M 0,${-size} L ${size},0 L 0,${size} L ${-size},0 Z`
       })
-      .attr('transform', (d: any, i: number) => {
-        const dimensions = getConfigurableDimensions(d.nodeData)
-        const nodeWidth = dimensions.width || 200
-        const nodeHeight = dimensions.height || 80
-        const spacing = nodeWidth / (d.nodeData.bottomPorts.length + 1)
-        const x = -nodeWidth/2 + spacing * (i + 1)
-        const y = nodeHeight/2 // อยู่กึ่งกลางของเส้นล่าง
-        return `translate(${x}, ${y})`
+      .attr('transform', (d: any) => {
+        // Find the correct index of this port in the bottomPorts array
+        const portIndex = d.nodeData.bottomPorts.findIndex((p: any) => p.id === d.id)
+        const position = calculateBottomPortLayout(d.nodeData, portIndex)
+        return `translate(${position.x}, ${position.y})`
       })
       .attr('fill', (d: any) => {
         if (isConnecting && connectionStart && connectionStart.type === 'output') {
@@ -1621,10 +1962,28 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     bottomPortGroups.selectAll('line').remove()
     bottomPortGroups.append('line')
       .attr('class', 'bottom-port-connector')
-      .attr('x1', 0)
-      .attr('y1', 0)
-      .attr('x2', 0)
+      .attr('x1', (d: any) => {
+        // Find the correct index of this port in the bottomPorts array
+        const portIndex = d.nodeData.bottomPorts.findIndex((p: any) => p.id === d.id)
+        const position = calculateBottomPortLayout(d.nodeData, portIndex)
+        return position.x
+      })
+      .attr('y1', (d: any) => {
+        // Find the correct index of this port in the bottomPorts array
+        const portIndex = d.nodeData.bottomPorts.findIndex((p: any) => p.id === d.id)
+        const position = calculateBottomPortLayout(d.nodeData, portIndex)
+        return position.y
+      })
+      .attr('x2', (d: any) => {
+        // Find the correct index of this port in the bottomPorts array
+        const portIndex = d.nodeData.bottomPorts.findIndex((p: any) => p.id === d.id)
+        const position = calculateBottomPortLayout(d.nodeData, portIndex)
+        return position.x
+      })
       .attr('y2', (d: any) => {
+        // Find the correct index of this port in the bottomPorts array
+        const portIndex = d.nodeData.bottomPorts.findIndex((p: any) => p.id === d.id)
+        const position = calculateBottomPortLayout(d.nodeData, portIndex)
         // Check if this bottom port has a connection
         const hasConnection = connections.some(conn => 
           conn.sourceNodeId === d.nodeId && conn.sourcePortId === d.id
@@ -1643,16 +2002,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           shouldShowLine = canBottomPortAcceptConnection(d.nodeId, d.id, connections)
         }
         
-        return shouldShowLine ? 28 : 0
-      })
-      .attr('transform', (d: any, i: number) => {
-        const dimensions = getConfigurableDimensions(d.nodeData)
-        const nodeWidth = dimensions.width || 200
-        const nodeHeight = dimensions.height || 80
-        const spacing = nodeWidth / (d.nodeData.bottomPorts.length + 1)
-        const x = -nodeWidth/2 + spacing * (i + 1)
-        const y = nodeHeight/2 // อยู่กึ่งกลางของเส้นล่าง
-        return `translate(${x}, ${y})`
+        // Return position.y + line length (or just position.y if no line)
+        return shouldShowLine ? position.y + 28 : position.y
       })
       .attr('stroke', (d: any) => {
         // Different colors for selected nodes based on connection capability
@@ -1682,371 +2033,231 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       })
       .style('pointer-events', 'none')
 
-    // Add plus buttons at the end of connector lines (separate from bottomPortGroups to avoid event bubbling)
-    const existingPlusButtons = mainNodeLayer.selectAll('.plus-button-container')
-    existingPlusButtons.remove()
-    
-    // Calculate plus button data inline to avoid circular dependencies
-    const currentPlusButtonData: any[] = []
-    nodeGroups.each(function(nodeData: any) {
-      if (nodeData.bottomPorts && nodeData.bottomPorts.length > 0) {
-        nodeData.bottomPorts.forEach((port: any, i: number) => {
-          // Check if this bottom port already has a connection
-          const hasConnection = connections.some(conn => 
-            conn.sourceNodeId === nodeData.id && conn.sourcePortId === port.id
-          )
-          
-          const nodeIsSelected = isNodeSelected(nodeData.id)
-          
-          // New logic: Show plus button based on selection state and connection capability
-          let shouldShowButton = false
-          
-          if (nodeIsSelected) {
-            // When node is selected, show plus button only for ports that can accept additional connections
-            shouldShowButton = canBottomPortAcceptConnection(nodeData.id, port.id, connections)
-            if (process.env.NODE_ENV === 'development') {
-              console.log(`🔍 Port ${port.id} on selected node ${nodeData.id}: canAccept=${shouldShowButton}, hasConnection=${hasConnection}`)
-            }
-          } else {
-            // When node is not selected, show only for unconnected ports (original behavior)
-            shouldShowButton = !hasConnection
-          }
-          
-          if (shouldShowButton) {
-            currentPlusButtonData.push({
-              ...port,
-              nodeId: nodeData.id,
-              nodeData: nodeData,
-              index: i,
-              hasConnection: hasConnection,
-              isNodeSelected: nodeIsSelected,
-              canAcceptConnection: canBottomPortAcceptConnection(nodeData.id, port.id, connections)
-            })
-          }
-        })
-      }
-    })
-    
-    const plusButtonGroups = mainNodeLayer.selectAll('.plus-button-container')
-      .data(currentPlusButtonData, (d: any) => `${d.nodeId}-${d.id}`)
-      .enter()
-      .append('g')
-      .attr('class', 'plus-button-container')
-      .attr('transform', (d: any) => {
-        const node = nodes.find(n => n.id === d.nodeId)
-        if (!node) return 'translate(0,0)'
-        
-        const dimensions = getConfigurableDimensions(d.nodeData)
-        const nodeWidth = dimensions.width || 200
-        const nodeHeight = dimensions.height || 80
-        const spacing = nodeWidth / (d.nodeData.bottomPorts.length + 1)
-        const x = node.x + (-nodeWidth/2 + spacing * (d.index + 1))
-        const y = node.y + (nodeHeight/2 + 36) // Beyond the connector line
-        return `translate(${x}, ${y})`
-      })
-      .append('g')
-      .attr('class', 'plus-button')
-      .style('cursor', 'crosshair') // Change cursor to crosshair like ports
-      .style('pointer-events', 'all') // Ensure this element can receive pointer events
-      // Add drag behavior for plus button - works like output port drag
-      .call(d3.drag<any, any>()
-        .on('start', (event: any, d: any) => {
-          console.log('🚀 Plus button drag START:', d.nodeId, d.id)
-          event.sourceEvent.stopPropagation()
-          event.sourceEvent.preventDefault()
-          // Start connection drag as if it's an output port
-          onPortDragStart(d.nodeId, d.id, 'output')
-          
-          const [x, y] = d3.pointer(event.sourceEvent, event.sourceEvent.target.ownerSVGElement)
-          const transform = d3.zoomTransform(event.sourceEvent.target.ownerSVGElement)
-          const [canvasX, canvasY] = transform.invert([x, y])
-          onPortDrag(canvasX, canvasY)
-        })
-        .on('drag', (event: any) => {
-          const [x, y] = d3.pointer(event.sourceEvent, event.sourceEvent.target.ownerSVGElement)
-          const transform = d3.zoomTransform(event.sourceEvent.target.ownerSVGElement)
-          const [canvasX, canvasY] = transform.invert([x, y])
-          console.log('🚀 Plus button DRAGGING to:', canvasX, canvasY)
-          onPortDrag(canvasX, canvasY)
-        })
-        .on('end', (event: any) => {
-          console.log('🚀 Plus button drag END')
-          
-          // Get correct SVG element and apply zoom transform
-          const svgElement = event.sourceEvent.target.ownerSVGElement
-          const svgSelection = d3.select(svgElement)
-          
-          // Get current zoom transform to correct coordinates
-          const currentTransform = d3.zoomTransform(svgElement)
-          
-          // Get mouse position in screen coordinates first
-          const [screenX, screenY] = d3.pointer(event.sourceEvent, svgElement)
-          
-          // Apply inverse transform to get canvas coordinates
-          const [canvasX, canvasY] = currentTransform.invert([screenX, screenY])
-          
-          let targetNodeId: string | undefined
-          let targetPortId: string | undefined
-          
-          // Find target input port by checking all input port circles and bottom port diamonds
-          const allInputPorts = svgSelection.selectAll('.input-port-circle')
-          const allBottomPorts = svgSelection.selectAll('.bottom-port-diamond')
-          let minDistance = Infinity
-          
-          // Check input ports
-          allInputPorts.each(function(portData: any) {
-            const circle = d3.select(this)
-            const element = this as SVGElement
-            
-            // Get port position in SVG coordinates
-            const portGroup = d3.select(element.parentNode as SVGElement)
-            const nodeGroup = d3.select(portGroup.node()?.closest('g[data-node-id]') as SVGElement)
-            
-            if (nodeGroup.empty()) return
-            
-            const nodeId = nodeGroup.attr('data-node-id')
-            const transform = nodeGroup.attr('transform')
-            let nodeSvgX = 0, nodeSvgY = 0
-            
-            if (transform) {
-              const match = /translate\(([^,]+),([^)]+)\)/.exec(transform)
-              if (match) {
-                nodeSvgX = parseFloat(match[1])
-                nodeSvgY = parseFloat(match[2])
-              }
-            }
-            
-            const cx = parseFloat(circle.attr('cx') || '0')
-            const cy = parseFloat(circle.attr('cy') || '0')
-            const r = parseFloat(circle.attr('r') || '8')
-            
-            // Port position in SVG coordinates (this is already in canvas space)
-            const portCanvasX = nodeSvgX + cx
-            const portCanvasY = nodeSvgY + cy
-            
-            // Calculate distance directly in canvas coordinates
-            const distance = Math.sqrt((canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2)
-            const tolerance = r + 15 // Increased tolerance for easier dropping
-            
-            // Use closest valid input port with tolerance
-            if (distance <= tolerance && distance < minDistance) {
-              minDistance = distance
-              targetNodeId = nodeId
-              targetPortId = portData.id
-            }
-          })
-          
-          // Also check bottom ports (diamond shapes)
-          allBottomPorts.each(function(portData: any) {
-            const diamond = d3.select(this)
-            const element = this as SVGElement
-            
-            // Get port position in SVG coordinates
-            const portGroup = d3.select(element.parentNode as SVGElement)
-            const nodeGroup = d3.select(portGroup.node()?.closest('g[data-node-id]') as SVGElement)
-            
-            if (nodeGroup.empty()) return
-            
-            const nodeId = nodeGroup.attr('data-node-id')
-            const nodeTransform = nodeGroup.attr('transform')
-            let nodeSvgX = 0, nodeSvgY = 0
-            
-            if (nodeTransform) {
-              const match = /translate\(([^,]+),([^)]+)\)/.exec(nodeTransform)
-              if (match) {
-                nodeSvgX = parseFloat(match[1])
-                nodeSvgY = parseFloat(match[2])
-              }
-            }
-            
-            // Get diamond position from its transform
-            const diamondTransform = diamond.attr('transform')
-            let diamondX = 0, diamondY = 0
-            
-            if (diamondTransform) {
-              const match = /translate\(([^,]+),([^)]+)\)/.exec(diamondTransform)
-              if (match) {
-                diamondX = parseFloat(match[1])
-                diamondY = parseFloat(match[2])
-              }
-            }
-            
-            // Port position in SVG coordinates (this is already in canvas space)
-            const portCanvasX = nodeSvgX + diamondX
-            const portCanvasY = nodeSvgY + diamondY
-            
-            // Calculate distance directly in canvas coordinates
-            const distance = Math.sqrt((canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2)
-            const tolerance = 15 // Tolerance for diamond shape
-            
-            // Use closest valid bottom port with tolerance
-            if (distance <= tolerance && distance < minDistance) {
-              minDistance = distance
-              targetNodeId = nodeId
-              targetPortId = portData.id
-            }
-          })
-
-          console.log('🏁 Plus button drag final target:', { targetNodeId, targetPortId, minDistance })
-          onPortDragEnd(targetNodeId, targetPortId)
-        })
+    // Add plus buttons and labels to bottom port groups (integrated approach)
+    bottomPortGroups.each(function(d: any) {
+      const group = d3.select(this)
+      
+      // Check if this bottom port already has a connection
+      const hasConnection = connections.some(conn => 
+        conn.sourceNodeId === d.nodeId && conn.sourcePortId === d.id
       )
-      .on('click', function(event: any, d: any) {
-        console.log('🟡 Plus button CLICKED - stopping all events')
-        event.stopPropagation() // Prevent node click
-        event.stopImmediatePropagation() // Stop all other handlers
-        event.preventDefault()
-        console.log('🟡 Plus button clicked for port:', d.id, 'on node:', d.nodeId)
-        // Only trigger click if not dragging
-        onPlusButtonClick?.(d.nodeId, d.id)
-        return false // Extra safety to prevent event bubbling
-      }, true) // Use capture phase to handle event before others
-      .on('mouseenter', function(_event: any, d: any) {
-        // Add hover effect
-        const bg = d3.select(this).select('.plus-button-bg')
-        if (d.hasConnection) {
-          bg.attr('fill', '#2E7D32') // Darker green on hover for multi-connection ports
-        } else {
-          bg.attr('fill', '#3A7BD5') // Blue on hover for unconnected ports
+      
+      const nodeIsSelected = isNodeSelected(d.nodeId)
+      
+      // Determine if plus button should be shown
+      let shouldShowButton = false
+      
+      if (nodeIsSelected) {
+        // When node is selected, show plus button only for ports that can accept additional connections
+        shouldShowButton = canBottomPortAcceptConnection(d.nodeId, d.id, connections)
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🔍 Port ${d.id} on selected node ${d.nodeId}: canAccept=${shouldShowButton}, hasConnection=${hasConnection}`)
         }
-      })
-      .on('mouseleave', function(_event: any, d: any) {
-        // Remove hover effect - restore original color
-        const bg = d3.select(this).select('.plus-button-bg')
-        if (d.hasConnection) {
-          bg.attr('fill', '#4CAF50') // Green for multi-connection ports
-        } else {
-          bg.attr('fill', '#8A8B96') // Gray for unconnected ports
-        }
-      })
-
-    // Plus button background (square with rounded corners)
-    plusButtonGroups.append('rect')
-      .attr('class', 'plus-button-bg')
-      .attr('x', -8)
-      .attr('y', -8)
-      .attr('width', 16)
-      .attr('height', 16)
-      .attr('rx', 2)
-      .attr('ry', 2)
-      .attr('fill', (d: any) => {
-        // Different colors based on port type and connection capability
-        if (d.hasConnection) {
-          // For connected ports that still allow more connections (like 'tool')
-          return '#4CAF50' // Green for ports that can accept multiple connections
-        }
-        return '#8A8B96' // Gray for unconnected ports
-      })
-      .attr('stroke', (d: any) => {
-        // Add border for connected ports to make them more visible
-        if (d.hasConnection && d.isNodeSelected) {
-          return '#388E3C' // Darker green border for multi-connection ports
-        }
-        return 'none'
-      })
-      .attr('stroke-width', (d: any) => {
-        if (d.hasConnection && d.isNodeSelected) {
-          return 1
-        }
-        return 0
-      })
-
-    // Plus symbol (horizontal line)
-    plusButtonGroups.append('line')
-      .attr('class', 'plus-horizontal')
-      .attr('x1', -4)
-      .attr('y1', 0)
-      .attr('x2', 4)
-      .attr('y2', 0)
-      .attr('stroke', 'white')
-      .attr('stroke-width', 2)
-      .style('pointer-events', 'none')
-
-    // Plus symbol (vertical line)
-    plusButtonGroups.append('line')
-      .attr('class', 'plus-vertical')
-      .attr('x1', 0)
-      .attr('y1', -4)
-      .attr('x2', 0)
-      .attr('y2', 4)
-      .attr('stroke', 'white')
-      .attr('stroke-width', 2)
-      .style('pointer-events', 'none')
-
-    // Add bottom port labels with background - create as separate layer to avoid node selection highlighting
-    const existingLabels = labelLayer.selectAll('.bottom-port-label-container')
-    existingLabels.remove()
-    
-    const labelData: any[] = []
-    nodeGroups.each(function(nodeData: any) {
-      if (nodeData.bottomPorts && nodeData.bottomPorts.length > 0) {
-        nodeData.bottomPorts.forEach((port: any, i: number) => {
-          labelData.push({
-            ...port,
-            nodeId: nodeData.id,
-            nodeData: nodeData,
-            index: i
-          })
-        })
+      } else {
+        // When node is not selected, show only for unconnected ports (original behavior)
+        shouldShowButton = !hasConnection
       }
-    })
-    
-    const labelContainers = labelLayer.selectAll('.bottom-port-label-container')
-      .data(labelData, (d: any) => `${d.nodeId}-${d.id}-label`)
-      .join('g')
-      .attr('class', 'bottom-port-label-container')
-      .attr('transform', (d: any) => {
+      
+      // Remove existing plus button and label
+      group.selectAll('.plus-button-container').remove()
+      group.selectAll('.bottom-port-label-container').remove()
+      
+      // Add plus button if needed
+      if (shouldShowButton) {
         const node = nodes.find(n => n.id === d.nodeId)
-        if (!node) return 'translate(0,0)'
-        
-        const dimensions = getConfigurableDimensions(d.nodeData)
-        const nodeWidth = dimensions.width || 200
-        const nodeHeight = dimensions.height || 80
-        const spacing = nodeWidth / (d.nodeData.bottomPorts.length + 1)
-        const x = node.x + (-nodeWidth/2 + spacing * (d.index + 1))
-        const y = node.y + (nodeHeight/2 + 15) // Position to overlap on connector line
-        return `translate(${x}, ${y})`
-      })
-      .style('pointer-events', 'none')
-      .style('user-select', 'none') // Prevent text selection
-      .style('-webkit-user-select', 'none') // Safari
-      .style('-moz-user-select', 'none') // Firefox
-      .style('-ms-user-select', 'none') // IE
-      .style('outline', 'none') // Remove focus outline
-      .style('-webkit-tap-highlight-color', 'transparent') // Remove mobile tap highlight
+        if (node) {
+          const portIndex = d.nodeData.bottomPorts.findIndex((p: any) => p.id === d.id)
+          const position = calculateBottomPortLayout(d.nodeData, portIndex)
+          const x = position.x
+          const y = position.y + 36 // Beyond the connector line
+          
+          const plusButtonContainer = group.append('g')
+            .attr('class', 'plus-button-container')
+            .attr('transform', `translate(${x}, ${y})`)
+            .style('cursor', 'crosshair')
+            .style('pointer-events', 'all')
 
-    // Add transparent background for text
-    labelContainers.append('rect')
-      .attr('class', 'label-background')
-      .attr('x', (d: any) => {
-        const textWidth = d.label.length * 5 // Smaller text width for 8px font
-        return -textWidth / 2
-      })
-      .attr('y', -7)
-      .attr('width', (d: any) => {
-        const textWidth = d.label.length * 5
-        return textWidth
-      })
-      .attr('height', 10)
-      .attr('rx', 2)
-      .attr('ry', 2)
-      .attr('fill', 'white')
-      .attr('fill-opacity', 0.4) // 60% transparent
-      .style('pointer-events', 'none') // Prevent mouse events on background
+          const plusButton = plusButtonContainer.append('g')
+            .attr('class', 'plus-button')
+            .style('cursor', 'crosshair')
+            .style('pointer-events', 'all')
+            .call(d3.drag<any, any>()
+              .on('start', (event: any) => {
+                console.log('🚀 Plus button drag START:', d.nodeId, d.id)
+                event.sourceEvent.stopPropagation()
+                event.sourceEvent.preventDefault()
+                
+                // Start connection from bottom port
+                onPortDragStart(d.nodeId, d.id, 'output')
+              })
+              .on('drag', (event: any) => {
+                // Get canvas coordinates
+                const [x, y] = d3.pointer(event.sourceEvent, event.sourceEvent.target.ownerSVGElement)
+                const transform = d3.zoomTransform(event.sourceEvent.target.ownerSVGElement)
+                const [canvasX, canvasY] = transform.invert([x, y])
+                
+                // Update connection preview
+                onPortDrag(canvasX, canvasY)
+              })
+              .on('end', (event: any) => {
+                console.log('🚀 Plus button drag END')
+                
+                // Get canvas coordinates where drag ended
+                const [x, y] = d3.pointer(event.sourceEvent, event.sourceEvent.target.ownerSVGElement)
+                const transform = d3.zoomTransform(event.sourceEvent.target.ownerSVGElement)
+                const [canvasX, canvasY] = transform.invert([x, y])
+                
+                console.log('🔍 Drag ended at canvas coordinates:', canvasX, canvasY)
+                
+                // Find target port using the existing WorkflowCanvas port detection
+                let targetNodeId: string | undefined
+                let targetPortId: string | undefined
+                let minDistance = 50 // 50px tolerance
+                
+                // Check all nodes for input ports within range
+                nodes.forEach(node => {
+                  if (node.id === d.nodeId) return // Don't connect to same node
+                  
+                  // Check input ports
+                  node.inputs.forEach(input => {
+                    const inputPortPosition = calculatePortPosition(node, input.id, 'input', nodeVariant)
+                    const distance = Math.sqrt(
+                      Math.pow(canvasX - inputPortPosition.x, 2) + 
+                      Math.pow(canvasY - inputPortPosition.y, 2)
+                    )
+                    
+                    if (distance < minDistance) {
+                      minDistance = distance
+                      targetNodeId = node.id
+                      targetPortId = input.id
+                    }
+                  })
+                  
+                  // Check bottom ports (input capability)
+                  if (node.bottomPorts) {
+                    node.bottomPorts.forEach(bottomPort => {
+                      const bottomPortPosition = calculatePortPosition(node, bottomPort.id, 'bottom', nodeVariant)
+                      const distance = Math.sqrt(
+                        Math.pow(canvasX - bottomPortPosition.x, 2) + 
+                        Math.pow(canvasY - bottomPortPosition.y, 2)
+                      )
+                      
+                      if (distance < minDistance) {
+                        minDistance = distance
+                        targetNodeId = node.id
+                        targetPortId = bottomPort.id
+                      }
+                    })
+                  }
+                })
+                
+                console.log('🔍 Found target:', { targetNodeId, targetPortId, distance: minDistance })
+                
+                // End the drag with target information
+                onPortDragEnd(targetNodeId, targetPortId)
+              })
+            )
+            .on('click', (event: any) => {
+              // Fallback click handler for simple plus button clicks
+              event.stopPropagation()
+              onPlusButtonClick?.(d.nodeId, d.id)
+            })
+            // Removed mouseenter/mouseleave hover effects to prevent highlights during node interactions
 
-    // Add text labels
-    labelContainers.append('text')
-      .attr('class', 'bottom-port-label')
-      .attr('x', 0)
-      .attr('y', 0)
-      .attr('text-anchor', 'middle')
-      .attr('font-size', '8px')
-      .attr('fill', '#666')
-      .style('pointer-events', 'none') // Prevent mouse events on text
-      .style('user-select', 'none') // Prevent text selection
-      .text((d: any) => d.label)
+          // Plus button background (square with rounded corners)
+          plusButton.append('rect')
+            .attr('class', 'plus-button-bg')
+            .attr('x', -8)
+            .attr('y', -8)
+            .attr('width', 16)
+            .attr('height', 16)
+            .attr('rx', 2)
+            .attr('ry', 2)
+            .attr('fill', () => {
+              // Different colors based on port type and connection capability
+              if (hasConnection) {
+                // For connected ports that still allow more connections (like 'tool')
+                return '#4CAF50' // Green for ports that can accept multiple connections
+              }
+              return '#8A8B96' // Gray for unconnected ports
+            })
+            .attr('stroke', () => {
+              // Add border for connected ports to make them more visible
+              if (hasConnection && nodeIsSelected) {
+                return '#388E3C' // Darker green border for multi-connection ports
+              }
+              return 'none'
+            })
+            .attr('stroke-width', () => {
+              if (hasConnection && nodeIsSelected) {
+                return 1
+              }
+              return 0
+            })
 
-    //console.log('🟡 Created', bottomPortGroups.selectAll('path').size(), 'bottom port diamonds')
+          // Plus symbol (horizontal line)
+          plusButton.append('line')
+            .attr('class', 'plus-horizontal')
+            .attr('x1', -4)
+            .attr('y1', 0)
+            .attr('x2', 4)
+            .attr('y2', 0)
+            .attr('stroke', 'white')
+            .attr('stroke-width', 1.5)
+            .attr('stroke-linecap', 'round')
+
+          // Plus symbol (vertical line)
+          plusButton.append('line')
+            .attr('class', 'plus-vertical')
+            .attr('x1', 0)
+            .attr('y1', -4)
+            .attr('x2', 0)
+            .attr('y2', 4)
+            .attr('stroke', 'white')
+            .attr('stroke-width', 1.5)
+            .attr('stroke-linecap', 'round')
+        }
+      }
+
+      // Add label for this bottom port
+      const portIndex = d.nodeData.bottomPorts.findIndex((p: any) => p.id === d.id)
+      const position = calculateBottomPortLayout(d.nodeData, portIndex)
+      const labelX = position.x
+      const labelY = position.y + 15 // Below the diamond
+      
+      const labelContainer = group.append('g')
+        .attr('class', 'bottom-port-label-container')
+        .attr('transform', `translate(${labelX}, ${labelY})`)
+
+      // Label background
+      const labelText = d.label || d.id
+      const textWidth = labelText.length * 5.5 // Better estimation for 10px font
+      const padding = 8
+      
+      labelContainer.append('rect')
+        .attr('class', 'bottom-port-label-bg')
+        .attr('x', -textWidth/2 - padding/2)
+        .attr('y', -7)
+        .attr('width', textWidth + padding)
+        .attr('height', 12)
+        .attr('fill', '#ffffff5b')
+        .attr('stroke', 'none') // Prevent stroke inheritance from parent node
+
+      // Label text
+      labelContainer.append('text')
+        .attr('class', 'bottom-port-label')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'middle')
+        .attr('font-size', '8px')
+        .attr('font-weight', '500')
+        .attr('fill', '#2c3e50')
+        .attr('stroke', 'none') // Prevent stroke inheritance from parent node
+        .attr('pointer-events', 'none')
+        .style('user-select', 'none')
+        .text(labelText)
+    })
 
     // Canvas event handlers
     svg.on('click', () => {
@@ -2060,12 +2271,26 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       onCanvasMouseMove(canvasX, canvasY)
     })
 
-    // Cleanup function
+    // Enhanced cleanup function with dragging state management
     return () => {
+      // Cancel any pending animations
       if (rafIdRef.current) {
         cancelAnimationFrame(rafIdRef.current)
         rafIdRef.current = null
       }
+      
+      // Clear any pending dragging state cleanup
+      if (dragStateCleanupRef.current) {
+        clearTimeout(dragStateCleanupRef.current)
+        dragStateCleanupRef.current = null
+      }
+      
+      // Reset all dragging state references (now handled by context)
+      endDragging()
+      draggedElementRef.current = null
+      draggedNodeElementRef.current = null
+      
+      // Clear DOM and caches
       svg.selectAll('*').remove()
       connectionPathCacheRef.current.clear()
       gridCacheRef.current = null
@@ -2105,7 +2330,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     })
     
     // Ensure proper z-index after visual state changes (but only if not dragging)
-    if (!isDraggingRef.current) {
+    if (!isDragging) {
       organizeNodeZIndex(true) // Use immediate execution to ensure proper layering
     }
     
@@ -2194,12 +2419,14 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const isConnectionActive = isConnecting && connectionStart && connectionStart.type === 'output'
         const canDrop = isConnectionActive ? canDropOnPort(d.nodeId, d.id, 'input') : false
         
-        // Calculate target values
-        const targetFill = isConnectionActive ? (canDrop ? '#4CAF50' : '#ccc') : getPortColor('any')
-        const targetStroke = isConnectionActive ? (canDrop ? '#4CAF50' : '#ff5722') : '#333'
-        const targetStrokeWidth = isConnectionActive ? (canDrop ? 3 : 2) : 2
+        // Calculate target values using inline logic (performance optimized)
+        const safeCanDrop = Boolean(canDrop)
         const baseDimensions = getConfigurableDimensions(d.nodeData)
-        const targetRadius = isConnectionActive ? (canDrop ? baseDimensions.portRadius * 1.5 : baseDimensions.portRadius) : baseDimensions.portRadius
+        
+        const targetFill = isConnectionActive ? (safeCanDrop ? '#4CAF50' : '#ccc') : getPortColor('any')
+        const targetStroke = isConnectionActive ? (safeCanDrop ? '#4CAF50' : '#ff5722') : '#333'
+        const targetStrokeWidth = isConnectionActive ? (safeCanDrop ? 3 : 2) : 2
+        const targetRadius = isConnectionActive ? (safeCanDrop ? baseDimensions.portRadius * 1.5 : baseDimensions.portRadius) : baseDimensions.portRadius
         
         // Only update if values changed to prevent flickering
         const currentFill = portElement.attr('fill')
@@ -2228,12 +2455,14 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const isConnectionActive = isConnecting && connectionStart && connectionStart.type === 'input'
         const canDrop = isConnectionActive ? canDropOnPort(d.nodeId, d.id, 'output') : false
         
-        // Calculate target values
-        const targetFill = isConnectionActive ? (canDrop ? '#4CAF50' : '#ccc') : getPortColor('any')
-        const targetStroke = isConnectionActive ? (canDrop ? '#4CAF50' : '#ff5722') : '#333'
-        const targetStrokeWidth = isConnectionActive ? (canDrop ? 3 : 2) : 2
+        // Calculate target values using inline logic (performance optimized)
+        const safeCanDrop = Boolean(canDrop)
         const baseDimensions = getConfigurableDimensions(d.nodeData)
-        const targetRadius = isConnectionActive ? (canDrop ? baseDimensions.portRadius * 1.5 : baseDimensions.portRadius) : baseDimensions.portRadius
+        
+        const targetFill = isConnectionActive ? (safeCanDrop ? '#4CAF50' : '#ccc') : getPortColor('any')
+        const targetStroke = isConnectionActive ? (safeCanDrop ? '#4CAF50' : '#ff5722') : '#333'
+        const targetStrokeWidth = isConnectionActive ? (safeCanDrop ? 3 : 2) : 2
+        const targetRadius = isConnectionActive ? (safeCanDrop ? baseDimensions.portRadius * 1.5 : baseDimensions.portRadius) : baseDimensions.portRadius
         
         // Only update if values changed to prevent flickering
         const currentFill = portElement.attr('fill')

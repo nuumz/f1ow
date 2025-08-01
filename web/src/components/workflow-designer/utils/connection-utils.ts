@@ -23,7 +23,7 @@ export function calculatePortPosition(
       const dimensions = getShapeAwareDimensions(node)
       const nodeWidth = dimensions.width || 200
       const nodeHeight = dimensions.height || 80
-      const spacing = nodeWidth / (node.bottomPorts.length + 1)
+      const portCount = node.bottomPorts.length
       
       // Adjust for variant scaling
       let scale = 1
@@ -31,7 +31,32 @@ export function calculatePortPosition(
         scale = 0.8
       }
       
-      const portX = nodeX + ((-nodeWidth/2 + spacing * (bottomPortIndex + 1)) * scale)
+      // Use the same sophisticated layout algorithm as WorkflowCanvas
+      // Use the smaller of: 80% width OR (width - 70px)
+      const usableWidth = Math.min(nodeWidth * 0.8, nodeWidth - 70)
+      
+      let relativeX = 0
+      
+      if (portCount === 1) {
+        // Single port: center it
+        relativeX = 0
+      } else if (portCount === 2) {
+        // Two ports: optimized positioning for visual balance
+        const spacing = usableWidth / 3 // Divide available space into thirds
+        const positions = [-spacing, spacing] // Place at 1/3 and 2/3 positions
+        relativeX = positions[bottomPortIndex] || 0
+      } else if (portCount === 3) {
+        // Three ports: center one, balance others
+        const halfWidth = usableWidth / 2
+        const positions = [-halfWidth, 0, halfWidth]
+        relativeX = positions[bottomPortIndex] || 0
+      } else {
+        // Multiple ports (4+): distribute evenly with optimal spacing
+        const spacing = usableWidth / (portCount - 1)
+        relativeX = -usableWidth / 2 + spacing * bottomPortIndex
+      }
+      
+      const portX = nodeX + (relativeX * scale)
       const portY = nodeY + ((nodeHeight/2) * scale) // Position at diamond location (bottom edge of node)
       
       return { x: portX, y: portY }

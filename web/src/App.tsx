@@ -7,7 +7,7 @@ function App() {
     <>
       <RouterProvider router={router} />
       {/* Show devtools in development */}
-      {process.env.NODE_ENV === 'development' && (
+      {process.env.NODE_ENV === 'development' && false && (
         <TanStackRouterDevtools router={router} />
       )}
     </>

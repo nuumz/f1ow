@@ -19,43 +19,43 @@ interface ArchitectureNodePaletteProps {
 // Icon components to avoid creating components inside render
 const iconComponents = {
   // Infrastructure
-  server: ({ size = 16 }) => <Server size={size} />,
-  database: ({ size = 16 }) => <Database size={size} />,
-  loadbalancer: ({ size = 16 }) => <Network size={size} />,
-  cdn: ({ size = 16 }) => <Globe size={size} />,
-  cache: ({ size = 16 }) => <HardDrive size={size} />,
+  server: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Server size={size} {...props} />,
+  database: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Database size={size} {...props} />,
+  loadbalancer: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Network size={size} {...props} />,
+  cdn: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Globe size={size} {...props} />,
+  cache: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <HardDrive size={size} {...props} />,
   
   // Services
-  microservice: ({ size = 16 }) => <Box size={size} />,
-  api: ({ size = 16 }) => <Globe size={size} />,
-  queue: ({ size = 16 }) => <Package size={size} />,
-  storage: ({ size = 16 }) => <Database size={size} />,
+  microservice: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Box size={size} {...props} />,
+  api: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Globe size={size} {...props} />,
+  queue: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Package size={size} {...props} />,
+  storage: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Database size={size} {...props} />,
   
   // Cloud Services
-  cloudfunction: ({ size = 16 }) => <Cloud size={size} />,
-  container: ({ size = 16 }) => <Box size={size} />,
-  kubernetes: ({ size = 16 }) => <Layers size={size} />,
+  cloudfunction: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Cloud size={size} {...props} />,
+  container: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Box size={size} {...props} />,
+  kubernetes: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Layers size={size} {...props} />,
   
   // Security
-  firewall: ({ size = 16 }) => <Shield size={size} />,
-  auth: ({ size = 16 }) => <Lock size={size} />,
+  firewall: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Shield size={size} {...props} />,
+  auth: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Lock size={size} {...props} />,
   
   // External Systems
-  external: ({ size = 16 }) => <Globe size={size} />,
-  thirdparty: ({ size = 16 }) => <Package size={size} />,
+  external: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Globe size={size} {...props} />,
+  thirdparty: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Package size={size} {...props} />,
   
   // Client Applications
-  webapp: ({ size = 16 }) => <Monitor size={size} />,
-  mobile: ({ size = 16 }) => <Smartphone size={size} />,
-  tablet: ({ size = 16 }) => <Tablet size={size} />,
+  webapp: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Monitor size={size} {...props} />,
+  mobile: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Smartphone size={size} {...props} />,
+  tablet: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Tablet size={size} {...props} />,
   
   // Data Flow
-  processor: ({ size = 16 }) => <Cpu size={size} />,
-  pipeline: ({ size = 16 }) => <GitBranch size={size} />,
+  processor: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Cpu size={size} {...props} />,
+  pipeline: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <GitBranch size={size} {...props} />,
   
   // Documentation
-  documentation: ({ size = 16 }) => <FileText size={size} />,
-  team: ({ size = 16 }) => <Users size={size} />,
+  documentation: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <FileText size={size} {...props} />,
+  team: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Users size={size} {...props} />,
 } as const
 
 export default function ArchitectureNodePalette({ 
@@ -278,13 +278,11 @@ export default function ArchitectureNodePalette({
 
   return (
     <BaseNodePalette
-      title="Architecture Components"
       nodes={architectureNodes}
       onAddNode={onAddNode}
       categories={categories}
       enableSearch={true}
       enableCategoryFilter={true}
-      mode="diagram"
       className={`architecture-node-palette ${className}`}
     />
   )

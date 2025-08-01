@@ -3,43 +3,41 @@
  * Unified design system for both Workflow and Architecture node palettes
  */
 
-import React, { useState, useMemo } from 'react'
-import { Search, Filter, X } from 'lucide-react'
+import React, { useState, useMemo, useRef, useEffect } from 'react'
+import { Search, X, Filter, ChevronDown } from 'lucide-react'
 import './BaseNodePalette.css'
 
 export interface NodePaletteItem {
   readonly type: string
   readonly label: string
-  readonly icon: React.ComponentType<{ size?: number }>
+  readonly icon: React.ComponentType<{ size?: number | string; className?: string; [key: string]: unknown }>
   readonly category: string
   readonly description?: string
   readonly color?: string
 }
 
 export interface BaseNodePaletteProps {
-  readonly title: string
   readonly nodes: NodePaletteItem[]
   readonly onAddNode: (type: string, position?: { x: number; y: number }) => void
   readonly categories?: string[]
   readonly enableSearch?: boolean
   readonly enableCategoryFilter?: boolean
-  readonly mode?: string
   readonly className?: string
 }
 
 export default function BaseNodePalette({
-  title,
   nodes,
   onAddNode,
   categories = [],
   enableSearch = true,
   enableCategoryFilter = true,
-  mode,
   className = ''
 }: BaseNodePaletteProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [isSearchFocused, setIsSearchFocused] = useState(false)
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Filter nodes based on search and category
   const filteredNodes = useMemo(() => {
@@ -81,6 +79,22 @@ export default function BaseNodePalette({
     return groups
   }, [filteredNodes])
 
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false)
+      }
+    }
+
+    if (isDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }
+  }, [isDropdownOpen])
+
   const handleDragStart = (e: React.DragEvent, type: string) => {
     e.dataTransfer.setData('application/node-type', type)
     e.dataTransfer.effectAllowed = 'copy'
@@ -109,68 +123,83 @@ export default function BaseNodePalette({
 
   return (
     <div className={`base-node-palette ${className}`}>
-      {/* Header */}
-      <div className="palette-header">
-        <h3 className="palette-title">{title}</h3>
-        {mode && <span className="palette-mode">{mode}</span>}
-      </div>
-
-      {/* Search Bar */}
+      {/* Search Bar with Category Dropdown */}
       {enableSearch && (
         <div className={`search-container ${isSearchFocused ? 'focused' : ''}`}>
-          <Search className="search-icon" size={16} />
-          <input
-            type="text"
-            placeholder="Search nodes..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onFocus={() => setIsSearchFocused(true)}
-            onBlur={() => setIsSearchFocused(false)}
-            className="search-input"
-          />
-          {searchTerm && (
-            <button onClick={clearSearch} className="clear-search">
-              <X size={14} />
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Category Filter */}
-      {enableCategoryFilter && categories.length > 0 && (
-        <div className="category-filter">
-          <div className="filter-header">
-            <Filter size={14} />
-            <span>Categories</span>
-            {(selectedCategory !== 'all' || searchTerm) && (
-              <button onClick={clearFilters} className="clear-filters">
-                Clear
+          {/* Search Input Row */}
+          <div className="search-input-wrapper">
+            <Search className="search-icon" size={16} />
+            <input
+              type="text"
+              placeholder="Search nodes, components, or features..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setIsSearchFocused(false)}
+              className="search-input"
+            />
+            {searchTerm && (
+              <button onClick={clearSearch} className="clear-search">
+                <X size={14} />
               </button>
             )}
           </div>
-          <div className="category-list">
-            <button
-              className={`category-item ${selectedCategory === 'all' ? 'active' : ''}`}
-              onClick={() => setSelectedCategory('all')}
-            >
-              All ({nodes.length})
-            </button>
-            {categories.map(category => {
-              const count = nodes.filter(node => 
-                node.category === category || node.category.startsWith(category)
-              ).length
+          
+          {/* Category Dropdown Row */}
+          {enableCategoryFilter && categories.length > 0 && (
+            <div className="category-dropdown" ref={dropdownRef}>
+              <button 
+                className="category-dropdown-trigger"
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                title="Filter by category"
+              >
+                <div className="category-label">
+                  <Filter size={14} />
+                  <span>
+                    {selectedCategory === 'all' ? 'All Categories' : selectedCategory}
+                  </span>
+                </div>
+                <ChevronDown 
+                  size={12} 
+                  className={`dropdown-chevron ${isDropdownOpen ? 'open' : ''}`} 
+                />
+              </button>
               
-              return (
-                <button
-                  key={category}
-                  className={`category-item ${selectedCategory === category ? 'active' : ''}`}
-                  onClick={() => setSelectedCategory(category)}
-                >
-                  {category} ({count})
-                </button>
-              )
-            })}
-          </div>
+              {isDropdownOpen && (
+                <div className="category-dropdown-menu">
+                  <button
+                    className={`category-dropdown-item ${selectedCategory === 'all' ? 'active' : ''}`}
+                    onClick={() => {
+                      setSelectedCategory('all')
+                      setIsDropdownOpen(false)
+                    }}
+                  >
+                    All Categories{' '}
+                    <span className="count">({nodes.length})</span>
+                  </button>
+                  
+                  {categories.map(category => {
+                    const count = nodes.filter(node => node.category === category).length
+                    if (count === 0) return null
+                    
+                    return (
+                      <button
+                        key={category}
+                        className={`category-dropdown-item ${selectedCategory === category ? 'active' : ''}`}
+                        onClick={() => {
+                          setSelectedCategory(category)
+                          setIsDropdownOpen(false)
+                        }}
+                      >
+                        {category}{' '}
+                        <span className="count">({count})</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -179,6 +208,9 @@ export default function BaseNodePalette({
         <span>{filteredNodes.length} nodes</span>
         {searchTerm && (
           <span className="search-info">for "{searchTerm}"</span>
+        )}
+        {selectedCategory !== 'all' && (
+          <span className="search-info"> in {selectedCategory}</span>
         )}
       </div>
 
@@ -204,10 +236,9 @@ export default function BaseNodePalette({
                 {categoryNodes.map(node => {
                   const Icon = node.icon
                   return (
-                    <div
+                    <button
                       key={node.type}
                       className="node-item"
-                      role="button"
                       tabIndex={0}
                       draggable
                       onDragStart={(e) => handleDragStart(e, node.type)}
@@ -233,7 +264,7 @@ export default function BaseNodePalette({
                           <span className="node-description">{node.description}</span>
                         )}
                       </div>
-                    </div>
+                    </button>
                   )
                 })}
               </div>

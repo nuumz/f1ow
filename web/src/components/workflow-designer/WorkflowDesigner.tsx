@@ -83,6 +83,9 @@ function WorkflowDesignerContent({
   // File operations
   const [isLoading, setIsLoading] = useState(false)
   
+  // Workflow name editing state
+  const [isEditingName, setIsEditingName] = useState(false)
+  
   // Architecture dropdown state
   const [architectureDropdownOpen, setArchitectureDropdownOpen] = useState(false)
   const [currentArchitectureLayout, setCurrentArchitectureLayout] = useState('microservices')
@@ -252,14 +255,36 @@ function WorkflowDesignerContent({
       {showToolbar && (
         <div className="workflow-designer-header">
           <div className="workflow-name-section">
-            <input
-              type="text"
-              value={state.workflowName}
-              onChange={(e) => operations.setWorkflowName(e.target.value)}
-              className="workflow-name-input"
-              placeholder="Workflow Name"
-              disabled={readOnly}
-            />
+            {isEditingName ? (
+              <input
+                type="text"
+                value={state.workflowName}
+                onChange={(e) => operations.setWorkflowName(e.target.value)}
+                onBlur={() => setIsEditingName(false)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setIsEditingName(false)
+                  }
+                }}
+                className="workflow-name-input"
+                placeholder="Workflow Name"
+                disabled={readOnly}
+                autoFocus
+              />
+            ) : (
+              <div 
+                className="workflow-name-display"
+                onClick={() => !readOnly && setIsEditingName(true)}
+                style={{ cursor: readOnly ? 'default' : 'pointer' }}
+              >
+                <span className="workflow-name-label">
+                  {state.workflowName || 'Unnamed Workflow'}
+                </span>
+                <span className={`workflow-mode-badge ${state.designerMode}`}>
+                  {state.designerMode === 'workflow' ? 'Workflow' : 'Architecture'}
+                </span>
+              </div>
+            )}
           </div>
           
           <div className="workflow-actions">
@@ -388,15 +413,17 @@ function WorkflowDesignerContent({
                   {isLoading ? 'Saving...' : 'Save'}
                 </button>
                 
-                <button 
-                  onClick={handleExecute}
-                  className="action-button execute-button"
-                  title="Execute Workflow"
-                  disabled={state.executionState.status === 'running' || isLoading || state.nodes.length === 0}
-                >
-                  <Play size={16} />
-                  {state.executionState.status === 'running' ? 'Running...' : 'Execute'}
-                </button>
+{state.designerMode === 'workflow' && (
+                  <button 
+                    onClick={handleExecute}
+                    className="action-button execute-button"
+                    title="Execute Workflow"
+                    disabled={state.executionState.status === 'running' || isLoading || state.nodes.length === 0}
+                  >
+                    <Play size={16} />
+                    {state.executionState.status === 'running' ? 'Running...' : 'Execute'}
+                  </button>
+                )}
               </>
             )}
             
@@ -567,7 +594,9 @@ function WorkflowDesignerContent({
               onZoomOut={canvas.zoomOut}
               onFitToScreen={() => canvas.fitToScreen(state.nodes)}
               onResetPosition={() => canvas.resetCanvasPosition(state.nodes)}
-              executionStatus={state.executionState.status === 'paused' ? 'idle' : state.executionState.status}
+{...(state.designerMode === 'workflow' && { 
+                executionStatus: state.executionState.status === 'paused' ? 'idle' : state.executionState.status 
+              })}
               selectedNodeCount={state.selectedNodes.size}
               onDeleteSelected={state.selectedNodes.size > 0 ? () => {
                 Array.from(state.selectedNodes).forEach(nodeId => {
@@ -615,7 +644,7 @@ function WorkflowDesignerContent({
             <span>Connections: {state.connections.length}</span>
             <span>Selected: {state.selectedNodes.size}</span>
             <span>Zoom: {Math.round(state.canvasTransform.k * 100)}%</span>
-            {state.executionState.status !== 'idle' && (
+{state.designerMode === 'workflow' && state.executionState.status !== 'idle' && (
               <span>Status: {state.executionState.status}</span>
             )}
           </div>
@@ -624,23 +653,25 @@ function WorkflowDesignerContent({
             <AutoSaveStatus showFullStatus={false} />
           </div>
           
-          <div className="execution-status">
-            <span className={`execution-status__indicator execution-status__indicator--${state.executionState.status}`}>
-              {state.executionState.status.toUpperCase()}
-            </span>
-            {state.executionState.currentNode && (
-              <span>Current: {state.executionState.currentNode}</span>
-            )}
-            {state.executionState.status === 'completed' && state.executionState.endTime && state.executionState.startTime && (() => {
-              const duration = Math.round((state.executionState.endTime - state.executionState.startTime) / 1000)
-              return <span>Duration: {duration}s</span>
-            })()}
-          </div>
+{state.designerMode === 'workflow' && (
+            <div className="execution-status">
+              <span className={`execution-status__indicator execution-status__indicator--${state.executionState.status}`}>
+                {state.executionState.status.toUpperCase()}
+              </span>
+              {state.executionState.currentNode && (
+                <span>Current: {state.executionState.currentNode}</span>
+              )}
+              {state.executionState.status === 'completed' && state.executionState.endTime && state.executionState.startTime && (() => {
+                const duration = Math.round((state.executionState.endTime - state.executionState.startTime) / 1000)
+                return <span>Duration: {duration}s</span>
+              })()}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Execution Logs (if running) */}
-      {state.executionState.status === 'running' && state.executionState.logs.length > 0 && (
+      {/* Execution Logs (if running) - Only show in workflow mode */}
+      {state.designerMode === 'workflow' && state.executionState.status === 'running' && state.executionState.logs.length > 0 && (
         <div className="execution-logs">
           <h3>Execution Logs</h3>
           <div className="logs-container">

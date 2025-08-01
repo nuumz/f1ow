@@ -18,27 +18,27 @@ interface WorkflowNodePaletteProps {
 
 // Icon components to avoid creating components inside render
 const iconComponents = {
-  start: ({ size = 16 }) => <Zap size={size} />,
-  if: ({ size = 16 }) => <GitBranch size={size} />,
-  loop: ({ size = 16 }) => <Repeat size={size} />,
-  subworkflow: ({ size = 16 }) => <Package size={size} />,
-  set: ({ size = 16 }) => <Code size={size} />,
-  json: ({ size = 16 }) => <FileText size={size} />,
-  transform: ({ size = 16 }) => <Map size={size} />,
-  filter: ({ size = 16 }) => <Filter size={size} />,
-  calculate: ({ size = 16 }) => <Calculator size={size} />,
-  http: ({ size = 16 }) => <Globe size={size} />,
-  email: ({ size = 16 }) => <Mail size={size} />,
-  mysql: ({ size = 16 }) => <Database size={size} />,
-  postgresql: ({ size = 16 }) => <Database size={size} />,
-  aiagent: ({ size = 16 }) => <Bot size={size} />,
-  openai: ({ size = 16 }) => <Brain size={size} />,
-  schedule: ({ size = 16 }) => <Clock size={size} />,
-  webhook: ({ size = 16 }) => <Globe size={size} />,
-  auth: ({ size = 16 }) => <Key size={size} />,
-  encrypt: ({ size = 16 }) => <Shield size={size} />,
-  delay: ({ size = 16 }) => <Pause size={size} />,
-  config: ({ size = 16 }) => <Settings size={size} />,
+  start: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Zap size={size} {...props} />,
+  if: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <GitBranch size={size} {...props} />,
+  loop: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Repeat size={size} {...props} />,
+  subworkflow: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Package size={size} {...props} />,
+  set: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Code size={size} {...props} />,
+  json: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <FileText size={size} {...props} />,
+  transform: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Map size={size} {...props} />,
+  filter: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Filter size={size} {...props} />,
+  calculate: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Calculator size={size} {...props} />,
+  http: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Globe size={size} {...props} />,
+  email: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Mail size={size} {...props} />,
+  mysql: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Database size={size} {...props} />,
+  postgresql: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Database size={size} {...props} />,
+  aiagent: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Bot size={size} {...props} />,
+  openai: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Brain size={size} {...props} />,
+  schedule: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Clock size={size} {...props} />,
+  webhook: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Globe size={size} {...props} />,
+  auth: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Key size={size} {...props} />,
+  encrypt: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Shield size={size} {...props} />,
+  delay: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Pause size={size} {...props} />,
+  config: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Settings size={size} {...props} />,
 } as const
 
 export default function WorkflowNodePalette({ 
@@ -245,13 +245,11 @@ export default function WorkflowNodePalette({
 
   return (
     <BaseNodePalette
-      title="Workflow Nodes"
       nodes={workflowNodes}
       onAddNode={onAddNode}
       categories={categories}
       enableSearch={true}
       enableCategoryFilter={true}
-      mode="automation"
       className={`workflow-node-palette ${className}`}
     />
   )

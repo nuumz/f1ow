@@ -956,6 +956,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .scaleExtent([0.2, 4])
       .on('zoom', (event) => {
         const transform = event.transform
+        console.log('🔍 D3 zoom event:', { x: transform.x, y: transform.y, k: transform.k })
+        
         g.attr('transform', transform.toString())
         !!onZoomLevelChange && currentTransformRef.current.k!=transform.k && onZoomLevelChange(transform.k)
         createGrid(gridLayer, transform, rect.width, rect.height)

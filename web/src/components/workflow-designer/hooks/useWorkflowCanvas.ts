@@ -88,19 +88,32 @@ export function useWorkflowCanvas() {
 
     // Find the leftmost node
     const leftmostNode = nodesToUse.reduce((leftmost, current) => 
-      current.x < leftmost.x ? current : leftmost
+      current.x < leftmost.x ? current : leftmost, nodesToUse[0]
     )
 
     // Focus on the center of the leftmost node
     const centerX = leftmostNode.x
     const centerY = leftmostNode.y
 
-    // Reset to 100% zoom (scale = 1) and center the content
+    // Reset to 100% zoom (scale = 1) and position the content based on node count
     const scale = 1
 
-    // Calculate translation to center content at 100% zoom
-    const translateX = viewportWidth / 2 - centerX * scale
-    const translateY = viewportHeight / 2 - centerY * scale
+    // Calculate translation based on number of nodes
+    let translateX: number, translateY: number
+    
+    if (nodesToUse.length === 1) {
+      // Single node: focus at center (50%, 50%)
+      const focusX = viewportWidth * 0.5   // 50% from left (center)
+      const focusY = viewportHeight * 0.5  // 50% from top (center)
+      translateX = focusX - centerX * scale
+      translateY = focusY - centerY * scale
+    } else {
+      // Multiple nodes: focus at 30% from left, 40% from top
+      const focusX = viewportWidth * 0.3   // 30% from left
+      const focusY = viewportHeight * 0.4  // 40% from top
+      translateX = focusX - centerX * scale
+      translateY = focusY - centerY * scale
+    }
 
     const newTransform = { x: translateX, y: translateY, k: scale }
     
@@ -119,8 +132,6 @@ export function useWorkflowCanvas() {
 
   const fitToScreen = useCallback((nodes?: WorkflowNode[], getNodeHeightFn = getNodeHeight) => {
     const nodesToUse = nodes || state.nodes
-    
-    console.log('🔍 fitToScreen called with', nodesToUse.length, 'nodes')
     
     if (!svgRef.current) {
       console.warn('SVG ref not available')
@@ -189,20 +200,11 @@ export function useWorkflowCanvas() {
     const scaleY = viewportHeight / boundingHeight
     const scale = Math.max(0.1, Math.min(scaleX, scaleY, 3)) // Min scale of 0.1, max scale of 3
 
-    console.log('🔍 fitToScreen calculations:', {
-      viewport: { width: viewportWidth, height: viewportHeight },
-      bounding: { width: boundingWidth, height: boundingHeight },
-      scales: { scaleX, scaleY, final: scale },
-      center: { centerX, centerY }
-    })
-
-    // Calculate translation to center content
+    // Calculate translation to center content (fitToScreen always centers)
     const translateX = viewportWidth / 2 - centerX * scale
     const translateY = viewportHeight / 2 - centerY * scale
 
     const newTransform = { x: translateX, y: translateY, k: scale }
-    
-    console.log('🔍 fitToScreen transform:', newTransform)
     
     // Only dispatch if transform actually changed
     const currentTransform = state.canvasTransform
@@ -223,16 +225,37 @@ export function useWorkflowCanvas() {
       return
     }
     
-    // Use d3 zoom behavior for proper event handling
-    const svg = d3.select(svgRef.current)
-    const currentScale = canvasTransformRef.current.k
-    const newScale = Math.min(currentScale * 1.2, 3)
+    // Calculate new scale
+    const currentTransform = state.canvasTransform
+    const newScale = Math.min(currentTransform.k * 1.2, 3)
     
-    if (Math.abs(newScale - currentScale) < 0.001) return
+    if (Math.abs(newScale - currentTransform.k) < 0.001) {
+      return
+    }
     
-    const transition = svg.transition().duration(150)
-    transition.call(zoomBehaviorRef.current.scaleBy, newScale / currentScale)
-  }, [svgRef])
+    try {
+      // Create new transform preserving position but adjusting for zoom center
+      const svg = d3.select(svgRef.current)
+      const rect = svgRef.current.getBoundingClientRect()
+      const centerX = rect.width / 2
+      const centerY = rect.height / 2
+      
+      // Calculate new position to zoom towards center
+      const scaleRatio = newScale / currentTransform.k
+      const newX = centerX - (centerX - currentTransform.x) * scaleRatio
+      const newY = centerY - (centerY - currentTransform.y) * scaleRatio
+      
+      const newTransform = d3.zoomIdentity
+        .translate(newX, newY)
+        .scale(newScale)
+      
+      // Apply transform without transition first
+      svg.call(zoomBehaviorRef.current.transform, newTransform)
+      
+    } catch (error) {
+      console.error('🔍 zoomIn - error:', error)
+    }
+  }, [state.canvasTransform, svgRef])
 
   const zoomOut = useCallback(() => {
     if (!svgRef.current || !zoomBehaviorRef.current) {
@@ -240,16 +263,37 @@ export function useWorkflowCanvas() {
       return
     }
     
-    // Use d3 zoom behavior for proper event handling
-    const svg = d3.select(svgRef.current)
-    const currentScale = canvasTransformRef.current.k
-    const newScale = Math.max(currentScale / 1.2, 0.2)
+    // Calculate new scale
+    const currentTransform = state.canvasTransform
+    const newScale = Math.max(currentTransform.k / 1.2, 0.2)
     
-    if (Math.abs(newScale - currentScale) < 0.001) return
+    if (Math.abs(newScale - currentTransform.k) < 0.001) {
+      return
+    }
     
-    const transition = svg.transition().duration(150)
-    transition.call(zoomBehaviorRef.current.scaleBy, newScale / currentScale)
-  }, [svgRef])
+    try {
+      // Create new transform preserving position but adjusting for zoom center
+      const svg = d3.select(svgRef.current)
+      const rect = svgRef.current.getBoundingClientRect()
+      const centerX = rect.width / 2
+      const centerY = rect.height / 2
+      
+      // Calculate new position to zoom towards center
+      const scaleRatio = newScale / currentTransform.k
+      const newX = centerX - (centerX - currentTransform.x) * scaleRatio
+      const newY = centerY - (centerY - currentTransform.y) * scaleRatio
+      
+      const newTransform = d3.zoomIdentity
+        .translate(newX, newY)
+        .scale(newScale)
+      
+      // Apply transform without transition first
+      svg.call(zoomBehaviorRef.current.transform, newTransform)
+      
+    } catch (error) {
+      console.error('🔍 zoomOut - error:', error)
+    }
+  }, [state.canvasTransform, svgRef])
 
   const setZoomLevel = useCallback((zoomLevel: number) => {
     if (!svgRef.current || !zoomBehaviorRef.current) {

@@ -766,6 +766,10 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     })
   })
   
+  // Create stable refs for current state to avoid stale closures
+  const currentStateRef = useRef(state)
+  currentStateRef.current = state
+  
   // Refs
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -891,16 +895,23 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
   }, [dispatch])
   
   const endDragging = useCallback(() => {
+    const currentState = currentStateRef.current
+    
+    // Prevent duplicate calls when already not dragging
+    if (!currentState.draggingState.isDragging) {
+      return
+    }
+    
     dispatch({ type: 'END_DRAGGING' })
   }, [dispatch])
   
   const isDragging = useCallback(() => {
-    return state.draggingState.isDragging
-  }, [state.draggingState.isDragging])
+    return currentStateRef.current.draggingState.isDragging
+  }, [])
   
   const getDraggedNodeId = useCallback(() => {
-    return state.draggingState.draggedNodeId
-  }, [state.draggingState.draggedNodeId])
+    return currentStateRef.current.draggingState.draggedNodeId
+  }, [])
   
   // Set up auto-save state callback
   useEffect(() => {

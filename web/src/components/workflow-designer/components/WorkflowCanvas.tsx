@@ -868,6 +868,22 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     }
   }, [selectedNodes, isNodeSelected, isInitialized, isDragging, draggedNodeId])
 
+  // Monitor drag state changes to clean up DOM classes
+  useEffect(() => {
+    if (!svgRef.current) return
+    
+    const svg = d3.select(svgRef.current)
+    
+    // If we're not dragging, remove all dragging classes
+    if (!isDragging) {
+      svg.selectAll('.node.dragging').classed('dragging', false)
+      // Clear draggedElementRef when not dragging
+      if (draggedElementRef.current) {
+        draggedElementRef.current = null
+      }
+    }
+  }, [isDragging, draggedNodeId]) // svgRef doesn't need to be in deps as it's stable
+
   // Main D3 rendering effect - split into smaller, focused effects
   useEffect(() => {
     if (!svgRef.current) return
@@ -1069,9 +1085,22 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       delete dragData.hasDragged
       delete dragData.dragStartTime
 
-      // End dragging in context
-      endDragging()
+      // Only end dragging if we're still in drag state to prevent premature cleanup
+      const currentDraggedNodeId = getDraggedNodeId()
+      const isCurrentlyDragging = isContextDragging()
+      
+      // Always end dragging first, then clean up DOM
+      if (isCurrentlyDragging && currentDraggedNodeId === d.id) {
+        endDragging()
+      }
+      
+      // ALWAYS remove dragging class after drag ends, regardless of state
       nodeElement.classed('dragging', false)
+      
+      // Clear draggedElementRef if it points to this element
+      if (draggedElementRef.current && draggedElementRef.current.node() === this) {
+        draggedElementRef.current = null
+      }
 
       // Clear drag position tracking and remove from update queues
       currentDragPositionsRef.current.delete(d.id)
@@ -1334,7 +1363,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       const nodeElement = d3.select(this)
       const isSelected = isNodeSelected(d.id)
       
-      // Enhanced dragging state detection with context-based state
+      // Enhanced dragging state detection with context-based state using fresh values
       let isNodeDragging = false
       const currentDraggedNodeId = getDraggedNodeId()
       const isCurrentlyDragging = isContextDragging()
@@ -1342,7 +1371,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       // Check current DOM state first to preserve existing dragging class
       const hasExistingDraggingClass = nodeElement.classed('dragging')
       
-      if (isCurrentlyDragging && currentDraggedNodeId === d.id) {
+      // Only process drag state if we have valid context state
+      if (currentDraggedNodeId && isCurrentlyDragging && currentDraggedNodeId === d.id) {
         // Force apply dragging class for the dragged node - no stale checks during active drag
         if (!hasExistingDraggingClass) {
           nodeElement.classed('dragging', true)
@@ -1354,7 +1384,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         if (!currentDraggedElement || currentDraggedElement.node() !== this) {
           draggedElementRef.current = nodeElement
         }
-      } else if (isCurrentlyDragging && currentDraggedNodeId !== d.id) {
+      } else if (isCurrentlyDragging && currentDraggedNodeId && currentDraggedNodeId !== d.id) {
         // For other nodes during drag, ensure dragging class is removed
         if (hasExistingDraggingClass) {
           nodeElement.classed('dragging', false)
@@ -1369,31 +1399,34 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         isNodeDragging = hasExistingDraggingClass
       }
       
+      // Fallback cleanup: Force remove dragging class if context says we're not dragging
+      if (!isCurrentlyDragging && hasExistingDraggingClass) {
+        nodeElement.classed('dragging', false)
+        isNodeDragging = false
+      }
+      
       const nodeBackground = nodeElement.select('.node-background')
       
       // Apply CSS classes
       nodeElement.classed('selected', isSelected)
       
-      // Apply visual styling
+      // Apply visual styling with consistent blue border for selected/dragging states
       let opacity = 1
       let filter = 'none'
       let strokeColor = getNodeColor(d.type, d.status)
       let strokeWidth = 2
       
-      if (isNodeDragging) {
-        opacity = 0.9
-        filter = 'drop-shadow(0 6px 12px rgba(0, 0, 0, 0.3))'
-        if (isSelected) {
-          strokeColor = '#2196F3' // Blue for selected+dragging
-          strokeWidth = 3
-        } else {
-          strokeColor = getNodeColor(d.type, d.status) // Original color for just dragging
-          strokeWidth = 3
-        }
-      } else if (isSelected) {
-        filter = 'drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))'
-        strokeColor = '#2196F3'
+      // Priority: Selected OR Dragging should use blue border
+      if (isSelected || isNodeDragging) {
+        strokeColor = '#2196F3' // Always use blue for selected or dragging
         strokeWidth = 3
+        
+        if (isNodeDragging) {
+          opacity = 0.9
+          filter = 'drop-shadow(0 6px 12px rgba(0, 0, 0, 0.3))'
+        } else if (isSelected) {
+          filter = 'drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))'
+        }
       }
       
       nodeElement
@@ -2285,8 +2318,17 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         dragStateCleanupRef.current = null
       }
       
-      // Reset all dragging state references (now handled by context)
-      endDragging()
+      // Force remove all dragging classes before cleanup
+      svg.selectAll('.node.dragging').classed('dragging', false)
+      
+      // Only reset dragging state if component is actually unmounting
+      // Check if we're in middle of a drag operation - if so, preserve state
+      const currentlyDragging = isContextDragging()
+      if (!currentlyDragging) {
+        // Reset all dragging state references only when not actively dragging
+        endDragging()
+      }
+      
       draggedElementRef.current = null
       draggedNodeElementRef.current = null
       

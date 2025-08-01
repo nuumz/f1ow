@@ -61,7 +61,7 @@ export default function CanvasToolbar({
             title="Zoom In"
             disabled={zoomLevel >= 3}
           >
-            <ZoomIn size={14} />
+            <ZoomIn size={16} />
           </button>
           <button 
             onClick={onZoomOut} 
@@ -69,7 +69,7 @@ export default function CanvasToolbar({
             title="Zoom Out"
             disabled={zoomLevel <= 0.2}
           >
-            <ZoomOut size={14} />
+            <ZoomOut size={16} />
           </button>
           <span className="zoom-display">{Math.round(zoomLevel * 100)}%</span>
         </div>
@@ -83,43 +83,24 @@ export default function CanvasToolbar({
             className="control-btn" 
             title="Fit to Screen"
           >
-            <Maximize2 size={14} />
+            <Maximize2 size={16} />
           </button>
           <button 
             onClick={onResetPosition} 
             className="control-btn" 
             title="Reset Position"
           >
-            <RotateCcw size={14} />
+            <RotateCcw size={16} />
           </button>
           <button 
             onClick={onToggleGrid}
             className={`control-btn ${showGrid ? 'active' : ''}`}
             title={showGrid ? 'Hide Grid' : 'Show Grid'}
           >
-            {showGrid ? <EyeOff size={14} /> : <Eye size={14} />}
+            {showGrid ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>
         </div>
       </div>
-
-      {/* Node Display Controls */}
-      {onVariantChange && (
-        <div className="toolbar-section">
-          <div className="node-display-controls">
-            <div className="control-group">
-              <label>Style:</label>
-              <select 
-                value={nodeVariant} 
-                onChange={(e) => onVariantChange(e.target.value as NodeVariant)}
-                className="control-select"
-              >
-                <option value="compact">Compact</option>
-                <option value="standard">Standard</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Selection Info */}
       {selectedNodeCount > 0 && (
@@ -130,7 +111,7 @@ export default function CanvasToolbar({
                 className="control-btn delete-btn"
                 title={`Delete ${selectedNodeCount > 1 ? 'selected nodes' : 'selected node'}`}
               >
-                <Trash2 size={12} />
+                <Trash2 size={16} />
               </button>
             )}
         </div>
@@ -146,7 +127,7 @@ export default function CanvasToolbar({
                 className="control-btn save-btn"
                 title="Save Workflow"
               >
-                <Save size={12} />
+                <Save size={16} />
                 <span>Save</span>
               </button>
             )}
@@ -157,7 +138,7 @@ export default function CanvasToolbar({
                 title="Execute Workflow"
                 disabled={executionStatus === 'running'}
               >
-                <Play size={12} />
+                <Play size={16} />
                 <span>
                   {executionStatus === 'running' ? 'Running...' : 'Execute'}
                 </span>

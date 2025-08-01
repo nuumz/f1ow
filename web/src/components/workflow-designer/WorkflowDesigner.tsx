@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useState } from 'react'
-import { Save, Play, Download, Upload, Clock, Layers } from 'lucide-react'
+import { Save, Play, Download, Upload, Clock, Layers, ChevronDown, Box, Webhook, Target, Network, Grid, Eye, Settings } from 'lucide-react'
 
 // Import CSS styles
 import './WorkflowDesigner.css'
@@ -20,7 +20,6 @@ import NodeEditor from '../NodeEditor'
 
 // Import Architecture Components
 import ArchitectureNodePalette from './components/ArchitectureNodePalette'
-import ArchitectureToolbar from './components/ArchitectureToolbar'
 import { ArchitectureNodeDefinitions } from './types/architecture'
 
 // Import types
@@ -83,6 +82,11 @@ function WorkflowDesignerContent({
 
   // File operations
   const [isLoading, setIsLoading] = useState(false)
+  
+  // Architecture dropdown state
+  const [architectureDropdownOpen, setArchitectureDropdownOpen] = useState(false)
+  const [currentArchitectureLayout, setCurrentArchitectureLayout] = useState('microservices')
+  const [currentArchitectureView, setCurrentArchitectureView] = useState('context')
 
   // Mode switching handler
   const handleModeSwitch = useCallback(() => {
@@ -217,6 +221,23 @@ function WorkflowDesignerContent({
     }
   }, [handlers.handleKeyDown])
 
+  // Close architecture dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (architectureDropdownOpen) {
+        const target = event.target as Element
+        if (!target.closest('.architecture-dropdown-container')) {
+          setArchitectureDropdownOpen(false)
+        }
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [architectureDropdownOpen])
+
   return (
     <div className={`workflow-designer ${className}`}>
       {/* Notifications */}
@@ -251,6 +272,109 @@ function WorkflowDesignerContent({
               <Layers size={16} />
               {state.designerMode === 'workflow' ? 'Architecture' : 'Workflow'}
             </button>
+
+            {/* Architecture Dropdown - Only show in architecture mode */}
+            {state.designerMode === 'architecture' && (
+              <div className="architecture-dropdown-container">
+                <button
+                  onClick={() => setArchitectureDropdownOpen(!architectureDropdownOpen)}
+                  className="action-button architecture-dropdown-button"
+                  title="Architecture Settings"
+                >
+                  <Settings size={16} />
+                  <span>
+                    {currentArchitectureLayout === 'microservices' && <Box size={14} />}
+                    {currentArchitectureLayout === 'api-first' && <Webhook size={14} />}
+                    {currentArchitectureLayout === 'domain-driven' && <Target size={14} />}
+                    {currentArchitectureLayout === 'service-mesh' && <Network size={14} />}
+                    {currentArchitectureLayout.charAt(0).toUpperCase() + currentArchitectureLayout.slice(1).replace('-', ' ')}
+                  </span>
+                  <ChevronDown size={14} className={architectureDropdownOpen ? 'rotate-180' : ''} />
+                </button>
+
+                {architectureDropdownOpen && (
+                  <div className="architecture-dropdown-menu">
+                    <div className="dropdown-section">
+                      <div className="dropdown-section-title">Layout Mode</div>
+                      <div className="dropdown-options">
+                        {[
+                          { id: 'microservices', label: 'Microservices', icon: Box },
+                          { id: 'api-first', label: 'API First', icon: Webhook },
+                          { id: 'domain-driven', label: 'Domain Driven', icon: Target },
+                          { id: 'service-mesh', label: 'Service Mesh', icon: Network }
+                        ].map(layout => {
+                          const IconComponent = layout.icon
+                          return (
+                            <button
+                              key={layout.id}
+                              onClick={() => {
+                                setCurrentArchitectureLayout(layout.id)
+                                // Auto-switch view mode
+                                const viewMapping = {
+                                  'microservices': 'context',
+                                  'api-first': 'api-flow',
+                                  'domain-driven': 'domain-driven',
+                                  'service-mesh': 'service-mesh'
+                                }
+                                setCurrentArchitectureView(viewMapping[layout.id as keyof typeof viewMapping])
+                                setArchitectureDropdownOpen(false) // Close dropdown
+                              }}
+                              className={`dropdown-option ${currentArchitectureLayout === layout.id ? 'active' : ''}`}
+                            >
+                              <IconComponent size={16} />
+                              {layout.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="dropdown-section">
+                      <div className="dropdown-section-title">View Mode</div>
+                      <div className="dropdown-options">
+                        {[
+                          { id: 'context', label: 'Context', icon: Grid },
+                          { id: 'api-flow', label: 'API Flow', icon: Webhook },
+                          { id: 'service-mesh', label: 'Service Mesh', icon: Network },
+                          { id: 'domain-driven', label: 'Domain Model', icon: Target }
+                        ].map(view => {
+                          const IconComponent = view.icon
+                          return (
+                            <button
+                              key={view.id}
+                              onClick={() => {
+                                setCurrentArchitectureView(view.id)
+                                setArchitectureDropdownOpen(false) // Close dropdown
+                              }}
+                              className={`dropdown-option ${currentArchitectureView === view.id ? 'active' : ''}`}
+                            >
+                              <IconComponent size={14} />
+                              {view.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="dropdown-section">
+                      <div className="dropdown-section-title">View Options</div>
+                      <div className="dropdown-options">
+                        <label className="dropdown-toggle">
+                          <input type="checkbox" defaultChecked />
+                          <Grid size={14} />
+                          Show Grid
+                        </label>
+                        <label className="dropdown-toggle">
+                          <input type="checkbox" defaultChecked />
+                          <Eye size={14} />
+                          Show Labels
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {!readOnly && (
               <>
@@ -326,22 +450,6 @@ function WorkflowDesignerContent({
               />
             )}
           </div>
-        )}
-
-        {/* Architecture Layout Toolbar - Only show in architecture mode */}
-        {state.designerMode === 'architecture' && (
-          <ArchitectureToolbar
-            onAutoLayout={() => console.log('Auto layout triggered')}
-            onGridToggle={(enabled) => console.log('Grid toggle:', enabled)}
-            onLayerToggle={(layer, visible) => console.log('Layer toggle:', layer, visible)}
-            onAlignNodes={(direction) => console.log('Align nodes:', direction)}
-            onZoom={(factor) => console.log('Zoom:', factor)}
-            onResetView={() => console.log('Reset view')}
-            onSave={() => handleSave()}
-            onExport={() => console.log('Export')}
-            onShare={() => console.log('Share')}
-            onSettings={() => console.log('Settings')}
-          />
         )}
 
         {/* Canvas Container - Shared for both modes */}

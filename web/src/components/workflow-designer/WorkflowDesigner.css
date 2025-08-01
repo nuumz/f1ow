@@ -406,6 +406,194 @@
   transform: translateY(-1px);
 }
 
+/* Architecture Dropdown Styles */
+.architecture-dropdown-container {
+  position: relative;
+  display: inline-block;
+}
+
+.architecture-dropdown-button {
+  position: relative;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border: none;
+  color: white;
+  font-weight: 500;
+  min-width: 180px;
+  justify-content: space-between;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.architecture-dropdown-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.architecture-dropdown-button span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.architecture-dropdown-button .rotate-180 {
+  transform: rotate(180deg);
+}
+
+.architecture-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 
+    0 10px 25px rgba(0, 0, 0, 0.1),
+    0 4px 6px rgba(0, 0, 0, 0.05);
+  z-index: var(--z-dropdown);
+  padding: 8px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: dropdownSlideIn 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+@keyframes dropdownSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dropdown-section {
+  margin-bottom: 8px;
+}
+
+.dropdown-section:last-child {
+  margin-bottom: 0;
+}
+
+.dropdown-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+  padding: 0 8px;
+}
+
+.dropdown-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dropdown-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  width: 100%;
+}
+
+.dropdown-option:hover {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+.dropdown-option.active {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.25);
+}
+
+.dropdown-option.active:hover {
+  background: linear-gradient(135deg, #2563eb, #1e40af);
+  box-shadow: 0 3px 10px rgba(59, 130, 246, 0.3);
+}
+
+.dropdown-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  transition: all 0.2s ease;
+}
+
+.dropdown-toggle:hover {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+.dropdown-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1px solid #d1d5db;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dropdown-toggle input[type="checkbox"]:checked {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='m13.854 3.646-7.5 7.5a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6 10.293l7.146-7.147a.5.5 0 0 1 .708.708z'/%3e%3c/svg%3e");
+}
+
+/* Responsive Architecture Dropdown */
+@media (max-width: 768px) {
+  .architecture-dropdown-button {
+    min-width: 140px;
+    padding: 6px 12px;
+  }
+  
+  .architecture-dropdown-button span {
+    font-size: 12px;
+  }
+  
+  .architecture-dropdown-menu {
+    left: -50px;
+    right: -50px;
+    width: auto;
+  }
+  
+  .dropdown-option {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .architecture-dropdown-button {
+    min-width: 120px;
+  }
+  
+  .architecture-dropdown-menu {
+    left: -100px;
+    right: -100px;
+  }
+}
+
 .import-button:not(.disabled) {
   background: #f59e0b;
   color: white;

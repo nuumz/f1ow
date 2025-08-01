@@ -1,23 +1,29 @@
 /**
- * Architecture Toolbar - Modern Design System
- * Consistent with BaseNodePalette and unified design principles
+ * Architecture Toolbar - Enhanced Modern Design System
+ * Premium UI with glass morphism and micro-interactions
  */
 
 .architecture-toolbar {
   display: flex;
   align-items: center;
-  gap: 24px;
-  padding: 16px 20px;
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  border-bottom: 1px solid #e2e8f0;
+  gap: 20px;
+  padding: 12px 24px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
   border-radius: 0;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-  min-height: 64px;
+  box-shadow: 
+    0 1px 3px rgba(0, 0, 0, 0.05),
+    0 8px 32px rgba(0, 0, 0, 0.02),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  min-height: 68px;
   overflow-x: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
   position: relative;
-  animation: slideInDown 0.3s ease-out;
+  animation: slideInDown 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  z-index: 100;
 }
 
 .architecture-toolbar::-webkit-scrollbar {
@@ -26,28 +32,260 @@
 
 /* Disabled state */
 .architecture-toolbar.disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   pointer-events: none;
+  filter: grayscale(0.3);
 }
 
-/* Toolbar Groups */
+/* Layout Selector - Architecture Specific */
+.layout-selector {
+  display: flex;
+  gap: 8px;
+  background: rgba(248, 250, 252, 0.9);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  border-radius: 12px;
+  padding: 6px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.layout-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary, #64748b);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  position: relative;
+  white-space: nowrap;
+}
+
+.layout-btn:hover {
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--text-primary, #1e293b);
+  transform: translateY(-1px);
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.08),
+    0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.layout-btn.active {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  box-shadow: 
+    0 4px 14px rgba(59, 130, 246, 0.25),
+    0 2px 8px rgba(59, 130, 246, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.layout-btn.active:hover {
+  transform: translateY(-1px);
+  box-shadow: 
+    0 6px 20px rgba(59, 130, 246, 0.3),
+    0 3px 10px rgba(59, 130, 246, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* View Mode Selector */
+.view-mode-selector {
+  display: flex;
+  gap: 6px;
+  background: rgba(248, 250, 252, 0.9);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  border-radius: 10px;
+  padding: 4px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.view-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary, #64748b);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  position: relative;
+  white-space: nowrap;
+}
+
+.view-mode-btn:hover {
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--text-primary, #1e293b);
+  transform: translateY(-0.5px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.view-mode-btn.active {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  box-shadow: 
+    0 3px 10px rgba(16, 185, 129, 0.25),
+    0 1px 6px rgba(16, 185, 129, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.view-mode-btn.active:hover {
+  transform: translateY(-0.5px);
+  box-shadow: 
+    0 4px 16px rgba(16, 185, 129, 0.3),
+    0 2px 8px rgba(16, 185, 129, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* View Controls */
+.view-controls {
+  display: flex;
+  gap: 6px;
+  background: rgba(248, 250, 252, 0.9);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  border-radius: 10px;
+  padding: 4px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary, #64748b);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.control-btn:hover {
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--text-primary, #1e293b);
+  transform: translateY(-0.5px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* Layer Toggles */
+.layer-toggles {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* Architecture-specific Action Tools */
+.action-tools {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-secondary, #64748b);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  white-space: nowrap;
+}
+
+.action-btn:hover {
+  background: rgba(255, 255, 255, 1);
+  color: var(--text-primary, #1e293b);
+  transform: translateY(-1px);
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.08),
+    0 2px 6px rgba(0, 0, 0, 0.04);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.action-btn.primary {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  border-color: transparent;
+  box-shadow: 
+    0 4px 14px rgba(59, 130, 246, 0.25),
+    0 2px 8px rgba(59, 130, 246, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.action-btn.primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 
+    0 6px 20px rgba(59, 130, 246, 0.3),
+    0 3px 10px rgba(59, 130, 246, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
 .toolbar-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   min-width: max-content;
+  position: relative;
 }
 
 .toolbar-group-label {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   color: #64748b;
   text-transform: uppercase;
-  letter-spacing: 0.8px;
-  margin-bottom: 4px;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.toolbar-group:hover .toolbar-group-label {
+  opacity: 1;
+  color: #475569;
+}
+
+/* Enhanced Group Badges */
+.group-badge {
+  font-size: 8px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 12px;
+}
+
+.group-badge.primary {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(59, 130, 246, 0.3);
+}
+
+.group-badge.settings {
+  background: rgba(100, 116, 139, 0.1);
+  color: #64748b;
+  border: 1px solid rgba(100, 116, 139, 0.2);
 }
 
 /* Button Groups */
@@ -60,152 +298,280 @@
 .toolbar-toggles {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-width: 120px;
+  gap: 10px;
+  min-width: 130px;
 }
 
-/* Primary Buttons */
+/* Enhanced Primary Buttons */
 .toolbar-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #ffffff;
+  padding: 11px 16px;
+  border: 1px solid rgba(226, 232, 240, 0.7);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
   color: #475569;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
   position: relative;
   overflow: hidden;
-  min-height: 36px;
+  min-height: 38px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: fadeIn 0.3s ease-out;
+  animation-fill-mode: both;
 }
 
+.toolbar-btn:nth-child(1) { animation-delay: 0.05s; }
+.toolbar-btn:nth-child(2) { animation-delay: 0.1s; }
+.toolbar-btn:nth-child(3) { animation-delay: 0.15s; }
+.toolbar-btn:nth-child(4) { animation-delay: 0.2s; }
+
+/* Modern Hover Effects */
 .toolbar-btn:hover {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  background: rgba(248, 250, 252, 0.95);
+  border-color: rgba(203, 213, 225, 0.8);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 
+    0 4px 8px rgba(0, 0, 0, 0.08),
+    0 12px 24px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .toolbar-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px) scale(1.01);
+  box-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.1),
+    inset 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
+/* Premium Primary Button Style */
 .toolbar-btn.primary {
   background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   border-color: #2563eb;
   color: #ffffff;
-  box-shadow: 0 2px 4px -1px rgba(59, 130, 246, 0.4);
+  font-weight: 700;
+  box-shadow: 
+    0 2px 8px rgba(59, 130, 246, 0.3),
+    0 4px 16px rgba(59, 130, 246, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .toolbar-btn.primary:hover {
   background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.5);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 
+    0 6px 12px rgba(59, 130, 246, 0.4),
+    0 12px 24px rgba(59, 130, 246, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .toolbar-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
   animation: pulse 2s infinite;
+  filter: grayscale(0.5);
 }
 
 .toolbar-btn svg {
   flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.toolbar-btn:hover svg {
+  transform: scale(1.05);
 }
 
 .btn-label {
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
+  transition: letter-spacing 0.2s ease;
 }
 
-/* Toggle Controls */
+.toolbar-btn:hover .btn-label {
+  letter-spacing: 0.5px;
+}
+
+/* Enhanced Primary Button Indicator */
+.btn-indicator {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  border-radius: 50%;
+  box-shadow: 
+    0 0 0 2px rgba(255, 255, 255, 0.9),
+    0 1px 3px rgba(16, 185, 129, 0.4);
+  animation: pulseIndicator 2s infinite;
+}
+
+@keyframes pulseIndicator {
+  0%, 100% { 
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% { 
+    transform: scale(1.2);
+    opacity: 0.8;
+  }
+}
+
+/* Active State for Toggle Buttons */
+.toolbar-btn.active {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #2563eb;
+}
+
+.toolbar-btn.active:hover {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+/* Enhanced Toggle Controls */
 .toggle-control {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   cursor: pointer;
   user-select: none;
-  padding: 6px 0;
-  transition: opacity 0.2s ease;
+  padding: 8px 0;
+  transition: all 0.2s ease;
+  border-radius: 8px;
+  position: relative;
 }
 
 .toggle-control:hover {
-  opacity: 0.8;
+  opacity: 1;
+  background: rgba(248, 250, 252, 0.5);
+  padding-left: 8px;
+  padding-right: 8px;
+  margin-left: -8px;
+  margin-right: -8px;
 }
 
 .toggle-control input[type="checkbox"] {
   display: none;
 }
 
+/* Modern Toggle Switch Design */
 .toggle-switch {
   position: relative;
-  width: 40px;
-  height: 22px;
-  background: #cbd5e1;
-  border-radius: 11px;
+  width: 44px;
+  height: 24px;
+  background: rgba(203, 213, 225, 0.6);
+  border-radius: 12px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
+  box-shadow: 
+    inset 0 2px 4px rgba(0, 0, 0, 0.1),
+    0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .toggle-slider {
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   background: #ffffff;
   border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  box-shadow: 
+    0 2px 6px rgba(0, 0, 0, 0.15),
+    0 4px 12px rgba(0, 0, 0, 0.08);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .toggle-control input:checked + .toggle-switch {
   background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  box-shadow: 
+    0 2px 8px rgba(59, 130, 246, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .toggle-control input:checked + .toggle-switch .toggle-slider {
-  transform: translateX(18px);
+  transform: translateX(20px);
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    0 4px 16px rgba(0, 0, 0, 0.1);
 }
 
 .toggle-text {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: #475569;
+  transition: color 0.2s ease;
+}
+
+.toggle-control:hover .toggle-text {
+  color: #334155;
 }
 
 .toggle-text svg {
-  opacity: 0.7;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
 }
 
-/* Layout Elements */
+.toggle-control:hover .toggle-text svg {
+  opacity: 1;
+}
+
+/* Enhanced Layout Elements */
 .toolbar-separator {
   width: 1px;
-  height: 32px;
-  background: linear-gradient(to bottom, transparent, #e2e8f0, transparent);
-  margin: 0 8px;
+  height: 36px;
+  background: linear-gradient(
+    to bottom, 
+    transparent, 
+    rgba(226, 232, 240, 0.7) 20%, 
+    rgba(226, 232, 240, 0.7) 80%, 
+    transparent
+  );
+  margin: 0 12px;
   flex-shrink: 0;
+  position: relative;
+}
+
+.toolbar-separator::after {
+  content: '';
+  position: absolute;
+  left: 1px;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(255, 255, 255, 0.8) 20%,
+    rgba(255, 255, 255, 0.8) 80%,
+    transparent
+  );
 }
 
 .toolbar-spacer {
   flex: 1;
-  min-width: 16px;
+  min-width: 20px;
 }
 
-/* Responsive Design */
+/* Enhanced Responsive Design */
 @media (max-width: 1200px) {
   .architecture-toolbar {
-    gap: 20px;
-    padding: 14px 16px;
+    gap: 16px;
+    padding: 12px 20px;
+    min-height: 64px;
   }
   
   .btn-label {
@@ -213,109 +579,175 @@
   }
   
   .toolbar-btn {
-    padding: 10px;
-    min-width: 36px;
+    padding: 11px;
+    min-width: 38px;
     justify-content: center;
+    position: relative;
+  }
+
+  /* Enhanced Tooltip for mobile */
+  .toolbar-btn[title]:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 8px 12px;
+    background: rgba(31, 41, 55, 0.95);
+    color: #ffffff;
+    font-size: 12px;
+    border-radius: 8px;
+    white-space: nowrap;
+    z-index: 1000;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    animation: fadeInTooltip 0.2s ease-out;
   }
 }
 
 @media (max-width: 968px) {
   .architecture-toolbar {
     flex-wrap: wrap;
-    gap: 16px;
-    padding: 12px 16px;
+    gap: 12px;
+    padding: 10px 16px;
     min-height: auto;
+    max-height: 120px;
+    overflow-y: auto;
   }
   
   .toolbar-group {
     min-width: auto;
+    flex: 1;
   }
   
   .toolbar-buttons {
     flex-wrap: wrap;
     gap: 6px;
+    justify-content: center;
   }
   
   .toolbar-toggles {
     flex-direction: row;
-    gap: 12px;
+    gap: 16px;
     min-width: auto;
+    justify-content: center;
+  }
+
+  .toolbar-separator {
+    display: none;
+  }
+
+  .toolbar-spacer {
+    display: none;
   }
 }
 
 @media (max-width: 768px) {
   .architecture-toolbar {
-    padding: 10px 12px;
-    gap: 12px;
+    padding: 8px 12px;
+    gap: 8px;
+    min-height: 56px;
   }
   
   .toolbar-group-label {
     font-size: 9px;
+    letter-spacing: 0.5px;
   }
   
   .toolbar-btn {
     padding: 8px;
     min-height: 32px;
     font-size: 12px;
+    border-radius: 8px;
   }
   
   .toggle-switch {
-    width: 32px;
-    height: 18px;
+    width: 36px;
+    height: 20px;
+    border-radius: 10px;
   }
   
   .toggle-slider {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
+    top: 2px;
+    left: 2px;
   }
   
   .toggle-control input:checked + .toggle-switch .toggle-slider {
-    transform: translateX(14px);
+    transform: translateX(16px);
   }
   
   .toggle-text {
     font-size: 11px;
+    gap: 6px;
+  }
+
+  .toolbar-group {
+    gap: 6px;
+  }
+
+  .toolbar-buttons {
+    gap: 4px;
   }
 }
 
-/* Focus States for Accessibility */
+/* Enhanced Focus States and Accessibility */
 .toolbar-btn:focus,
 .toggle-control:focus-within {
-  outline: 2px solid #3b82f6;
+  outline: 2px solid rgba(59, 130, 246, 0.6);
   outline-offset: 2px;
+  border-radius: 10px;
 }
 
-/* High Contrast Mode */
+.toolbar-btn:focus-visible {
+  box-shadow: 
+    0 0 0 3px rgba(59, 130, 246, 0.3),
+    0 4px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* High Contrast Mode Support */
 @media (prefers-contrast: high) {
   .toolbar-btn {
     border-width: 2px;
-  }
-  
-  .toolbar-btn.primary {
     border-color: #000000;
   }
   
+  .toolbar-btn.primary {
+    border-color: #ffffff;
+    background: #000000;
+    color: #ffffff;
+  }
+  
   .toggle-switch {
-    border: 1px solid #000000;
+    border: 2px solid #000000;
+  }
+
+  .toggle-control input:checked + .toggle-switch {
+    background: #000000;
+    border-color: #ffffff;
   }
 }
 
-/* Dark Mode Support */
+/* Enhanced Dark Mode Support */
 @media (prefers-color-scheme: dark) {
   .architecture-toolbar {
-    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-    border-bottom-color: #334155;
+    background: rgba(15, 23, 42, 0.95);
+    border-bottom-color: rgba(51, 65, 85, 0.8);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
   }
   
   .toolbar-btn {
-    background: #334155;
-    border-color: #475569;
+    background: rgba(51, 65, 85, 0.8);
+    border-color: rgba(71, 85, 105, 0.8);
     color: #e2e8f0;
   }
   
   .toolbar-btn:hover {
-    background: #475569;
-    border-color: #64748b;
+    background: rgba(71, 85, 105, 0.9);
+    border-color: rgba(100, 116, 139, 0.8);
   }
   
   .toggle-text {
@@ -327,21 +759,42 @@
   }
   
   .toggle-switch {
-    background: #475569;
+    background: rgba(71, 85, 105, 0.8);
+  }
+
+  .toggle-slider {
+    background: rgba(248, 250, 252, 0.95);
   }
 }
 
-/* Loading Animation */
+/* Enhanced Loading and Animation States */
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+  0%, 100% { 
+    opacity: 1; 
+    transform: scale(1);
+  }
+  50% { 
+    opacity: 0.7; 
+    transform: scale(0.98);
+  }
 }
 
-/* Smooth entrance animation */
+@keyframes fadeInTooltip {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* Smooth entrance animation with stagger effect */
 @keyframes slideInDown {
   from {
     opacity: 0;
-    transform: translateY(-20px);
+    transform: translateY(-24px);
   }
   to {
     opacity: 1;
@@ -349,7 +802,20 @@
   }
 }
 
-/* Hover effects */
+/* Individual button entrance animations */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Premium visual effects */
 .toolbar-btn::before {
   content: '';
   position: absolute;
@@ -357,8 +823,15 @@
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-  transition: left 0.5s;
+  background: linear-gradient(
+    90deg, 
+    transparent, 
+    rgba(255, 255, 255, 0.3), 
+    transparent
+  );
+  transition: left 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  border-radius: inherit;
 }
 
 .toolbar-btn:hover::before {
@@ -366,7 +839,12 @@
 }
 
 .toolbar-btn.primary::before {
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  background: linear-gradient(
+    90deg, 
+    transparent, 
+    rgba(255, 255, 255, 0.4), 
+    transparent
+  );
 }
 
 /* Tooltip enhancement */

@@ -1,181 +1,141 @@
 /**
- * Architecture Toolbar - Modern & Clean Design
- * Comprehensive toolbar for architecture diagram operations
+ * Architecture Toolbar - Architecture View Selection & Layout Controls
+ * Provides architecture-specific layout modes and view types for system design
  */
 
 import { useMemo } from 'react'
 import { 
-  Layout, Grid3X3, Layers, AlignLeft, AlignCenter, AlignRight,
-  ZoomIn, ZoomOut, RotateCcw, Save, Download, Share2, 
-  Settings, Eye
+  Box, Webhook, Target, Network, Grid, 
+  Eye, EyeOff, Save, Download,
+  Settings, RotateCcw, ZoomIn, ZoomOut
 } from 'lucide-react'
 import './ArchitectureToolbar.css'
 
-interface ToolItem {
+interface LayoutMode {
   readonly id: string
   readonly label: string
-  readonly icon: typeof Layout
-  readonly action?: () => void
-  readonly shortcut?: string
-  readonly variant?: 'primary'
+  readonly icon: typeof Box
+  readonly description: string
+}
+
+interface ViewMode {
+  readonly id: string
+  readonly label: string
+  readonly icon: typeof Grid
+  readonly description: string
 }
 
 interface ArchitectureToolbarProps {
-  readonly onAutoLayout?: () => void
-  readonly onGridToggle?: (enabled: boolean) => void
-  readonly onLayerToggle?: (layer: string, visible: boolean) => void
-  readonly onAlignNodes?: (direction: 'left' | 'center' | 'right' | 'top' | 'bottom') => void
-  readonly onZoom?: (factor: number) => void
-  readonly onResetView?: () => void
+  readonly currentLayout?: string
+  readonly currentView?: string
+  readonly onLayoutChange?: (layoutId: string) => void
+  readonly onViewChange?: (viewId: string) => void
+  readonly onToggleLayer?: (layer: string, visible: boolean) => void
   readonly onSave?: () => void
   readonly onExport?: () => void
-  readonly onShare?: () => void
   readonly onSettings?: () => void
+  readonly onResetView?: () => void
+  readonly onZoom?: (factor: number) => void
   readonly className?: string
   readonly disabled?: boolean
+  readonly showGrid?: boolean
+  readonly showLabels?: boolean
 }
 
 export default function ArchitectureToolbar({
-  onAutoLayout,
-  onGridToggle,
-  onLayerToggle,
-  onAlignNodes,
-  onZoom,
-  onResetView,
+  currentLayout = 'microservices',
+  currentView = 'context',
+  onLayoutChange,
+  onViewChange,
+  onToggleLayer,
   onSave,
   onExport,
-  onShare,
   onSettings,
+  onResetView,
+  onZoom,
   className = '',
-  disabled = false
+  disabled = false,
+  showGrid = true,
+  showLabels = true
 }: ArchitectureToolbarProps) {
 
-  const layoutTools = useMemo<ToolItem[]>(() => [
-    {
-      id: 'auto-layout',
-      label: 'Auto Layout',
-      icon: Layout,
-      action: onAutoLayout,
-      shortcut: '⌘ + L'
+  const layouts = useMemo<LayoutMode[]>(() => [
+    { 
+      id: 'microservices', 
+      label: 'Microservices', 
+      icon: Box, 
+      description: 'Service-oriented architecture view' 
     },
-    {
-      id: 'grid-snap',
-      label: 'Grid Snap',
-      icon: Grid3X3,
-      action: () => onGridToggle?.(true),
-      shortcut: '⌘ + G'
+    { 
+      id: 'api-first', 
+      label: 'API First', 
+      icon: Webhook, 
+      description: 'API-centric architecture view' 
     },
-    {
-      id: 'layers',
-      label: 'Layers',
-      icon: Layers,
-      action: () => onLayerToggle?.('all', true),
-      shortcut: '⌘ + ⇧ + L'
+    { 
+      id: 'domain-driven', 
+      label: 'Domain Driven', 
+      icon: Target, 
+      description: 'Business domain architecture' 
+    },
+    { 
+      id: 'service-mesh', 
+      label: 'Service Mesh', 
+      icon: Network, 
+      description: 'Infrastructure mesh view' 
     }
-  ], [onAutoLayout, onGridToggle, onLayerToggle])
+  ], [])
 
-  const alignmentTools = useMemo<ToolItem[]>(() => [
-    {
-      id: 'align-left',
-      label: 'Align Left',
-      icon: AlignLeft,
-      action: () => onAlignNodes?.('left'),
-      shortcut: '⌘ + ⇧ + L'
+  const modes = useMemo<ViewMode[]>(() => [
+    { 
+      id: 'context', 
+      label: 'Context', 
+      icon: Grid, 
+      description: 'High-level system context' 
     },
-    {
-      id: 'align-center',
-      label: 'Align Center',
-      icon: AlignCenter,
-      action: () => onAlignNodes?.('center'),
-      shortcut: '⌘ + ⇧ + C'
+    { 
+      id: 'api-flow', 
+      label: 'API Flow', 
+      icon: Webhook, 
+      description: 'API interactions and flows' 
     },
-    {
-      id: 'align-right',
-      label: 'Align Right',
-      icon: AlignRight,
-      action: () => onAlignNodes?.('right'),
-      shortcut: '⌘ + ⇧ + R'
+    { 
+      id: 'service-mesh', 
+      label: 'Service Mesh', 
+      icon: Network, 
+      description: 'Service mesh topology' 
+    },
+    { 
+      id: 'domain-driven', 
+      label: 'Domain Model', 
+      icon: Target, 
+      description: 'Domain-driven design view' 
     }
-  ], [onAlignNodes])
+  ], [])
 
-  const viewTools = useMemo<ToolItem[]>(() => [
-    {
-      id: 'zoom-in',
-      label: 'Zoom In',
-      icon: ZoomIn,
-      action: () => onZoom?.(1.2),
-      shortcut: '⌘ + +'
-    },
-    {
-      id: 'zoom-out',
-      label: 'Zoom Out',
-      icon: ZoomOut,
-      action: () => onZoom?.(0.8),
-      shortcut: '⌘ + -'
-    },
-    {
-      id: 'reset-view',
-      label: 'Reset View',
-      icon: RotateCcw,
-      action: onResetView,
-      shortcut: '⌘ + 0'
-    }
-  ], [onZoom, onResetView])
-
-  const actionTools = useMemo<ToolItem[]>(() => [
-    {
-      id: 'save',
-      label: 'Save',
-      icon: Save,
-      action: onSave,
-      variant: 'primary',
-      shortcut: '⌘ + S'
-    },
-    {
-      id: 'export',
-      label: 'Export',
-      icon: Download,
-      action: onExport,
-      shortcut: '⌘ + E'
-    },
-    {
-      id: 'share',
-      label: 'Share',
-      icon: Share2,
-      action: onShare,
-      shortcut: '⌘ + ⇧ + S'
-    },
-    {
-      id: 'settings',
-      label: 'Settings',
-      icon: Settings,
-      action: onSettings,
-      shortcut: '⌘ + ,'
-    }
-  ], [onSave, onExport, onShare, onSettings])
-
-  const renderToolGroup = (tools: ToolItem[], groupLabel: string) => (
+  const renderLayoutSelector = () => (
     <div className="toolbar-group">
-      <span className="toolbar-group-label">{groupLabel}</span>
-      <div className="toolbar-buttons">
-        {tools.map(tool => {
-          const IconComponent = tool.icon
-          const isDisabled = disabled || !tool.action
-          const buttonTitle = tool.shortcut ? 
-            `${tool.label} (${tool.shortcut})` : 
-            tool.label
+      <span className="toolbar-group-label">
+        Architecture Layout{' '}
+        <span className="group-badge primary">●</span>
+      </span>
+      <div className="layout-selector">
+        {layouts.map(layout => {
+          const IconComponent = layout.icon
+          const isActive = currentLayout === layout.id
           
           return (
             <button
-              key={tool.id}
-              className={`toolbar-btn ${tool.variant === 'primary' ? 'primary' : ''}`}
-              onClick={tool.action}
-              disabled={isDisabled}
-              title={buttonTitle}
-              aria-label={tool.label}
+              key={layout.id}
+              className={`layout-btn ${isActive ? 'active' : ''}`}
+              onClick={() => onLayoutChange?.(layout.id)}
+              disabled={disabled}
+              title={layout.description}
+              aria-label={layout.label}
+              data-testid={`layout-${layout.id}`}
             >
               <IconComponent size={16} />
-              <span className="btn-label">{tool.label}</span>
+              <span className="btn-label">{layout.label}</span>
             </button>
           )
         })}
@@ -183,63 +143,173 @@ export default function ArchitectureToolbar({
     </div>
   )
 
+  const renderViewModeSelector = () => (
+    <div className="toolbar-group">
+      <span className="toolbar-group-label">
+        View Mode
+      </span>
+      <div className="view-mode-selector">
+        {modes.map(mode => {
+          const IconComponent = mode.icon
+          const isActive = currentView === mode.id
+          
+          return (
+            <button
+              key={mode.id}
+              className={`view-mode-btn ${isActive ? 'active' : ''}`}
+              onClick={() => onViewChange?.(mode.id)}
+              disabled={disabled}
+              title={mode.description}
+              aria-label={mode.label}
+              data-testid={`view-${mode.id}`}
+            >
+              <IconComponent size={14} />
+              <span className="btn-label">{mode.label}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+
+  const renderViewControls = () => (
+    <div className="toolbar-group">
+      <span className="toolbar-group-label">
+        View Controls
+      </span>
+      <div className="view-controls">
+        <button
+          className="control-btn"
+          onClick={() => onZoom?.(1.2)}
+          disabled={disabled}
+          title="Zoom In"
+        >
+          <ZoomIn size={14} />
+        </button>
+        <button
+          className="control-btn"
+          onClick={() => onZoom?.(0.8)}
+          disabled={disabled}
+          title="Zoom Out"
+        >
+          <ZoomOut size={14} />
+        </button>
+        <button
+          className="control-btn"
+          onClick={onResetView}
+          disabled={disabled}
+          title="Reset View"
+        >
+          <RotateCcw size={14} />
+        </button>
+      </div>
+    </div>
+  )
+
+  const renderLayerToggles = () => (
+    <div className="toolbar-group">
+      <span className="toolbar-group-label">
+        Layer Visibility
+      </span>
+      <div className="layer-toggles">
+        <label className="toggle-control">
+          <input 
+            type="checkbox" 
+            checked={showGrid}
+            onChange={(e) => onToggleLayer?.('grid', e.target.checked)}
+            disabled={disabled}
+            data-testid="toggle-grid"
+          />
+          <div className="toggle-switch">
+            <div className="toggle-slider" />
+          </div>
+          <span className="toggle-text">
+            <Grid size={14} />
+            Grid
+          </span>
+        </label>
+        
+        <label className="toggle-control">
+          <input 
+            type="checkbox" 
+            checked={showLabels}
+            onChange={(e) => onToggleLayer?.('labels', e.target.checked)}
+            disabled={disabled}
+            data-testid="toggle-labels"
+          />
+          <div className="toggle-switch">
+            <div className="toggle-slider" />
+          </div>
+          <span className="toggle-text">
+            {showLabels ? <Eye size={14} /> : <EyeOff size={14} />}
+            Labels
+          </span>
+        </label>
+      </div>
+    </div>
+  )
+
+  const renderActionTools = () => (
+    <div className="toolbar-group">
+      <span className="toolbar-group-label">
+        Actions
+      </span>
+      <div className="action-tools">
+        <button
+          className="action-btn primary"
+          onClick={onSave}
+          disabled={disabled}
+          title="Save Architecture"
+        >
+          <Save size={16} />
+          <span className="btn-label">Save</span>
+        </button>
+        <button
+          className="action-btn"
+          onClick={onExport}
+          disabled={disabled}
+          title="Export Diagram"
+        >
+          <Download size={16} />
+          <span className="btn-label">Export</span>
+        </button>
+        <button
+          className="action-btn"
+          onClick={onSettings}
+          disabled={disabled}
+          title="Diagram Settings"
+        >
+          <Settings size={16} />
+          <span className="btn-label">Settings</span>
+        </button>
+      </div>
+    </div>
+  )
+
   return (
     <div className={`architecture-toolbar ${className} ${disabled ? 'disabled' : ''}`}>
-      {/* Layout Tools */}
-      {renderToolGroup(layoutTools, 'Layout')}
+      {/* Architecture Layout Selector */}
+      {renderLayoutSelector()}
       
       <div className="toolbar-separator" />
       
-      {/* Alignment Tools */}
-      {renderToolGroup(alignmentTools, 'Align')}
+      {/* View Mode Selector */}
+      {renderViewModeSelector()}
       
       <div className="toolbar-separator" />
       
-      {/* View Tools */}
-      {renderToolGroup(viewTools, 'View')}
+      {/* View Controls */}
+      {renderViewControls()}
+      
+      <div className="toolbar-separator" />
+      
+      {/* Layer Toggles */}
+      {renderLayerToggles()}
       
       <div className="toolbar-spacer" />
       
       {/* Action Tools */}
-      {renderToolGroup(actionTools, 'Actions')}
-      
-      {/* Quick Mode Toggles */}
-      <div className="toolbar-group">
-        <span className="toolbar-group-label">Mode</span>
-        <div className="toolbar-toggles">
-          <label className="toggle-control">
-            <input 
-              type="checkbox" 
-              defaultChecked 
-              onChange={(e) => onLayerToggle?.('grid', e.target.checked)}
-              disabled={disabled}
-            />
-            <div className="toggle-switch">
-              <div className="toggle-slider" />
-            </div>
-            <span className="toggle-text">
-              <Grid3X3 size={14} />
-              Grid
-            </span>
-          </label>
-          
-          <label className="toggle-control">
-            <input 
-              type="checkbox" 
-              defaultChecked 
-              onChange={(e) => onLayerToggle?.('labels', e.target.checked)}
-              disabled={disabled}
-            />
-            <div className="toggle-switch">
-              <div className="toggle-slider" />
-            </div>
-            <span className="toggle-text">
-              <Eye size={14} />
-              Labels
-            </span>
-          </label>
-        </div>
-      </div>
+      {renderActionTools()}
     </div>
   )
 }

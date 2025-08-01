@@ -102,7 +102,7 @@ export function calculateFitTransform(
   return {
     x: translateX,
     y: translateY,
-    k: Math.max(0.2, Math.min(3, scale)) // Clamp between min/max zoom
+    k: Math.max(0.4, Math.min(3, scale)) // Clamp between min/max zoom
   }
 }
 

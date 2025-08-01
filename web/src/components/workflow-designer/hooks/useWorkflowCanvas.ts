@@ -265,7 +265,7 @@ export function useWorkflowCanvas() {
     
     // Calculate new scale
     const currentTransform = state.canvasTransform
-    const newScale = Math.max(currentTransform.k / 1.2, 0.2)
+    const newScale = Math.max(currentTransform.k / 1.2, 0.4)
     
     if (Math.abs(newScale - currentTransform.k) < 0.001) {
       return
@@ -303,7 +303,7 @@ export function useWorkflowCanvas() {
     
     // Use d3 zoom behavior for proper event handling
     const currentTransform = canvasTransformRef.current
-    const newScale = Math.max(0.2, Math.min(3, zoomLevel))
+    const newScale = Math.max(0.4, Math.min(3, zoomLevel))
     
     if (Math.abs(newScale - currentTransform.k) < 0.001) return
     

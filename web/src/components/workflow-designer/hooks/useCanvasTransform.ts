@@ -109,7 +109,7 @@ export function useCanvasTransform({
 
   const zoomOut = useCallback(() => {
     const currentTransform = canvasTransformRef.current
-    const newScale = Math.max(currentTransform.k / 1.2, 0.2)
+    const newScale = Math.max(currentTransform.k / 1.2, 0.4)
     
     const newTransform = calculateZoomAroundCenter(currentTransform, newScale)
     if (!newTransform) return

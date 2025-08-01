@@ -67,7 +67,7 @@ export default function CanvasToolbar({
             onClick={onZoomOut} 
             className="zoom-btn" 
             title="Zoom Out"
-            disabled={zoomLevel <= 0.2}
+            disabled={zoomLevel <= 0.4}
           >
             <ZoomOut size={16} />
           </button>

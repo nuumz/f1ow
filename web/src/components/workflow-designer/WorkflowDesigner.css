@@ -1718,38 +1718,175 @@
   }
 }
 
-/* Connection Selection Styles */
+/* ===== MODE-SPECIFIC CONNECTION AND PORT STYLES ===== */
 
-.connection-selected .connection-path {
-  stroke: #2196F3 !important;
-  stroke-width: 3 !important;
-  marker-end: url(#arrowhead-selected) !important;
-  transition: stroke 0.2s ease, stroke-width 0.2s ease;
-}
-
-/* Default connection styles */
-.connection .connection-path {
-  stroke: #666;
+/* === WORKFLOW MODE STYLES === */
+.canvas-container.workflow-mode .connection .connection-path {
+  stroke: #2563eb; /* Blue for workflow connections */
   stroke-width: 2;
-  marker-end: url(#arrowhead);
+  marker-end: url(#arrowhead-workflow);
   transition: stroke 0.2s ease, stroke-width 0.2s ease;
   cursor: pointer;
+  stroke-dasharray: none; /* Solid lines for workflow */
 }
 
+.canvas-container.workflow-mode .connection-hover .connection-path {
+  stroke: #1d4ed8 !important; /* Darker blue on hover */
+  stroke-width: 3 !important;
+  marker-end: url(#arrowhead-workflow-hover) !important;
+  filter: drop-shadow(0 2px 8px rgba(29, 78, 216, 0.3));
+}
+
+.canvas-container.workflow-mode .connection-selected .connection-path {
+  stroke: #059669 !important; /* Green for selected workflow connections */
+  stroke-width: 3 !important;
+  marker-end: url(#arrowhead-workflow-selected) !important;
+  filter: drop-shadow(0 2px 8px rgba(5, 150, 105, 0.4));
+  animation: workflowPulse 2s infinite;
+}
+
+/* Workflow Mode Port Styles */
+.canvas-container.workflow-mode .input-port circle,
+.canvas-container.workflow-mode .output-port circle {
+  fill: #f8fafc;
+  stroke: #2563eb;
+  stroke-width: 2;
+  transition: all 0.2s ease;
+}
+
+.canvas-container.workflow-mode .input-port:hover circle,
+.canvas-container.workflow-mode .output-port:hover circle {
+  fill: #dbeafe;
+  stroke: #1d4ed8;
+  stroke-width: 3;
+  filter: drop-shadow(0 2px 6px rgba(29, 78, 216, 0.25));
+}
+
+.canvas-container.workflow-mode .input-port.connected circle,
+.canvas-container.workflow-mode .output-port.connected circle {
+  fill: #059669;
+  stroke: #047857;
+}
+
+/* === ARCHITECTURE MODE STYLES === */
+.canvas-container.architecture-mode .connection .connection-path {
+  stroke: #7c3aed; /* Purple for architecture connections */
+  stroke-width: 2.5;
+  marker-end: url(#arrowhead-architecture);
+  transition: stroke 0.2s ease, stroke-width 0.2s ease;
+  cursor: pointer;
+  stroke-dasharray: 8,4; /* Dashed lines for architecture */
+  opacity: 0.85;
+}
+
+.canvas-container.architecture-mode .connection-hover .connection-path {
+  stroke: #6d28d9 !important; /* Darker purple on hover */
+  stroke-width: 3.5 !important;
+  marker-end: url(#arrowhead-architecture-hover) !important;
+  filter: drop-shadow(0 3px 10px rgba(109, 40, 217, 0.4));
+  opacity: 1;
+  stroke-dasharray: 12,6; /* Larger dashes on hover */
+}
+
+.canvas-container.architecture-mode .connection-selected .connection-path {
+  stroke: #dc2626 !important; /* Red for selected architecture connections */
+  stroke-width: 4 !important;
+  marker-end: url(#arrowhead-architecture-selected) !important;
+  filter: drop-shadow(0 3px 12px rgba(220, 38, 38, 0.5));
+  stroke-dasharray: none; /* Solid when selected */
+  animation: architecturePulse 1.5s infinite;
+  opacity: 1;
+}
+
+/* Architecture Mode Port Styles */
+.canvas-container.architecture-mode .input-port circle,
+.canvas-container.architecture-mode .output-port circle {
+  fill: #faf5ff;
+  stroke: #7c3aed;
+  stroke-width: 2.5;
+  stroke-dasharray: 3,2; /* Dashed port borders */
+  transition: all 0.2s ease;
+}
+
+.canvas-container.architecture-mode .input-port:hover circle,
+.canvas-container.architecture-mode .output-port:hover circle {
+  fill: #f3e8ff;
+  stroke: #6d28d9;
+  stroke-width: 3.5;
+  stroke-dasharray: none; /* Solid on hover */
+  filter: drop-shadow(0 2px 8px rgba(109, 40, 217, 0.3));
+  transform: scale(1.1);
+}
+
+.canvas-container.architecture-mode .input-port.connected circle,
+.canvas-container.architecture-mode .output-port.connected circle {
+  fill: #dc2626;
+  stroke: #b91c1c;
+  stroke-dasharray: none;
+  animation: architecturePortPulse 2s infinite;
+}
+
+/* === SHARED STYLES === */
 .connection .connection-hitbox {
   cursor: pointer;
 }
 
-.connection-hover .connection-path {
-  stroke: #1976D2 !important;
-  stroke-width: 5 !important;
-  marker-end: url(#arrowhead-hover) !important;
-  transition: stroke 0.2s ease, stroke-width 0.2s ease;
-}
-
 /* Ensure hover takes precedence over default but not over selected */
 .connection:not(.connection-selected).connection-hover .connection-path {
-  stroke: #1976D2 !important;
-  stroke-width: 5 !important;
-  marker-end: url(#arrowhead-hover) !important;
+  /* Styles handled by mode-specific selectors above */
 }
+
+/* === ANIMATIONS === */
+@keyframes workflowPulse {
+  0%, 100% {
+    opacity: 1;
+    stroke-width: 3;
+  }
+  50% {
+    opacity: 0.7;
+    stroke-width: 4;
+  }
+}
+
+@keyframes architecturePulse {
+  0%, 100% {
+    opacity: 1;
+    stroke-width: 4;
+    filter: drop-shadow(0 3px 12px rgba(220, 38, 38, 0.5));
+  }
+  50% {
+    opacity: 0.8;
+    stroke-width: 5;
+    filter: drop-shadow(0 4px 16px rgba(220, 38, 38, 0.7));
+  }
+}
+
+@keyframes architecturePortPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.8;
+  }
+}
+
+/* === PORT TYPE SPECIFIC STYLES === */
+/* Workflow Mode - Brighter, more colorful port types */
+.canvas-container.workflow-mode .port-type-string circle { stroke: #16a34a; }
+.canvas-container.workflow-mode .port-type-number circle { stroke: #2563eb; }
+.canvas-container.workflow-mode .port-type-boolean circle { stroke: #ea580c; }
+.canvas-container.workflow-mode .port-type-object circle { stroke: #c026d3; }
+.canvas-container.workflow-mode .port-type-array circle { stroke: #0891b2; }
+.canvas-container.workflow-mode .port-type-error circle { stroke: #dc2626; }
+.canvas-container.workflow-mode .port-type-any circle { stroke: #6b7280; }
+
+/* Architecture Mode - Muted, architectural port types */
+.canvas-container.architecture-mode .port-type-string circle { stroke: #059669; stroke-dasharray: 4,2; }
+.canvas-container.architecture-mode .port-type-number circle { stroke: #1d4ed8; stroke-dasharray: 4,2; }
+.canvas-container.architecture-mode .port-type-boolean circle { stroke: #c2410c; stroke-dasharray: 4,2; }
+.canvas-container.architecture-mode .port-type-object circle { stroke: #a21caf; stroke-dasharray: 4,2; }
+.canvas-container.architecture-mode .port-type-array circle { stroke: #0e7490; stroke-dasharray: 4,2; }
+.canvas-container.architecture-mode .port-type-error circle { stroke: #b91c1c; stroke-dasharray: 4,2; }
+.canvas-container.architecture-mode .port-type-any circle { stroke: #52525b; stroke-dasharray: 4,2; }

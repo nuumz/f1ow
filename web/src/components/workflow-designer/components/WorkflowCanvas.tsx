@@ -97,8 +97,9 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   onZoomLevelChange,
   onRegisterZoomBehavior,
 }: WorkflowCanvasProps) {  
-  // Get dragging state from context
+  // Get dragging state and designer mode from context
   const { 
+    state: workflowContextState,
     isDragging: isContextDragging, 
     getDraggedNodeId, 
     startDragging, 
@@ -146,12 +147,16 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   
   /**
    * Helper function to determine connection direction and appropriate arrow marker
+   * Now includes mode-specific styling for workflow vs architecture modes
    */
   const getConnectionMarker = useCallback((connection: Connection, state: 'default' | 'selected' | 'hover' = 'default') => {
     const sourceNode = nodes.find(n => n.id === connection.sourceNodeId)
     const targetNode = nodes.find(n => n.id === connection.targetNodeId)
     
     if (!sourceNode || !targetNode) return 'url(#arrowhead)'
+    
+    // Use designer mode from context state
+    const isWorkflowMode = workflowContextState.designerMode === 'workflow'
     
     // Check if source is a bottom port
     const isSourceBottomPort = sourceNode.bottomPorts?.some(p => p.id === connection.sourcePortId)
@@ -162,14 +167,22 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       const isLeftToRight = targetNode.x > sourceNode.x
       
       if (isLeftToRight) {
-        // Standard right-pointing arrow
-        switch (state) {
-          case 'selected': return 'url(#arrowhead-selected)'
-          case 'hover': return 'url(#arrowhead-hover)'
-          default: return 'url(#arrowhead)'
+        // Standard right-pointing arrow - mode-specific
+        if (isWorkflowMode) {
+          switch (state) {
+            case 'selected': return 'url(#arrowhead-workflow-selected)'
+            case 'hover': return 'url(#arrowhead-workflow-hover)'
+            default: return 'url(#arrowhead-workflow)'
+          }
+        } else {
+          switch (state) {
+            case 'selected': return 'url(#arrowhead-architecture-selected)'
+            case 'hover': return 'url(#arrowhead-architecture-hover)'
+            default: return 'url(#arrowhead-architecture)'
+          }
         }
       } else {
-        // Left-pointing arrow for right-to-left connections
+        // Left-pointing arrow for right-to-left connections (keep generic for now)
         switch (state) {
           case 'selected': return 'url(#arrowhead-left-selected)'
           case 'hover': return 'url(#arrowhead-left-hover)'
@@ -178,13 +191,21 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       }
     }
     
-    // Regular connections use standard right-pointing arrows
-    switch (state) {
-      case 'selected': return 'url(#arrowhead-selected)'
-      case 'hover': return 'url(#arrowhead-hover)'
-      default: return 'url(#arrowhead)'
+    // Regular connections use mode-specific right-pointing arrows
+    if (isWorkflowMode) {
+      switch (state) {
+        case 'selected': return 'url(#arrowhead-workflow-selected)'
+        case 'hover': return 'url(#arrowhead-workflow-hover)'
+        default: return 'url(#arrowhead-workflow)'
+      }
+    } else {
+      switch (state) {
+        case 'selected': return 'url(#arrowhead-architecture-selected)'
+        case 'hover': return 'url(#arrowhead-architecture-hover)'
+        default: return 'url(#arrowhead-architecture)'
+      }
     }
-  }, [nodes])
+  }, [nodes, workflowContextState.designerMode])
   useEffect(() => {
     currentTransformRef.current = canvasTransform
   }, [canvasTransform])
@@ -934,7 +955,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     svg.append('rect')
       .attr('width', '100%')
       .attr('height', '100%')
-      .attr('fill', '#fcfcfc')  
+      .attr('fill', '#f7f7f7')  
       .attr('class', 'svg-canvas-background')
 
     // Arrow markers with direction-aware positioning
@@ -974,6 +995,16 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     createArrowMarker('arrowhead-left', '#666', 14, 'left')
     createArrowMarker('arrowhead-left-selected', '#2196F3', 14, 'left')
     createArrowMarker('arrowhead-left-hover', '#1976D2', 18, 'left')
+    
+    // Mode-specific arrow markers for workflow mode
+    createArrowMarker('arrowhead-workflow', '#2563eb', 14)
+    createArrowMarker('arrowhead-workflow-selected', '#059669', 16)
+    createArrowMarker('arrowhead-workflow-hover', '#1d4ed8', 18)
+    
+    // Mode-specific arrow markers for architecture mode
+    createArrowMarker('arrowhead-architecture', '#7c3aed', 15)
+    createArrowMarker('arrowhead-architecture-selected', '#dc2626', 18)
+    createArrowMarker('arrowhead-architecture-hover', '#6d28d9', 20)
 
     // Layer hierarchy
     const g = svg.append('g')

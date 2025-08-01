@@ -1,0 +1,605 @@
+/**
+ * Comprehensive Mode System CSS
+ * Dramatic visual distinctions following SOLID design principles
+ * Each mode has a completely unique visual identity
+ */
+
+/* ===== CSS CUSTOM PROPERTIES SYSTEM ===== */
+:root {
+  /* Base timing and easing */
+  --mode-transition-fast: 150ms;
+  --mode-transition-normal: 300ms;
+  --mode-transition-slow: 500ms;
+  --mode-easing-smooth: cubic-bezier(0.4, 0.0, 0.2, 1);
+  --mode-easing-bounce: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --mode-easing-sharp: cubic-bezier(0.4, 0.0, 1, 1);
+  
+  /* Shadow system */
+  --mode-shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --mode-shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --mode-shadow-dramatic: 0 8px 32px rgba(0, 0, 0, 0.25);
+  
+  /* Border radius system */
+  --mode-radius-small: 4px;
+  --mode-radius-medium: 8px;
+  --mode-radius-large: 12px;
+}
+
+/* ===== WORKFLOW MODE - BRIGHT EXECUTION THEME ===== */
+.canvas-container.workflow-mode {
+  /* CSS Custom Properties for Workflow Mode */
+  --mode-primary: #2563eb;
+  --mode-secondary: #3b82f6;
+  --mode-accent: #1d4ed8;
+  --mode-background: #f8fafc;
+  --mode-foreground: #1e293b;
+  --mode-success: #10b981;
+  --mode-warning: #f59e0b;
+  --mode-error: #ef4444;
+  
+  /* Gradients */
+  --mode-gradient-primary: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+  --mode-gradient-secondary: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
+  --mode-gradient-background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  
+  /* Shadows */
+  --mode-shadow-primary: 0 2px 8px rgba(37, 99, 235, 0.25);
+  --mode-shadow-connection: 0 2px 8px rgba(37, 99, 235, 0.25);
+  --mode-shadow-port: 0 2px 6px rgba(37, 99, 235, 0.2);
+  
+  /* Apply background */
+  background: var(--mode-gradient-background);
+  transition: all var(--mode-transition-normal) var(--mode-easing-smooth);
+}
+
+/* Workflow Mode - Connection Styles */
+.canvas-container.workflow-mode .connection {
+  transition: all var(--mode-transition-fast) var(--mode-easing-smooth);
+}
+
+.canvas-container.workflow-mode .connection .connection-path {
+  stroke: var(--mode-primary);
+  stroke-width: 2.5px;
+  stroke-dasharray: none; /* Solid lines */
+  opacity: 0.9;
+  fill: none;
+  transition: all var(--mode-transition-fast) var(--mode-easing-smooth);
+  filter: drop-shadow(0 1px 2px rgba(37, 99, 235, 0.1));
+}
+
+.canvas-container.workflow-mode .connection:hover .connection-path {
+  stroke: var(--mode-accent);
+  stroke-width: 3.5px;
+  opacity: 1;
+  filter: var(--mode-shadow-connection);
+  transform: scale(1.02);
+}
+
+.canvas-container.workflow-mode .connection-selected .connection-path {
+  stroke: var(--mode-success) !important;
+  stroke-width: 4px !important;
+  opacity: 1 !important;
+  filter: drop-shadow(0 2px 12px rgba(16, 185, 129, 0.4));
+  animation: workflow-connection-pulse 2s infinite ease-in-out;
+}
+
+/* Workflow Mode - Port Styles */
+.canvas-container.workflow-mode .input-port circle,
+.canvas-container.workflow-mode .output-port circle {
+  fill: var(--mode-background);
+  stroke: var(--mode-primary);
+  stroke-width: 2px;
+  filter: var(--mode-shadow-port);
+  transition: all var(--mode-transition-fast) var(--mode-easing-smooth);
+}
+
+.canvas-container.workflow-mode .input-port:hover circle,
+.canvas-container.workflow-mode .output-port:hover circle {
+  fill: rgba(37, 99, 235, 0.1);
+  stroke: var(--mode-accent);
+  stroke-width: 3px;
+  filter: drop-shadow(0 3px 12px rgba(37, 99, 235, 0.3));
+  transform: scale(1.3);
+}
+
+.canvas-container.workflow-mode .input-port.connected circle,
+.canvas-container.workflow-mode .output-port.connected circle {
+  fill: var(--mode-success);
+  stroke: #047857;
+  animation: workflow-port-glow 2s infinite ease-in-out;
+}
+
+/* Workflow Mode - Node Enhancements */
+.canvas-container.workflow-mode .node {
+  filter: drop-shadow(0 2px 8px rgba(37, 99, 235, 0.08));
+  transition: all var(--mode-transition-fast) var(--mode-easing-smooth);
+}
+
+.canvas-container.workflow-mode .node:hover {
+  filter: drop-shadow(0 4px 16px rgba(37, 99, 235, 0.15));
+  transform: translateY(-1px);
+}
+
+.canvas-container.workflow-mode .node.selected {
+  filter: drop-shadow(0 6px 24px rgba(16, 185, 129, 0.2));
+  transform: translateY(-2px);
+}
+
+/* ===== ARCHITECTURE MODE - DARK SOPHISTICATED THEME ===== */
+.canvas-container.architecture-mode {
+  /* CSS Custom Properties for Architecture Mode */
+  --mode-primary: #8b5cf6;
+  --mode-secondary: #a78bfa;
+  --mode-accent: #7c3aed;
+  --mode-background: #1e1b2e;
+  --mode-foreground: #e2d6ff;
+  --mode-success: #34d399;
+  --mode-warning: #fbbf24;
+  --mode-error: #f87171;
+  
+  /* Gradients */
+  --mode-gradient-primary: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  --mode-gradient-secondary: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
+  --mode-gradient-background: linear-gradient(135deg, #1e1b2e 0%, #2d1b57 100%);
+  
+  /* Shadows */
+  --mode-shadow-primary: 0 3px 12px rgba(139, 92, 246, 0.4);
+  --mode-shadow-connection: 0 3px 12px rgba(139, 92, 246, 0.4);
+  --mode-shadow-port: 0 3px 10px rgba(139, 92, 246, 0.35);
+  
+  /* Apply dark background with sophisticated gradient */
+  background: var(--mode-gradient-background);
+  color: var(--mode-foreground);
+  transition: all var(--mode-transition-slow) var(--mode-easing-bounce);
+  
+  /* Add architectural blueprint effect */
+  position: relative;
+}
+
+.canvas-container.architecture-mode::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 50% 50%, transparent 0%, rgba(30, 27, 46, 0.6) 100%),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 49px,
+      rgba(139, 92, 246, 0.03) 50px,
+      rgba(139, 92, 246, 0.03) 51px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 49px,
+      rgba(139, 92, 246, 0.03) 50px,
+      rgba(139, 92, 246, 0.03) 51px
+    );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Architecture Mode - Connection Styles */
+.canvas-container.architecture-mode .connection {
+  transition: all var(--mode-transition-normal) var(--mode-easing-bounce);
+}
+
+.canvas-container.architecture-mode .connection .connection-path {
+  stroke: var(--mode-primary);
+  stroke-width: 3px;
+  stroke-dasharray: 12,6; /* Architectural dashed lines */
+  opacity: 0.85;
+  fill: none;
+  transition: all var(--mode-transition-normal) var(--mode-easing-bounce);
+  filter: drop-shadow(0 2px 6px rgba(139, 92, 246, 0.2));
+}
+
+.canvas-container.architecture-mode .connection:hover .connection-path {
+  stroke: var(--mode-accent);
+  stroke-width: 4.5px;
+  stroke-dasharray: 18,8; /* Larger dashes on hover */
+  opacity: 1;
+  filter: var(--mode-shadow-connection);
+  transform: scale(1.05);
+}
+
+.canvas-container.architecture-mode .connection-selected .connection-path {
+  stroke: var(--mode-error) !important;
+  stroke-width: 5px !important;
+  stroke-dasharray: none !important; /* Solid when selected */
+  opacity: 1 !important;
+  filter: drop-shadow(0 4px 20px rgba(248, 113, 113, 0.5));
+  animation: architecture-connection-pulse 1.5s infinite ease-in-out;
+}
+
+/* Architecture Mode - Port Styles */
+.canvas-container.architecture-mode .input-port rect,
+.canvas-container.architecture-mode .output-port rect {
+  fill: rgba(139, 92, 246, 0.1);
+  stroke: var(--mode-primary);
+  stroke-width: 2.5px;
+  stroke-dasharray: 4,3; /* Dashed port borders */
+  filter: var(--mode-shadow-port);
+  transition: all var(--mode-transition-normal) var(--mode-easing-bounce);
+}
+
+.canvas-container.architecture-mode .input-port:hover rect,
+.canvas-container.architecture-mode .output-port:hover rect {
+  fill: rgba(124, 58, 237, 0.2);
+  stroke: var(--mode-accent);
+  stroke-width: 3.5px;
+  stroke-dasharray: none; /* Solid on hover */
+  filter: drop-shadow(0 4px 16px rgba(124, 58, 237, 0.4));
+  transform: scale(1.4) rotate(5deg);
+}
+
+.canvas-container.architecture-mode .input-port.connected rect,
+.canvas-container.architecture-mode .output-port.connected rect {
+  fill: var(--mode-error);
+  stroke: #dc2626;
+  stroke-dasharray: none;
+  animation: architecture-port-pulse 2s infinite ease-in-out;
+}
+
+/* Architecture Mode - Node Enhancements */
+.canvas-container.architecture-mode .node {
+  filter: drop-shadow(0 3px 12px rgba(139, 92, 246, 0.15));
+  transition: all var(--mode-transition-normal) var(--mode-easing-bounce);
+}
+
+.canvas-container.architecture-mode .node:hover {
+  filter: drop-shadow(0 6px 24px rgba(139, 92, 246, 0.25));
+  transform: translateY(-2px) scale(1.02);
+}
+
+.canvas-container.architecture-mode .node.selected {
+  filter: drop-shadow(0 8px 32px rgba(248, 113, 113, 0.3));
+  transform: translateY(-3px) scale(1.03);
+}
+
+/* ===== DEBUG MODE - HIGH CONTRAST TECHNICAL THEME ===== */
+.canvas-container.debug-mode {
+  /* CSS Custom Properties for Debug Mode */
+  --mode-primary: #00ff88;
+  --mode-secondary: #00cc66;
+  --mode-accent: #ff4444;
+  --mode-background: #0d1117;
+  --mode-foreground: #ffffff;
+  --mode-success: #00ff88;
+  --mode-warning: #ffaa00;
+  --mode-error: #ff4444;
+  
+  /* Gradients */
+  --mode-gradient-primary: linear-gradient(135deg, #00ff88 0%, #00cc66 100%);
+  --mode-gradient-secondary: linear-gradient(135deg, #ff4444 0%, #cc3333 100%);
+  --mode-gradient-background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+  
+  /* Shadows */
+  --mode-shadow-primary: 0 3px 15px rgba(0, 255, 136, 0.6);
+  --mode-shadow-connection: 0 3px 15px rgba(0, 255, 136, 0.6);
+  --mode-shadow-port: 0 2px 10px rgba(0, 255, 136, 0.5);
+  
+  /* Apply terminal-like background */
+  background: var(--mode-gradient-background);
+  color: var(--mode-foreground);
+  font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
+  transition: all var(--mode-transition-fast) linear;
+  
+  /* Add scanline effect */
+  position: relative;
+}
+
+.canvas-container.debug-mode::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 1px,
+      rgba(0, 255, 136, 0.03) 2px,
+      rgba(0, 255, 136, 0.03) 3px
+    );
+  pointer-events: none;
+  z-index: 1;
+  animation: debug-scanlines 0.1s infinite linear;
+}
+
+.canvas-container.debug-mode::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(ellipse at center, transparent 0%, rgba(13, 17, 23, 0.1) 100%),
+    repeating-conic-gradient(
+      from 0deg at 50% 50%, 
+      transparent 0deg, 
+      rgba(255, 68, 68, 0.02) 60deg, 
+      transparent 120deg
+    );
+  pointer-events: none;
+  z-index: 2;
+  mix-blend-mode: overlay;
+}
+
+/* Debug Mode - Connection Styles */
+.canvas-container.debug-mode .connection {
+  transition: all var(--mode-transition-fast) linear;
+}
+
+.canvas-container.debug-mode .connection .connection-path {
+  stroke: var(--mode-primary);
+  stroke-width: 2px;
+  stroke-dasharray: 6,3,2,3; /* Complex technical pattern */
+  opacity: 0.95;
+  fill: none;
+  transition: all var(--mode-transition-fast) linear;
+  filter: drop-shadow(0 0 4px rgba(0, 255, 136, 0.4));
+  animation: debug-connection-flow 2s infinite linear;
+}
+
+.canvas-container.debug-mode .connection:hover .connection-path {
+  stroke: var(--mode-primary);
+  stroke-width: 4px;
+  stroke-dasharray: 8,4,3,4;
+  opacity: 1;
+  filter: var(--mode-shadow-connection);
+  transform: scale(1.1);
+  animation-duration: 1s;
+}
+
+.canvas-container.debug-mode .connection-selected .connection-path {
+  stroke: var(--mode-accent) !important;
+  stroke-width: 5px !important;
+  stroke-dasharray: none !important;
+  opacity: 1 !important;
+  filter: drop-shadow(0 0 20px rgba(255, 68, 68, 0.8));
+  animation: debug-connection-selected 1s infinite linear;
+}
+
+/* Debug Mode - Port Styles */
+.canvas-container.debug-mode .input-port polygon,
+.canvas-container.debug-mode .output-port polygon {
+  fill: transparent;
+  stroke: var(--mode-primary);
+  stroke-width: 3px;
+  filter: var(--mode-shadow-port);
+  transition: all var(--mode-transition-fast) linear;
+}
+
+.canvas-container.debug-mode .input-port:hover polygon,
+.canvas-container.debug-mode .output-port:hover polygon {
+  fill: rgba(0, 255, 136, 0.1);
+  stroke: var(--mode-primary);
+  stroke-width: 4px;
+  filter: drop-shadow(0 0 15px rgba(0, 255, 136, 0.8));
+  transform: scale(1.5) rotate(10deg);
+  animation: debug-port-glitch 0.5s infinite linear;
+}
+
+.canvas-container.debug-mode .input-port.connected polygon,
+.canvas-container.debug-mode .output-port.connected polygon {
+  fill: var(--mode-accent);
+  stroke: #cc3333;
+  animation: debug-port-error 2s infinite linear;
+}
+
+/* Debug Mode - Node Enhancements */
+.canvas-container.debug-mode .node {
+  filter: drop-shadow(0 0 8px rgba(0, 255, 136, 0.2));
+  transition: all var(--mode-transition-fast) linear;
+  font-family: 'Courier New', monospace;
+}
+
+.canvas-container.debug-mode .node:hover {
+  filter: drop-shadow(0 0 20px rgba(0, 255, 136, 0.4));
+  transform: scale(1.05);
+}
+
+.canvas-container.debug-mode .node.selected {
+  filter: drop-shadow(0 0 30px rgba(255, 68, 68, 0.6));
+  transform: scale(1.08);
+  animation: debug-node-selected 1s infinite linear;
+}
+
+/* ===== MODE-SPECIFIC ANIMATIONS ===== */
+
+/* Workflow Mode Animations */
+@keyframes workflow-connection-pulse {
+  0%, 100% {
+    opacity: 1;
+    stroke-width: 4px;
+    filter: drop-shadow(0 2px 12px rgba(16, 185, 129, 0.4));
+  }
+  50% {
+    opacity: 0.8;
+    stroke-width: 5px;
+    filter: drop-shadow(0 3px 16px rgba(16, 185, 129, 0.6));
+  }
+}
+
+@keyframes workflow-port-glow {
+  0%, 100% {
+    filter: drop-shadow(0 2px 6px rgba(16, 185, 129, 0.3));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 4px 12px rgba(16, 185, 129, 0.6));
+    transform: scale(1.1);
+  }
+}
+
+/* Architecture Mode Animations */
+@keyframes architecture-connection-pulse {
+  0%, 100% {
+    opacity: 1;
+    stroke-width: 5px;
+    filter: drop-shadow(0 4px 20px rgba(248, 113, 113, 0.5));
+  }
+  50% {
+    opacity: 0.8;
+    stroke-width: 6px;
+    filter: drop-shadow(0 6px 30px rgba(248, 113, 113, 0.8));
+  }
+}
+
+@keyframes architecture-port-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+    filter: drop-shadow(0 3px 10px rgba(248, 113, 113, 0.4));
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.9;
+    filter: drop-shadow(0 4px 15px rgba(248, 113, 113, 0.7));
+  }
+}
+
+/* Debug Mode Animations */
+@keyframes debug-scanlines {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(4px); }
+}
+
+@keyframes debug-connection-flow {
+  0% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 20; }
+}
+
+@keyframes debug-connection-selected {
+  0% { stroke-dashoffset: 0; opacity: 1; }
+  50% { stroke-dashoffset: 10; opacity: 0.8; }
+  100% { stroke-dashoffset: 20; opacity: 1; }
+}
+
+@keyframes debug-port-glitch {
+  0% { transform: scale(1.5) rotate(10deg); }
+  25% { transform: scale(1.6) rotate(-5deg); }
+  50% { transform: scale(1.4) rotate(15deg); }
+  75% { transform: scale(1.7) rotate(-10deg); }
+  100% { transform: scale(1.5) rotate(10deg); }
+}
+
+@keyframes debug-port-error {
+  0%, 100% {
+    filter: drop-shadow(0 0 10px rgba(255, 68, 68, 0.5));
+    transform: scale(1);
+  }
+  25% {
+    filter: drop-shadow(0 0 20px rgba(255, 68, 68, 0.8));
+    transform: scale(1.2);
+  }
+  50% {
+    filter: drop-shadow(0 0 15px rgba(255, 68, 68, 0.6));
+    transform: scale(0.9);
+  }
+  75% {
+    filter: drop-shadow(0 0 25px rgba(255, 68, 68, 1));
+    transform: scale(1.3);
+  }
+}
+
+@keyframes debug-node-selected {
+  0% { 
+    filter: drop-shadow(0 0 30px rgba(255, 68, 68, 0.6));
+    transform: scale(1.08);
+  }
+  50% { 
+    filter: drop-shadow(0 0 40px rgba(255, 68, 68, 0.9));
+    transform: scale(1.12);
+  }
+  100% { 
+    filter: drop-shadow(0 0 30px rgba(255, 68, 68, 0.6));
+    transform: scale(1.08);
+  }
+}
+
+/* ===== RESPONSIVE DESIGN FOR ALL MODES ===== */
+@media (max-width: 768px) {
+  .canvas-container.workflow-mode .connection .connection-path,
+  .canvas-container.architecture-mode .connection .connection-path,
+  .canvas-container.debug-mode .connection .connection-path {
+    stroke-width: 3px;
+  }
+  
+  .canvas-container.workflow-mode .connection:hover .connection-path {
+    stroke-width: 4px;
+  }
+  
+  .canvas-container.architecture-mode .connection:hover .connection-path {
+    stroke-width: 5px;
+  }
+  
+  .canvas-container.debug-mode .connection:hover .connection-path {
+    stroke-width: 5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-container.workflow-mode *,
+  .canvas-container.architecture-mode *,
+  .canvas-container.debug-mode * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ===== HIGH CONTRAST MODE SUPPORT ===== */
+@media (prefers-contrast: high) {
+  .canvas-container.workflow-mode {
+    --mode-primary: #0066ff;
+    --mode-background: #ffffff;
+    --mode-foreground: #000000;
+  }
+  
+  .canvas-container.architecture-mode {
+    --mode-primary: #bb88ff;
+    --mode-background: #000000;
+    --mode-foreground: #ffffff;
+  }
+  
+  .canvas-container.debug-mode {
+    --mode-primary: #00ff00;
+    --mode-accent: #ff0000;
+    --mode-background: #000000;
+    --mode-foreground: #ffffff;
+  }
+}
+
+/* ===== PRINT STYLES ===== */
+@media print {
+  .canvas-container.workflow-mode,
+  .canvas-container.architecture-mode,
+  .canvas-container.debug-mode {
+    background: white !important;
+    color: black !important;
+  }
+  
+  .canvas-container.workflow-mode .connection .connection-path {
+    stroke: #000000 !important;
+  }
+  
+  .canvas-container.architecture-mode .connection .connection-path {
+    stroke: #666666 !important;
+    stroke-dasharray: 5,3 !important;
+  }
+  
+  .canvas-container.debug-mode .connection .connection-path {
+    stroke: #333333 !important;
+    stroke-dasharray: 3,2 !important;
+  }
+}

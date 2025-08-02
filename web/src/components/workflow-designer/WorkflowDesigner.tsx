@@ -490,7 +490,7 @@ function WorkflowDesignerContent({
         >
           <svg 
             ref={svgRef} 
-            className={`workflow-canvas ${state.designerMode}-canvas`}
+            className={`workflow-canvas ${state.designerMode}-canvas ${state.connectionState.isConnecting ? 'connecting' : ''}`}
             width="100%" 
             height="100%"
           >
@@ -539,6 +539,15 @@ function WorkflowDesignerContent({
                 })
                 
                 return !existingConnection
+              }}
+              canDropOnNode={(targetNodeId: string) => {
+                const { connectionStart } = state.connectionState
+                if (!connectionStart || connectionStart.nodeId === targetNodeId) {
+                  return false
+                }
+                
+                // Allow dropping on different nodes when connecting
+                return state.connectionState.isConnecting
               }}
               onPlusButtonClick={(nodeId: string, portId: string) => {
                 console.log('Plus button clicked:', { nodeId, portId })

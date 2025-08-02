@@ -16,6 +16,33 @@ body {
   color: #333;
 }
 
+/* ===== GLOBAL CSS VARIABLES ===== */
+:root {
+  /* Z-Index Layer System */
+  --z-base: 1;
+  --z-canvas: 5;
+  --z-grid: 10;
+  --z-content: 100;
+  --z-connections: 105;
+  --z-nodes: 110;
+  --z-ports: 115;
+  --z-labels: 120;
+  --z-selection: 125;
+  --z-header: 1000;
+  --z-toolbar: 1010;
+  --z-sidebar: 1020;
+  --z-footer: 1030;
+  --z-canvas-toolbar: 1040;
+  --z-tooltip: 9000;
+  --z-dropdown: 9010;
+  --z-popover: 9020;
+  --z-notification: 9030;
+  --z-modal-backdrop: 9900;
+  --z-modal: 9910;
+  --z-modal-header: 9920;
+  --z-critical: 99999;
+}
+
 /* App Layout */
 .app {
   display: flex;
@@ -192,7 +219,7 @@ body {
   min-height: 0;
 }
 
-/* Workflow Designer */
+/* Workflow Designer - Base global styles only */
 .workflow-designer,
 .advanced-workflow-designer {
   display: flex;
@@ -226,7 +253,16 @@ body {
   gap: 1rem;
 }
 
-/* Button Styles - Consolidated */
+/* Designer Content */
+.designer-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ===== GLOBAL BUTTON SYSTEM ===== */
+/* Base button component - all buttons inherit from this */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -240,6 +276,7 @@ body {
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
+  font-family: inherit;
 }
 
 .btn:hover {
@@ -262,13 +299,14 @@ body {
   box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
 }
 
+/* Button color variants */
 .btn-primary {
   background: #2196f3;
   color: white;
   border-color: #2196f3;
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
   background: #1976d2;
   border-color: #1976d2;
 }
@@ -279,7 +317,7 @@ body {
   border-color: #6c757d;
 }
 
-.btn-secondary:hover {
+.btn-secondary:hover:not(:disabled) {
   background: #545b62;
   border-color: #545b62;
 }
@@ -296,7 +334,7 @@ body {
   border-color: #4caf50;
 }
 
-.btn-success:hover {
+.btn-success:hover:not(:disabled) {
   background: #388e3c;
   border-color: #388e3c;
 }
@@ -307,7 +345,7 @@ body {
   border-color: #f44336;
 }
 
-.btn-danger:hover {
+.btn-danger:hover:not(:disabled) {
   background: #d32f2f;
   border-color: #d32f2f;
 }
@@ -318,7 +356,7 @@ body {
   border-color: #ff9800;
 }
 
-.btn-warning:hover {
+.btn-warning:hover:not(:disabled) {
   background: #f57c00;
   border-color: #f57c00;
 }
@@ -327,19 +365,24 @@ body {
   background: none;
   color: #667eea;
   text-decoration: underline;
+  border: none;
 }
 
+.btn-link:hover:not(:disabled) {
+  color: #4a5bb3;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Button size variants */
 .btn-sm {
   padding: 0.25rem 0.5rem;
   font-size: 0.75rem;
 }
 
-/* Designer Content */
-.designer-content {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-  position: relative;
+.btn-lg {
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
 }
 
 /* Zoom Level */
@@ -413,25 +456,13 @@ body {
   100% { opacity: 1; }
 }
 
-/* Canvas Container - Consolidated */
+/* Canvas Container - Base styles only */
 .canvas-container {
   flex: 1;
   position: relative;
   overflow: hidden;
   background: #fafbfc;
   cursor: crosshair;
-}
-
-.canvas-container.tool-select {
-  cursor: default;
-}
-
-.canvas-container.tool-pan {
-  cursor: grab;
-}
-
-.canvas-container.tool-pan:active {
-  cursor: grabbing;
 }
 
 .canvas-container svg {
@@ -551,16 +582,16 @@ body {
 }
 
 .bottom-port-label-bg {
-  /* No styling - plain background */
+  fill: white;
+  stroke: none;
 }
 
 .bottom-port-label {
-  /* Removed transition to prevent highlight animations during node interactions */
+  font-size: 10px;
+  text-anchor: middle;
+  dominant-baseline: central;
+  fill: #333;
 }
-
-/* Removed hover effects for bottom-port-label-bg */
-
-/* Removed hover effects for bottom-port-label to prevent highlights during node interactions */
 
 /* Plus button styles - inherit from bottom port group */
 .plus-button-container {
@@ -573,7 +604,9 @@ body {
 }
 
 .plus-button-bg {
-  /* Removed transition to prevent highlight animations during node interactions */
+  fill: #2196f3;
+  stroke: white;
+  stroke-width: 2;
 }
 
 /* Removed hover effects for plus-button to prevent highlights during node interactions */
@@ -685,11 +718,6 @@ body {
   z-index: var(--z-connections, 105);
 }
 
-.connection:hover path {
-  stroke-width: 3 !important;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
-}
-
 .connection.selected path {
   stroke: #4caf50 !important;
   stroke-width: 3 !important;
@@ -706,23 +734,23 @@ body {
   to { stroke-dashoffset: 0; }
 }
 
-/* Node Editor Panel - Consolidated */
-.node-editor-panel {
-  width: 320px;
-  background: white;
-  border-left: 1px solid #e0e0e0;
-  overflow-y: auto;
-  box-shadow: -2px 0 8px rgba(0,0,0,0.1);
-  z-index: 50;
-}
-
-/* Node Palette - Consolidated */
+/* Node Palette - Base styles only */
 .node-palette {
   width: 280px;
   background: white;
   border-right: 1px solid #e0e0e0;
   overflow-y: auto;
   box-shadow: 2px 0 8px rgba(0,0,0,0.05);
+  z-index: 50;
+}
+
+/* Node Editor Panel - Base styles only */
+.node-editor-panel {
+  width: 320px;
+  background: white;
+  border-left: 1px solid #e0e0e0;
+  overflow-y: auto;
+  box-shadow: -2px 0 8px rgba(0,0,0,0.1);
   z-index: 50;
 }
 

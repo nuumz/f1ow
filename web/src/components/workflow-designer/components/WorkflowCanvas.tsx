@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import * as d3 from 'd3'
-import type { WorkflowNode, Connection, NodeVariant } from '../types'
+import type { WorkflowNode, Connection, NodeVariant, NodePort } from '../types'
 import { useWorkflowContext } from '../contexts/WorkflowContext'
 import { getVisibleCanvasBounds } from '../utils/canvas-utils'
 import { 
@@ -57,7 +58,7 @@ export interface WorkflowCanvasProps {
   
   // Drop validation
   canDropOnPort: (targetNodeId: string, targetPortId: string, targetPortType?: 'input' | 'output') => boolean
-  // canDropOnNode: (targetNodeId: string) => boolean // Commented out - reserved for future use
+  canDropOnNode: (targetNodeId: string) => boolean
   
   // Plus button handler for bottom ports
   onPlusButtonClick?: (nodeId: string, portId: string) => void
@@ -92,6 +93,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   onPortDrag,
   onPortDragEnd,
   canDropOnPort,
+  canDropOnNode,
   onPlusButtonClick,
   onTransformChange,
   onZoomLevelChange,
@@ -1199,18 +1201,17 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .append('g')
       .attr('class', 'connection')
 
-    // Add visible connection path with direct interaction 
+    // Add invisible hitbox for better hover detection (especially for dashed lines)
     connectionEnter.append('path')
-      .attr('class', 'connection-path')
+      .attr('class', 'connection-hitbox')
       .attr('fill', 'none')
-      .style('cursor', 'pointer')
       .on('click', (event, d) => {
         event.stopPropagation()
         onConnectionClick(d)
       })
       .on('mouseenter', function(this: any, _event: any, d: Connection) {
-        const connectionElement = d3.select(this)
         const connectionGroup = d3.select(this.parentNode)
+        const connectionPath = connectionGroup.select('.connection-path')
         const isSelected = selectedConnection?.id === d.id
         
         // Clear any pending timeout
@@ -1221,8 +1222,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         // Apply hover immediately for non-selected connections
         if (!isSelected) {
           connectionGroup.classed('connection-hover', true)
-          // Force immediate visual update
-          connectionElement
+          // Force immediate visual update on the visible path
+          connectionPath
             .interrupt() // Stop any ongoing transitions
             .attr('stroke', '#1976D2')
             .attr('stroke-width', 3)
@@ -1230,8 +1231,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         }
       })
       .on('mouseleave', function(this: any, _event: any, d: Connection) {
-        const connectionElement = d3.select(this)
         const connectionGroup = d3.select(this.parentNode)
+        const connectionPath = connectionGroup.select('.connection-path')
         const isSelected = selectedConnection?.id === d.id
         
         // Remove hover class
@@ -1240,7 +1241,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         // Delay the visual reset to prevent flickering
         hoverTimeoutRef.current = setTimeout(() => {
           if (!isSelected && !connectionGroup.classed('connection-hover')) {
-            connectionElement
+            connectionPath
               .interrupt() // Stop any ongoing transitions
               .attr('stroke', 'white')
               .attr('stroke-width', 2)
@@ -1248,9 +1249,19 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           }
         }, 50) // Small delay to prevent flicker on quick mouse movements
       })
+
+    // Add visible connection path (no interaction events, use hitbox instead)
+    connectionEnter.append('path')
+      .attr('class', 'connection-path')
+      .attr('fill', 'none')
+      .style('pointer-events', 'none') // Disable events on visible path
     
     const connectionUpdate = connectionEnter.merge(connectionPaths as any)
     
+    // Update hitbox path (invisible but wide for better hover detection)
+    connectionUpdate.select('.connection-hitbox')
+      .attr('d', (d: any) => getConnectionPath(d))
+
     // Update visible path
     connectionUpdate.select('.connection-path')
       .attr('d', (d: any) => getConnectionPath(d))
@@ -1386,7 +1397,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     // Node background (shape-aware)
     nodeEnter.append('path')
       .attr('class', 'node-background')
-      .on('click', (event: any, d: any) => {
+      .on('click', (event: any, d: WorkflowNode) => {
         // Fallback click handler for node background
         if (!isDragging) {
           event.stopPropagation()
@@ -1394,10 +1405,73 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           onNodeClick(d, ctrlKey)
         }
       })
-      .on('dblclick', (event: any, d: any) => {
+      .on('dblclick', (event: any, d: WorkflowNode) => {
         event.stopPropagation()
         event.preventDefault()
         onNodeDoubleClick(d)
+      })
+      .on('dragover', (event: any, d: WorkflowNode) => {
+        // Allow drop if connecting and can drop on this node
+        if (isConnecting && canDropOnNode && canDropOnNode(d.id)) {
+          event.preventDefault()
+          event.stopPropagation()
+          // Add visual feedback with enhanced styling
+          const nodeElement = d3.select(event.currentTarget.parentNode)
+          nodeElement.classed('can-drop-node', true)
+          d3.select(event.currentTarget).classed('can-drop', true)
+          
+          // Highlight available input ports
+          nodeElement.selectAll('.input-port')
+            .classed('drop-target-port', function(this: any, portData: any) {
+              // Type-safe port data access
+              const typedPortData = portData as (NodePort & { nodeId: string })
+              // Check if this specific port can accept the connection
+              return !connections.some((conn: Connection) => 
+                conn.targetNodeId === d.id && conn.targetPortId === typedPortData.id
+              )
+            })
+        }
+      })
+      .on('dragleave', (event: any) => {
+        // Remove visual feedback
+        const nodeElement = d3.select(event.currentTarget.parentNode)
+        nodeElement.classed('can-drop-node', false)
+        d3.select(event.currentTarget).classed('can-drop', false)
+        
+        // Remove port highlighting
+        nodeElement.selectAll('.input-port').classed('drop-target-port', false)
+      })
+      .on('drop', (event: any, d: WorkflowNode) => {
+        event.preventDefault()
+        event.stopPropagation()
+        
+        // Remove visual feedback
+        const nodeElement = d3.select(event.currentTarget.parentNode)
+        nodeElement.classed('can-drop-node', false)
+        d3.select(event.currentTarget).classed('can-drop', false)
+        nodeElement.selectAll('.input-port').classed('drop-target-port', false)
+        
+        // Handle connection drop on node
+        if (isConnecting && canDropOnNode && canDropOnNode(d.id)) {
+          // Smart port selection: find the best available input port
+          const availableInputPorts = d.inputs?.filter((port: NodePort) => {
+            // Check if port is not already connected
+            return !connections.some((conn: Connection) => 
+              conn.targetNodeId === d.id && conn.targetPortId === port.id
+            )
+          }) || []
+          
+          if (availableInputPorts.length > 0) {
+            // Strategy: prefer first available port, but could be enhanced with type matching
+            const targetPort = availableInputPorts[0]
+            console.log('📍 Node background drop - connecting to port:', d.id, targetPort.id)
+            onPortDragEnd(d.id, targetPort.id)
+          } else {
+            // No available input ports
+            console.log('⚠️ Node background drop - no available input ports on:', d.id)
+            onPortDragEnd()
+          }
+        }
       })
       
     // Update node background attributes (shape-aware)
@@ -1908,8 +1982,20 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         return positions[i]?.y || 0
       })
       .attr('r', (d: any) => getConfigurableDimensions(d.nodeData).portRadius || 6)
-      .attr('fill', () => getPortColor('any'))
-      .attr('stroke', '#333')
+      .attr('fill', (d: any) => {
+        if (isConnecting && connectionStart && connectionStart.type === 'input') {
+          const canDrop = canDropOnPort(d.nodeId, d.id, 'output')
+          return canDrop ? '#4CAF50' : getPortColor('any')
+        }
+        return getPortColor('any')
+      })
+      .attr('stroke', (d: any) => {
+        if (isConnecting && connectionStart && connectionStart.type === 'input') {
+          const canDrop = canDropOnPort(d.nodeId, d.id, 'output')
+          return canDrop ? '#4CAF50' : '#ff5722'
+        }
+        return '#333'
+      })
       .attr('stroke-width', 2)
 
     //console.log('🔴 Created', outputPortGroups.selectAll('circle').size(), 'output port circles')
@@ -2565,6 +2651,42 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const portElement = d3.select(this)
         const isConnectionActive = isConnecting && connectionStart && connectionStart.type === 'output'
         const canDrop = isConnectionActive ? canDropOnPort(d.nodeId, d.id, 'input') : false
+        
+        // Calculate target values using inline logic (performance optimized)
+        const safeCanDrop = Boolean(canDrop)
+        const baseDimensions = getConfigurableDimensions(d.nodeData)
+        
+        const targetFill = isConnectionActive ? (safeCanDrop ? '#4CAF50' : '#ccc') : getPortColor('any')
+        const targetStroke = isConnectionActive ? (safeCanDrop ? '#4CAF50' : '#ff5722') : '#333'
+        const targetStrokeWidth = isConnectionActive ? (safeCanDrop ? 3 : 2) : 2
+        const targetRadius = isConnectionActive ? (safeCanDrop ? baseDimensions.portRadius * 1.5 : baseDimensions.portRadius) : baseDimensions.portRadius
+        
+        // Only update if values changed to prevent flickering
+        const currentFill = portElement.attr('fill')
+        const currentStroke = portElement.attr('stroke')
+        const currentStrokeWidth = parseInt(portElement.attr('stroke-width') || '2')
+        const currentRadius = parseFloat(portElement.attr('r') || '0')
+        
+        if (currentFill !== targetFill) {
+          portElement.attr('fill', targetFill)
+        }
+        if (currentStroke !== targetStroke) {
+          portElement.attr('stroke', targetStroke)
+        }
+        if (currentStrokeWidth !== targetStrokeWidth) {
+          portElement.attr('stroke-width', targetStrokeWidth)
+        }
+        if (Math.abs(currentRadius - targetRadius) > 0.1) {
+          portElement.attr('r', targetRadius)
+        }
+      })
+      
+    // Update output ports visual state with change detection
+    nodeLayer.selectAll('.output-port-circle')
+      .each(function(d: any) {
+        const portElement = d3.select(this)
+        const isConnectionActive = isConnecting && connectionStart && connectionStart.type === 'input'
+        const canDrop = isConnectionActive ? canDropOnPort(d.nodeId, d.id, 'output') : false
         
         // Calculate target values using inline logic (performance optimized)
         const safeCanDrop = Boolean(canDrop)

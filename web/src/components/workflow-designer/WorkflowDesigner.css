@@ -197,6 +197,7 @@
   min-height: 0;
 }
 
+/* Workflow Designer Container Extensions */
 .node-palette-container {
   width: auto;
   max-width: fit-content;
@@ -208,19 +209,6 @@
   box-sizing: border-box;
 }
 
-.canvas-container {
-  flex: 1;
-  position: relative;
-  background: #fcfcfc;
-  min-height: 0;
-  overflow: hidden;
-  z-index: var(--z-base);
-}
-
-.canvas-container.drag-over {
-  background: #e3f2fd;
-}
-
 .node-editor-container {
   width: 320px;
   background: white;
@@ -228,6 +216,24 @@
   overflow-y: auto;
   flex-shrink: 0;
   z-index: var(--z-sidebar);
+}
+
+/* Canvas Container - Workflow Designer Specific Extensions */
+.canvas-container.drag-over {
+  background: #e3f2fd;
+}
+
+.canvas-container.architecture-mode {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+}
+
+.canvas-container.workflow-mode {
+  background: #fcfcfc;
+}
+
+/* Canvas container adjustments for architecture mode */
+.workflow-designer-content .architecture-toolbar + .canvas-container {
+  margin-top: 60px; /* Account for architecture toolbar height */
 }
 
 .workflow-canvas {
@@ -239,6 +245,51 @@
 
 .workflow-canvas:active {
   cursor: grabbing;
+}
+
+/* Port connection dragging state */
+.workflow-canvas.connecting {
+  cursor: crosshair !important;
+}
+
+.workflow-canvas.connecting:active {
+  cursor: crosshair !important;
+}
+
+/* Canvas container visual feedback during connection */
+.canvas-container .workflow-canvas.connecting {
+  background: radial-gradient(circle at center, rgba(33, 150, 243, 0.05) 0%, transparent 70%);
+}
+
+/* Architecture mode connection feedback */
+.canvas-container.architecture-mode .workflow-canvas.connecting {
+  background: radial-gradient(circle at center, rgba(139, 92, 246, 0.05) 0%, transparent 70%);
+}
+
+/* Valid ports highlighting during connection */
+.workflow-canvas.connecting .input-port-circle[fill="#4CAF50"],
+.workflow-canvas.connecting .output-port-circle[fill="#4CAF50"] {
+  filter: drop-shadow(0 0 8px rgba(76, 175, 80, 0.8));
+}
+
+/* Invalid ports dimming during connection */
+.workflow-canvas.connecting .input-port-circle[fill="#ccc"],
+.workflow-canvas.connecting .output-port-circle[fill="#ccc"] {
+  opacity: 0.3;
+}
+
+/* Bottom ports (diamond shapes) during connection */
+.workflow-canvas.connecting .bottom-port-diamond[fill="#4CAF50"] {
+  filter: drop-shadow(0 0 8px rgba(76, 175, 80, 0.8));
+}
+
+.workflow-canvas.connecting .bottom-port-diamond[fill="#ff5722"] {
+  opacity: 0.3;
+}
+
+/* Hide output port borders when canvas is in connecting mode */
+.workflow-canvas.connecting .output-port-circle {
+  stroke: none !important;
 }
 
 /* Execution Logs */
@@ -377,43 +428,33 @@
   border-left: 1px solid rgba(255, 255, 255, 0.2);
 }
 
+/* ===== WORKFLOW DESIGNER SPECIFIC BUTTON EXTENSIONS ===== */
+/* Extends base .btn styles from globals.css */
+
 .action-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
+  /* Extends .btn base styles */
   border: 1px solid #e0e0e0;
-  border-radius: 6px;
   background: white;
   color: #333;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  white-space: nowrap;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .action-button:hover:not(:disabled) {
   background: #f8f9fa;
   border-color: #d0d0d0;
-  transform: translateY(-1px);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 
 .action-button:active:not(:disabled) {
-  transform: translateY(0);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .action-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
   background: #f3f4f6;
   color: #9ca3af;
 }
 
-/* Mode Switch Button */
+/* Specific workflow button variants */
 .mode-switch-button {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border: none;
@@ -439,7 +480,7 @@
   box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4);
 }
 
-/* Specific button styles */
+/* Workflow-specific button variants - extending .btn-* classes */
 .save-button:not(:disabled) {
   background: #3b82f6;
   color: white;
@@ -449,7 +490,6 @@
 .save-button:hover:not(:disabled) {
   background: #2563eb;
   border-color: #1d4ed8;
-  transform: translateY(-1px);
 }
 
 .draft-button:not(:disabled) {
@@ -461,7 +501,6 @@
 .draft-button:hover:not(:disabled) {
   background: #7C3AED;
   border-color: #6D28D9;
-  transform: translateY(-1px);
 }
 
 .execute-button:not(:disabled) {
@@ -473,7 +512,6 @@
 .execute-button:hover:not(:disabled) {
   background: #059669;
   border-color: #047857;
-  transform: translateY(-1px);
 }
 
 .export-button:not(:disabled) {
@@ -485,7 +523,6 @@
 .export-button:hover:not(:disabled) {
   background: #7c3aed;
   border-color: #6d28d9;
-  transform: translateY(-1px);
 }
 
 /* Architecture Dropdown Styles */
@@ -1785,7 +1822,7 @@
   marker-end: url(#arrowhead-architecture-hover) !important;
   filter: drop-shadow(0 3px 10px rgba(109, 40, 217, 0.4));
   opacity: 1;
-  stroke-dasharray: 12,6; /* Larger dashes on hover */
+  stroke-dasharray: 8,4; /* Keep same dash pattern to prevent instability */
 }
 
 .canvas-container.architecture-mode .connection-selected .connection-path {
@@ -1807,6 +1844,13 @@
 }
 
 /* Show all ports when hovering over node - this will be controlled by JavaScript */
+
+/* Override architecture mode port hiding when connecting */
+.canvas-container.architecture-mode .workflow-canvas.connecting .input-port-group,
+.canvas-container.architecture-mode .workflow-canvas.connecting .output-port-group {
+  opacity: 1 !important;
+  pointer-events: all !important;
+}
 
 .canvas-container.architecture-mode .input-port circle,
 .canvas-container.architecture-mode .output-port circle {
@@ -1836,14 +1880,23 @@
 }
 
 /* === SHARED STYLES === */
-.connection .connection-hitbox {
-  cursor: pointer;
+
+/* Enhanced hover detection for dashed lines */
+.connection .connection-path {
+  stroke-linecap: round; /* Rounded ends help with gaps */
+  stroke-linejoin: round; /* Rounded joins */
 }
 
-/* Ensure hover takes precedence over default but not over selected */
-.connection:not(.connection-selected).connection-hover .connection-path {
-  /* Styles handled by mode-specific selectors above */
+/* Wide invisible stroke for better hover detection on dashed lines */
+.connection .connection-hitbox {
+  stroke: transparent !important;
+  stroke-width: 10px !important;
+  fill: none !important;
+  pointer-events: all !important;
+  cursor: pointer !important;
 }
+
+/* Connection hover styles handled by mode-specific selectors */
 
 /* === ANIMATIONS === */
 @keyframes workflowPulse {
@@ -1899,3 +1952,80 @@
 .canvas-container.architecture-mode .port-type-array circle { stroke: #0e7490; stroke-dasharray: 4,2; }
 .canvas-container.architecture-mode .port-type-error circle { stroke: #b91c1c; stroke-dasharray: 4,2; }
 .canvas-container.architecture-mode .port-type-any circle { stroke: #52525b; stroke-dasharray: 4,2; }
+
+/* === NODE DROP FEEDBACK === */
+.node-background.can-drop {
+  stroke: #4CAF50 !important;
+  stroke-width: 2px;
+  stroke-dasharray: 5,5;
+  animation: dash 1s linear infinite;
+}
+
+/* Enhanced node-level drop feedback */
+.node.can-drop-node {
+  filter: drop-shadow(0 0 12px rgba(76, 175, 80, 0.6)) !important;
+  transform: scale(1.02);
+}
+
+.node.can-drop-node .node-background {
+  stroke: #4CAF50 !important;
+  stroke-width: 3px !important;
+  stroke-dasharray: 8,4;
+  animation: nodeDrop 1.2s ease-in-out infinite;
+}
+
+/* Port-level drop feedback */
+.input-port.drop-target-port circle {
+  fill: rgba(76, 175, 80, 0.2) !important;
+  stroke: #4CAF50 !important;
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 8px rgba(76, 175, 80, 0.8));
+  animation: portPulse 0.8s ease-in-out infinite;
+}
+
+.output-port.drop-target-port circle {
+  fill: rgba(76, 175, 80, 0.2) !important;
+  stroke: #4CAF50 !important;
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 8px rgba(76, 175, 80, 0.8));
+  animation: portPulse 0.8s ease-in-out infinite;
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+@keyframes nodeDrop {
+  0%, 100% { 
+    stroke-dashoffset: 0;
+    filter: drop-shadow(0 0 12px rgba(76, 175, 80, 0.6));
+  }
+  50% { 
+    stroke-dashoffset: -12;
+    filter: drop-shadow(0 0 20px rgba(76, 175, 80, 0.9));
+  }
+}
+
+@keyframes portPulse {
+  0%, 100% { 
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% { 
+    transform: scale(1.2);
+    opacity: 0.8;
+  }
+}
+
+@keyframes validPortPulse {
+  0%, 100% { 
+    transform: scale(1);
+    filter: drop-shadow(0 0 8px rgba(76, 175, 80, 0.8));
+  }
+  50% { 
+    transform: scale(1.15);
+    filter: drop-shadow(0 0 12px rgba(76, 175, 80, 1));
+  }
+}

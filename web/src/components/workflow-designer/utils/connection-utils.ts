@@ -203,3 +203,173 @@ export function calculateConnectionPreviewPath(
 
   return `M ${sourcePos.x} ${sourcePos.y} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${adjustedPreviewX} ${adjustedPreviewY}`
 }
+
+/**
+ * Generate connection path with offset for multiple connections between same nodes
+ */
+export function generateMultipleConnectionPath(
+  sourceNode: WorkflowNode,
+  sourcePortId: string,
+  targetNode: WorkflowNode,
+  targetPortId: string,
+  connectionIndex: number = 0,
+  totalConnections: number = 1,
+  variant: NodeVariant = 'standard'
+): string {
+  // Use base connection path generation
+  const basePath = generateVariantAwareConnectionPath(sourceNode, sourcePortId, targetNode, targetPortId, variant)
+  
+  // If only one connection, return base path
+  if (totalConnections <= 1) {
+    return basePath
+  }
+  
+  // Calculate offset for multiple connections
+  const sourcePos = calculatePortPosition(sourceNode, sourcePortId, 
+    sourceNode.bottomPorts?.some(p => p.id === sourcePortId) ? 'bottom' : 'output', variant)
+  const targetPos = calculatePortPosition(targetNode, targetPortId,
+    targetNode.bottomPorts?.some(p => p.id === targetPortId) ? 'bottom' : 'input', variant)
+  
+  // Calculate connection offset based on index and total connections
+  const maxOffset = Math.min(30, 10 + (totalConnections * 3)) // Maximum offset of 30px
+  const spacing = maxOffset / Math.max(1, totalConnections - 1)
+  const offset = totalConnections === 1 ? 0 : (connectionIndex * spacing) - (maxOffset / 2)
+  
+  // Apply offset perpendicular to connection direction
+  const dx = targetPos.x - sourcePos.x
+  const dy = targetPos.y - sourcePos.y
+  const distance = Math.sqrt(dx * dx + dy * dy)
+  
+  if (distance === 0) return basePath
+  
+  // Calculate perpendicular offset vector
+  const perpX = (-dy / distance) * offset
+  const perpY = (dx / distance) * offset
+  
+  // Apply arrow marker offset
+  const arrowOffset = 7
+  const offsetRatio = arrowOffset / distance
+  const adjustedTargetX = targetPos.x - (dx * offsetRatio) + perpX
+  const adjustedTargetY = targetPos.y - (dy * offsetRatio) + perpY
+  
+  const adjustedSourceX = sourcePos.x + perpX
+  const adjustedSourceY = sourcePos.y + perpY
+  
+  const adjustedDx = adjustedTargetX - adjustedSourceX
+  const adjustedDy = adjustedTargetY - adjustedSourceY
+  
+  // Calculate control points with offset
+  const isSourceBottomPort = sourceNode.bottomPorts?.some(p => p.id === sourcePortId)
+  let cp1x, cp1y, cp2x, cp2y
+  
+  if (isSourceBottomPort) {
+    const controlOffset = Math.max(Math.abs(adjustedDy) / 2.5, 60)
+    cp1x = adjustedSourceX
+    cp1y = adjustedSourceY + controlOffset
+    cp2x = adjustedTargetX
+    cp2y = adjustedTargetY - Math.max(Math.abs(adjustedDx) / 2.5, 40)
+  } else {
+    const controlOffset = Math.max(Math.abs(adjustedDx) / 2.5, 60)
+    cp1x = adjustedSourceX + controlOffset
+    cp1y = adjustedSourceY + adjustedDy * 0.1
+    cp2x = adjustedTargetX - controlOffset
+    cp2y = adjustedTargetY - adjustedDy * 0.1
+  }
+  
+  return `M ${adjustedSourceX} ${adjustedSourceY} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${adjustedTargetX} ${adjustedTargetY}`
+}
+
+/**
+ * Analyze connections to detect multiple connections between same node pairs
+ */
+export function analyzeConnectionGroups(connections: Array<{
+  id: string
+  sourceNodeId: string
+  targetNodeId: string
+  sourcePortId: string
+  targetPortId: string
+}>): Map<string, Array<{
+  id: string
+  sourceNodeId: string
+  targetNodeId: string
+  sourcePortId: string
+  targetPortId: string
+  index: number
+  total: number
+}>> {
+  const connectionGroups = new Map<string, Array<any>>()
+  
+  // Group connections by node pair
+  connections.forEach(connection => {
+    const groupKey = `${connection.sourceNodeId}->${connection.targetNodeId}`
+    
+    if (!connectionGroups.has(groupKey)) {
+      connectionGroups.set(groupKey, [])
+    }
+    
+    connectionGroups.get(groupKey)!.push(connection)
+  })
+  
+  // Add index and total count to each connection
+  const enrichedGroups = new Map<string, Array<any>>()
+  
+  connectionGroups.forEach((group, groupKey) => {
+    const enrichedGroup = group.map((connection, index) => ({
+      ...connection,
+      index,
+      total: group.length
+    }))
+    
+    enrichedGroups.set(groupKey, enrichedGroup)
+  })
+  
+  return enrichedGroups
+}
+
+/**
+ * Get connection group information for a specific connection
+ */
+export function getConnectionGroupInfo(
+  connectionId: string,
+  connections: Array<{
+    id: string
+    sourceNodeId: string
+    targetNodeId: string
+    sourcePortId: string
+    targetPortId: string
+  }>
+): { index: number; total: number; isMultiple: boolean } {
+  const connection = connections.find(c => c.id === connectionId)
+  if (!connection) {
+    return { index: 0, total: 1, isMultiple: false }
+  }
+  
+  // Find all connections between the same node pair
+  const sameNodeConnections = connections.filter(c => 
+    c.sourceNodeId === connection.sourceNodeId && 
+    c.targetNodeId === connection.targetNodeId
+  )
+  
+  const index = sameNodeConnections.findIndex(c => c.id === connectionId)
+  const total = sameNodeConnections.length
+  
+  return {
+    index: index >= 0 ? index : 0,
+    total,
+    isMultiple: total > 1
+  }
+}
+
+/**
+ * Check if a node is a legacy endpoint based on various criteria
+ */
+export function isLegacyEndpoint(node: WorkflowNode): boolean {
+  return (
+    node.config?.isLegacyEndpoint ||
+    node.type?.includes('legacy') ||
+    (node.inputs && node.inputs.length > 3) ||
+    (node.outputs && node.outputs.length > 3) ||
+    node.metadata?.category?.includes('Legacy') ||
+    false
+  )
+}

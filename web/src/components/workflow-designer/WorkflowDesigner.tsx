@@ -523,8 +523,8 @@ function WorkflowDesignerContent({
                   return false
                 }
                 
-                // Check if connection already exists
-                const existingConnection = state.connections.find(conn => {
+                // Check for exact duplicate connection
+                const exactDuplicateExists = state.connections.find(conn => {
                   if (connectionStart.type === 'output') {
                     return conn.sourceNodeId === connectionStart.nodeId &&
                            conn.sourcePortId === connectionStart.portId &&
@@ -538,7 +538,60 @@ function WorkflowDesignerContent({
                   }
                 })
                 
-                return !existingConnection
+                // Always prevent exact duplicate connections
+                if (exactDuplicateExists) {
+                  return false
+                }
+                
+                // In architecture mode, allow multiple connections to support legacy endpoints
+                if (state.designerMode === 'architecture') {
+                  // Get target node for enhanced validation
+                  const targetNode = state.nodes.find(n => n.id === targetNodeId)
+                  const sourceNode = state.nodes.find(n => n.id === connectionStart.nodeId)
+                  
+                  // Enhanced legacy system detection
+                  const isLegacyTarget = targetNode && (
+                    targetNode.config?.isLegacyEndpoint ||
+                    targetNode.type?.includes('legacy') ||
+                    (targetNode.inputs && targetNode.inputs.length > 3) || // Many input ports
+                    state.connections.filter(c => c.targetNodeId === targetNodeId).length >= 2 // Already has multiple connections
+                  )
+                  
+                  const isLegacySource = sourceNode && (
+                    sourceNode.config?.isLegacyEndpoint ||
+                    sourceNode.type?.includes('legacy') ||
+                    (sourceNode.outputs && sourceNode.outputs.length > 3) // Many output ports
+                  )
+                  
+                  // Allow multiple connections for legacy systems or when nodes are connected through different endpoints
+                  if (isLegacyTarget || isLegacySource) {
+                    console.log('🏗️ Architecture mode: Allowing multiple connections for legacy system')
+                    return true
+                  }
+                  
+                  // For non-legacy systems in architecture mode, still allow multiple connections
+                  // but provide console feedback for architecture design awareness
+                  const existingConnectionsCount = state.connections.filter(conn => 
+                    conn.sourceNodeId === connectionStart.nodeId && conn.targetNodeId === targetNodeId
+                  ).length
+                  
+                  if (existingConnectionsCount > 0) {
+                    console.log(`🔄 Architecture mode: Creating additional connection between ${connectionStart.nodeId} and ${targetNodeId} (${existingConnectionsCount + 1} total)`)
+                  }
+                  
+                  return true
+                }
+                
+                // In workflow mode, use stricter validation
+                // Additional workflow mode validation: prevent multiple connections to input ports
+                if (connectionStart.type === 'output') {
+                  const targetPortAlreadyConnected = state.connections.find(conn => 
+                    conn.targetNodeId === targetNodeId && conn.targetPortId === targetPortId
+                  )
+                  return !targetPortAlreadyConnected
+                }
+                
+                return true
               }}
               canDropOnNode={(targetNodeId: string) => {
                 const { connectionStart } = state.connectionState

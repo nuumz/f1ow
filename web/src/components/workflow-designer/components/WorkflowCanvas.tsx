@@ -15,7 +15,14 @@ import {
   NodeTypes
 } from '../utils/node-utils'
 // Removed unused import: getNodeDimensions
-import { generateVariantAwareConnectionPath, calculateConnectionPreviewPath, calculatePortPosition } from '../utils/connection-utils'
+import { 
+  generateVariantAwareConnectionPath, 
+  generateMultipleConnectionPath,
+  calculateConnectionPreviewPath, 
+  calculatePortPosition,
+  getConnectionGroupInfo,
+  isLegacyEndpoint
+} from '../utils/connection-utils'
 
 export interface WorkflowCanvasProps {
   // SVG ref
@@ -517,7 +524,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
    * - Other array types: Multiple connections allowed
    * - Other single types: Single connection only
    */
-  const canBottomPortAcceptConnection = useCallback((nodeId: string, portId: string, connections: Connection[]) => {
+  const canBottomPortAcceptConnection = useCallback((nodeId: string, portId: string, connections: Connection[], designerMode?: 'workflow' | 'architecture') => {
     // Get the node to check its bottom ports configuration
     const node = nodeMap.get(nodeId)
     if (!node || !node.bottomPorts) return false
@@ -530,7 +537,32 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       conn.sourceNodeId === nodeId && conn.sourcePortId === portId
     )
     
-    // Define connection rules based on port type/ID
+    // In architecture mode, be more permissive for legacy system support
+    if (designerMode === 'architecture') {
+      // Allow multiple connections to most ports in architecture mode
+      // This supports legacy systems with multiple endpoints
+      switch (portId) {
+        case 'ai-model':
+          // Even AI Model ports can have multiple connections in architecture mode
+          // (e.g., different model versions or fallback models)
+          return true
+          
+        case 'memory':
+          // Memory ports can connect to multiple stores in architecture mode
+          return true
+          
+        case 'tool':
+          // Tool port: Always allows multiple connections
+          return true
+          
+        default:
+          // In architecture mode, allow multiple connections for all ports
+          // This supports legacy systems with multiple endpoints
+          return true
+      }
+    }
+    
+    // Original workflow mode logic (stricter validation)
     switch (portId) {
       case 'ai-model':
         // AI Model port: Only allows 1 connection (can replace existing)
@@ -556,6 +588,44 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         }
     }
   }, [nodeMap])
+
+  // Helper function to check if a port has multiple connections
+  const hasMultipleConnections = useCallback((nodeId: string, portId: string, portType: 'input' | 'output') => {
+    if (portType === 'input') {
+      return connections.filter(conn => 
+        conn.targetNodeId === nodeId && conn.targetPortId === portId
+      ).length > 1
+    } else {
+      return connections.filter(conn => 
+        conn.sourceNodeId === nodeId && conn.sourcePortId === portId
+      ).length > 1
+    }
+  }, [connections])
+
+  // Helper function to determine if a node is a legacy endpoint
+  const isLegacyEndpoint = useCallback((node: WorkflowNode) => {
+    // Mark nodes as legacy endpoints based on certain criteria
+    return node.config?.isLegacyEndpoint || 
+           node.type === 'legacy-api' || 
+           node.type === 'legacy-service' ||
+           (node.inputs && node.inputs.length > 3) || // Many input ports suggest legacy system
+           (workflowContextState.designerMode === 'architecture' && 
+            connections.filter(conn => conn.targetNodeId === node.id).length > 2) // Multiple incoming connections
+  }, [connections, workflowContextState.designerMode])
+
+  // Enhanced port highlighting for architecture mode
+  const getPortHighlightClass = useCallback((nodeId: string, portId: string, portType: 'input' | 'output') => {
+    if (workflowContextState.designerMode !== 'architecture') return ''
+    
+    const isMultiple = hasMultipleConnections(nodeId, portId, portType)
+    const classes = []
+    
+    if (isMultiple) {
+      classes.push('has-multiple-connections')
+    }
+    
+    return classes.join(' ')
+  }, [workflowContextState.designerMode, hasMultipleConnections])
 
 
   // Cache cleanup utility to prevent memory leaks
@@ -597,13 +667,31 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       }
     }
     
-    const path = generateVariantAwareConnectionPath(
-      sourceNode, 
-      connection.sourcePortId, 
-      targetNode, 
-      connection.targetPortId,
-      nodeVariant
-    )
+    // Check if this is part of multiple connections between same nodes
+    const groupInfo = getConnectionGroupInfo(connection.id, connections)
+    
+    let path: string
+    if (groupInfo.isMultiple) {
+      // Use multiple connection path with offset for visual separation
+      path = generateMultipleConnectionPath(
+        sourceNode,
+        connection.sourcePortId,
+        targetNode,
+        connection.targetPortId,
+        groupInfo.index,
+        groupInfo.total,
+        nodeVariant
+      )
+    } else {
+      // Use standard connection path for single connections
+      path = generateVariantAwareConnectionPath(
+        sourceNode, 
+        connection.sourcePortId, 
+        targetNode, 
+        connection.targetPortId,
+        nodeVariant
+      )
+    }
     
     if (!useDragPositions) {
       connectionPathCacheRef.current.set(cacheKey, path)
@@ -1256,6 +1344,17 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr('class', 'connection-path')
       .attr('fill', 'none')
       .style('pointer-events', 'none') // Disable events on visible path
+
+    // Add connection labels (only in architecture mode for multiple connections)
+    connectionEnter.append('text')
+      .attr('class', 'connection-label')
+      .attr('font-size', 10)
+      .attr('font-weight', 'bold')
+      .attr('fill', '#555')
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'middle')
+      .style('pointer-events', 'none')
+      .style('display', 'none') // Initially hidden
     
     const connectionUpdate = connectionEnter.merge(connectionPaths as any)
     
@@ -1269,6 +1368,69 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr('stroke', 'white') // Default stroke - CSS will override for selection/hover
       .attr('stroke-width', 2) // Default width - CSS will override for selection/hover
       .attr('marker-end', (d: any) => getConnectionMarker(d, 'default')) // Dynamic marker based on direction
+      .attr('class', (d: any) => {
+        const groupInfo = getConnectionGroupInfo(d.id, connections)
+        let classes = 'connection-path'
+        
+        if (groupInfo.isMultiple) {
+          classes += ' multiple-connection'
+          if (groupInfo.index === 1) classes += ' secondary'
+          if (groupInfo.index === 2) classes += ' tertiary'
+        }
+        
+        return classes
+      })
+
+    // Update connection labels
+    connectionUpdate.select('.connection-label')
+      .style('display', (d: any) => {
+        // Show labels only in architecture mode for multiple connections
+        if (workflowContextState.designerMode !== 'architecture') return 'none'
+        
+        const groupInfo = getConnectionGroupInfo(d.id, connections)
+        return groupInfo.isMultiple ? 'block' : 'none'
+      })
+      .attr('x', (d: any) => {
+        // Position label at midpoint of connection
+        const sourceNode = nodeMap.get(d.sourceNodeId)
+        const targetNode = nodeMap.get(d.targetNodeId)
+        if (!sourceNode || !targetNode) return 0
+        
+        return (sourceNode.x + targetNode.x) / 2
+      })
+      .attr('y', (d: any) => {
+        // Position label at midpoint of connection
+        const sourceNode = nodeMap.get(d.sourceNodeId)
+        const targetNode = nodeMap.get(d.targetNodeId)
+        if (!sourceNode || !targetNode) return 0
+        
+        const groupInfo = getConnectionGroupInfo(d.id, connections)
+        const yOffset = groupInfo.isMultiple ? (groupInfo.index - 1) * 15 - 10 : 0
+        
+        return (sourceNode.y + targetNode.y) / 2 + yOffset
+      })
+      .text((d: any) => {
+        // Generate descriptive labels for different connection types
+        const sourceNode = nodeMap.get(d.sourceNodeId)
+        const targetNode = nodeMap.get(d.targetNodeId)
+        const groupInfo = getConnectionGroupInfo(d.id, connections)
+        
+        if (!sourceNode || !targetNode || !groupInfo.isMultiple) return ''
+        
+        // Generate meaningful labels based on port types and node types
+        const sourcePort = sourceNode.outputs?.find(p => p.id === d.sourcePortId)
+        const targetPort = targetNode.inputs?.find(p => p.id === d.targetPortId)
+        
+        if (sourcePort && targetPort) {
+          // Use port labels if available
+          if (sourcePort.label && targetPort.label) {
+            return `${sourcePort.label} → ${targetPort.label}`
+          }
+        }
+        
+        // Fallback to endpoint numbering
+        return `Endpoint ${groupInfo.index + 1}`
+      })
 
     // Render connection preview
     if (isConnecting && connectionStart) {
@@ -1426,7 +1588,19 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
             .classed('drop-target-port', function(this: any, portData: any) {
               // Type-safe port data access
               const typedPortData = portData as (NodePort & { nodeId: string })
-              // Check if this specific port can accept the connection
+              
+              // In architecture mode, allow multiple connections to the same port
+              if (workflowContextState.designerMode === 'architecture') {
+                // Only highlight if not an exact duplicate connection
+                return !connections.some((conn: Connection) => 
+                  conn.sourceNodeId === connectionStart?.nodeId &&
+                  conn.sourcePortId === connectionStart?.portId &&
+                  conn.targetNodeId === d.id && 
+                  conn.targetPortId === typedPortData.id
+                )
+              }
+              
+              // In workflow mode, use original logic (no multiple connections to same port)
               return !connections.some((conn: Connection) => 
                 conn.targetNodeId === d.id && conn.targetPortId === typedPortData.id
               )
@@ -1454,22 +1628,38 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         
         // Handle connection drop on node
         if (isConnecting && canDropOnNode && canDropOnNode(d.id)) {
-          // Smart port selection: find the best available input port
-          const availableInputPorts = d.inputs?.filter((port: NodePort) => {
-            // Check if port is not already connected
-            return !connections.some((conn: Connection) => 
-              conn.targetNodeId === d.id && conn.targetPortId === port.id
-            )
-          }) || []
+          // Smart port selection based on designer mode
+          let availableInputPorts: NodePort[] = []
+          
+          if (workflowContextState.designerMode === 'architecture') {
+            // In architecture mode, allow connections to any input port (including already connected ones)
+            // Only prevent exact duplicate connections
+            availableInputPorts = d.inputs?.filter((port: NodePort) => {
+              // Check if this exact connection already exists
+              return !connections.some((conn: Connection) => 
+                conn.sourceNodeId === connectionStart?.nodeId &&
+                conn.sourcePortId === connectionStart?.portId &&
+                conn.targetNodeId === d.id && 
+                conn.targetPortId === port.id
+              )
+            }) || []
+          } else {
+            // In workflow mode, use original logic (only unconnected ports)
+            availableInputPorts = d.inputs?.filter((port: NodePort) => {
+              return !connections.some((conn: Connection) => 
+                conn.targetNodeId === d.id && conn.targetPortId === port.id
+              )
+            }) || []
+          }
           
           if (availableInputPorts.length > 0) {
             // Strategy: prefer first available port, but could be enhanced with type matching
             const targetPort = availableInputPorts[0]
-            console.log('📍 Node background drop - connecting to port:', d.id, targetPort.id)
+            console.log(`📍 Node background drop (${workflowContextState.designerMode} mode) - connecting to port:`, d.id, targetPort.id)
             onPortDragEnd(d.id, targetPort.id)
           } else {
             // No available input ports
-            console.log('⚠️ Node background drop - no available input ports on:', d.id)
+            console.log(`⚠️ Node background drop (${workflowContextState.designerMode} mode) - no available input ports on:`, d.id)
             onPortDragEnd()
           }
         }
@@ -1530,6 +1720,13 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     nodeGroups.each(function(d: any) {
       const nodeElement = d3.select(this)
       const isSelected = isNodeSelected(d.id)
+      
+      // Add legacy endpoint class for architecture mode
+      if (workflowContextState.designerMode === 'architecture' && isLegacyEndpoint(d)) {
+        nodeElement.classed('legacy-endpoint', true)
+      } else {
+        nodeElement.classed('legacy-endpoint', false)
+      }
       
       // Enhanced dragging state detection with context-based state using fresh values
       let isNodeDragging = false
@@ -1641,6 +1838,51 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     nodeEnter.append('text')
       .attr('class', 'node-label')
       .style('pointer-events', 'none')
+
+    // Legacy endpoint badge (only in architecture mode)
+    nodeEnter.append('g')
+      .attr('class', 'legacy-badge-group')
+      .style('display', (d: any) => {
+        return workflowContextState.designerMode === 'architecture' && isLegacyEndpoint(d) ? 'block' : 'none'
+      })
+    
+    const legacyBadgeGroup = nodeEnter.select('.legacy-badge-group')
+    
+    // Badge background
+    legacyBadgeGroup.append('rect')
+      .attr('class', 'legacy-badge-bg')
+      .attr('x', (d: any) => {
+        const dimensions = getConfigurableDimensions(d)
+        return (dimensions.width / 2) - 15
+      })
+      .attr('y', (d: any) => {
+        const dimensions = getConfigurableDimensions(d)
+        return -(dimensions.height / 2) - 10
+      })
+      .attr('width', 30)
+      .attr('height', 16)
+      .attr('rx', 3)
+      .attr('fill', '#9C27B0')
+      .attr('stroke', '#7B1FA2')
+      .attr('stroke-width', 1)
+    
+    // Badge text
+    legacyBadgeGroup.append('text')
+      .attr('class', 'legacy-badge-text')
+      .attr('x', (d: any) => {
+        const dimensions = getConfigurableDimensions(d)
+        return (dimensions.width / 2)
+      })
+      .attr('y', (d: any) => {
+        const dimensions = getConfigurableDimensions(d)
+        return -(dimensions.height / 2) - 2
+      })
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'middle')
+      .attr('font-size', 9)
+      .attr('font-weight', 'bold')
+      .attr('fill', 'white')
+      .text('LEGACY')
     
     nodeGroups.select('.node-label')
       .attr('x', (d: any) => {
@@ -1662,6 +1904,12 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         return nodeTypeInfo?.label || d.label || d.type
       })
 
+    // Update legacy badge visibility for existing nodes
+    nodeGroups.select('.legacy-badge-group')
+      .style('display', (d: any) => {
+        return workflowContextState.designerMode === 'architecture' && isLegacyEndpoint(d) ? 'block' : 'none'
+      })
+
     // Render simple ports for both variants
     // Input ports
     const inputPortGroups = nodeGroups.selectAll('.input-port-group')
@@ -1672,7 +1920,12 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const hasConnection = connections.some(conn => 
           conn.targetNodeId === d.nodeId && conn.targetPortId === d.id
         )
-        return hasConnection ? 'input-port-group connected' : 'input-port-group'
+        
+        // Add architecture mode specific classes
+        const baseClass = hasConnection ? 'input-port-group connected' : 'input-port-group'
+        const highlightClass = getPortHighlightClass(d.nodeId, d.id, 'input')
+        
+        return `${baseClass} ${highlightClass}`.trim()
       })
       .style('cursor', 'crosshair')
       .style('pointer-events', 'all')
@@ -1779,6 +2032,32 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr('stroke-width', 2)
 
     //console.log('🔵 Created', inputPortGroups.selectAll('circle').size(), 'input port circles')
+
+    // Add port capacity indicators (only in architecture mode)
+    inputPortGroups.selectAll('.port-capacity-indicator').remove()
+    inputPortGroups.filter((d: any) => workflowContextState.designerMode === 'architecture')
+      .append('text')
+      .attr('class', 'port-capacity-indicator')
+      .attr('x', (d: any, i: number) => {
+        const positions = getPortPositions(d.nodeData, 'input')
+        return positions[i]?.x || 0
+      })
+      .attr('y', (d: any, i: number) => {
+        const positions = getPortPositions(d.nodeData, 'input')
+        return (positions[i]?.y || 0) + 20
+      })
+      .attr('text-anchor', 'middle')
+      .attr('font-size', 9)
+      .attr('fill', '#666')
+      .attr('pointer-events', 'none')
+      .text((d: any) => {
+        const connectionCount = connections.filter(conn => 
+          conn.targetNodeId === d.nodeId && conn.targetPortId === d.id
+        ).length
+        
+        if (connectionCount === 0) return 'Multi ∞'
+        return `${connectionCount} conn${connectionCount !== 1 ? 's' : ''}`
+      })
 
     // Output ports
     const outputPortGroups = nodeGroups.selectAll('.output-port-group')
@@ -2115,6 +2394,32 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
     //console.log('🔴 Created', outputPortGroups.selectAll('circle').size(), 'output port circles')
 
+    // Add output port capacity indicators (only in architecture mode)
+    outputPortGroups.selectAll('.port-capacity-indicator').remove()
+    outputPortGroups.filter((d: any) => workflowContextState.designerMode === 'architecture')
+      .append('text')
+      .attr('class', 'port-capacity-indicator')
+      .attr('x', (d: any, i: number) => {
+        const positions = getPortPositions(d.nodeData, 'output')
+        return positions[i]?.x || 0
+      })
+      .attr('y', (d: any, i: number) => {
+        const positions = getPortPositions(d.nodeData, 'output')
+        return (positions[i]?.y || 0) + 20
+      })
+      .attr('text-anchor', 'middle')
+      .attr('font-size', 9)
+      .attr('fill', '#666')
+      .attr('pointer-events', 'none')
+      .text((d: any) => {
+        const connectionCount = connections.filter(conn => 
+          conn.sourceNodeId === d.nodeId && conn.sourcePortId === d.id
+        ).length
+        
+        if (connectionCount === 0) return 'Multi ∞'
+        return `${connectionCount} conn${connectionCount !== 1 ? 's' : ''}`
+      })
+
     // Bottom ports - สำหรับ AI Agent nodes ที่มี bottomPorts
     const bottomPortGroups = nodeGroups.filter((d: any) => d.bottomPorts && d.bottomPorts.length > 0)
       .selectAll('.bottom-port-group')
@@ -2338,7 +2643,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           shouldShowLine = true // Always show for unconnected ports
         } else if (nodeIsSelected) {
           // Only show for connected ports if they can accept more connections
-          shouldShowLine = canBottomPortAcceptConnection(d.nodeId, d.id, connections)
+          shouldShowLine = canBottomPortAcceptConnection(d.nodeId, d.id, connections, workflowContextState.designerMode)
         }
         
         // Return position.y + line length (or just position.y if no line)
@@ -2352,7 +2657,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         )
         
         if (nodeIsSelected && hasConnection) {
-          const canAcceptMore = canBottomPortAcceptConnection(d.nodeId, d.id, connections)
+          const canAcceptMore = canBottomPortAcceptConnection(d.nodeId, d.id, connections, workflowContextState.designerMode)
           if (canAcceptMore) {
             return '#4CAF50' // Green for ports that can accept more connections (like 'tool')
           }
@@ -2388,7 +2693,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       
       if (nodeIsSelected) {
         // When node is selected, show plus button only for ports that can accept additional connections
-        shouldShowButton = canBottomPortAcceptConnection(d.nodeId, d.id, connections)
+        shouldShowButton = canBottomPortAcceptConnection(d.nodeId, d.id, connections, workflowContextState.designerMode)
         if (process.env.NODE_ENV === 'development') {
           console.log(`🔍 Port ${d.id} on selected node ${d.nodeId}: canAccept=${shouldShowButton}, hasConnection=${hasConnection}`)
         }

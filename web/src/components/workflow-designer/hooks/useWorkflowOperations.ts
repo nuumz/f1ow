@@ -56,26 +56,57 @@ export function useWorkflowOperations() {
     dispatch({ type: 'UPDATE_NODE_POSITION', payload: { nodeId, x, y } })
   }, [dispatch])
 
-  // Connection operations
-  const createConnection = useCallback((
+  // Helper function for architecture mode connection validation
+  const validateArchitectureModeConnection = useCallback((
     sourceNodeId: string,
     sourcePortId: string,
     targetNodeId: string,
     targetPortId: string
   ) => {
-    // Check if exact same connection already exists
-    const existingConnection = state.connections.find(conn =>
-      conn.sourceNodeId === sourceNodeId &&
-      conn.sourcePortId === sourcePortId &&
-      conn.targetNodeId === targetNodeId &&
-      conn.targetPortId === targetPortId
+    console.log('🏗️ Architecture mode: Creating connection with relaxed validation for multiple endpoints')
+    
+    // Count existing connections between these nodes
+    const existingConnectionsBetweenNodes = state.connections.filter(conn =>
+      conn.sourceNodeId === sourceNodeId && conn.targetNodeId === targetNodeId
     )
     
-    // Don't create duplicate connections
-    if (existingConnection) {
-      console.warn('Connection already exists:', existingConnection)
-      return existingConnection
+    console.log(`🔗 Found ${existingConnectionsBetweenNodes.length} existing connections between nodes`)
+    
+    // In architecture mode, allow multiple connections between same nodes (for legacy endpoints)
+    // We do NOT prevent exact duplicates in architecture mode because each connection 
+    // represents a different endpoint/API call to the same service
+    console.log('✅ Architecture mode: Allowing multiple connections between same ports for different endpoints')
+    
+    // Special case: Still limit ai-model in architecture mode if it's marked as single-connection
+    if (sourcePortId === 'ai-model') {
+      const sourceNode = state.nodes.find(n => n.id === sourceNodeId)
+      const sourcePort = sourceNode?.outputs?.find(p => p.id === sourcePortId)
+      
+      // Check if this specific ai-model port allows multiple connections
+      if (sourcePort?.dataType !== 'array' && sourcePort?.label?.includes('(single)')) {
+        const existingAiModelConnection = state.connections.find(conn =>
+          conn.sourceNodeId === sourceNodeId &&
+          conn.sourcePortId === 'ai-model'
+        )
+        
+        if (existingAiModelConnection) {
+          console.log('🔄 Architecture mode: Replacing single ai-model connection:', existingAiModelConnection)
+          dispatch({ type: 'DELETE_CONNECTION', payload: existingAiModelConnection.id })
+        }
+      }
     }
+    
+    return true
+  }, [state.nodes, state.connections, dispatch])
+
+  // Helper function for workflow mode connection validation  
+  const validateWorkflowModeConnection = useCallback((
+    sourceNodeId: string,
+    sourcePortId: string,
+    targetNodeId: string,
+    targetPortId: string
+  ) => {
+    console.log('⚙️ Workflow mode: Creating connection with strict validation')
     
     // Special handling for 'ai-model' port - only allow one connection
     if (sourcePortId === 'ai-model') {
@@ -90,6 +121,57 @@ export function useWorkflowOperations() {
       }
     }
     
+    // In workflow mode, prevent multiple connections to the same input port
+    const targetPortAlreadyConnected = state.connections.find(conn =>
+      conn.targetNodeId === targetNodeId &&
+      conn.targetPortId === targetPortId
+    )
+    
+    if (targetPortAlreadyConnected) {
+      console.warn('Workflow mode: Target port already connected:', targetPortAlreadyConnected)
+      return false // Prevent connection in workflow mode
+    }
+    
+    return true
+  }, [state.connections, dispatch])
+
+  // Connection operations
+  const createConnection = useCallback((
+    sourceNodeId: string,
+    sourcePortId: string,
+    targetNodeId: string,
+    targetPortId: string
+  ) => {
+    // Get current designer mode from state
+    const isArchitectureMode = state.designerMode === 'architecture'
+    
+    // Check if exact same connection already exists
+    const existingConnection = state.connections.find(conn =>
+      conn.sourceNodeId === sourceNodeId &&
+      conn.sourcePortId === sourcePortId &&
+      conn.targetNodeId === targetNodeId &&
+      conn.targetPortId === targetPortId
+    )
+    
+    // Mode-aware connection validation
+    let canCreateConnection = true
+    
+    if (isArchitectureMode) {
+      // In architecture mode, the validation function will handle duplicate checking
+      canCreateConnection = validateArchitectureModeConnection(sourceNodeId, sourcePortId, targetNodeId, targetPortId)
+    } else {
+      // In workflow mode, prevent exact duplicates
+      if (existingConnection) {
+        console.warn('⚙️ Workflow mode: Connection already exists, returning existing:', existingConnection)
+        return existingConnection
+      }
+      canCreateConnection = validateWorkflowModeConnection(sourceNodeId, sourcePortId, targetNodeId, targetPortId)
+    }
+    
+    if (!canCreateConnection) {
+      return null
+    }
+    
     const newConnection: Connection = {
       id: generateConnectionId(),
       sourceNodeId,
@@ -98,12 +180,12 @@ export function useWorkflowOperations() {
       targetPortId
     }
     
-    console.log('Creating new connection:', newConnection)
+    console.log(`✅ Creating new connection (${state.designerMode} mode):`, newConnection)
     console.log('Current connections count:', state.connections.length)
     
     dispatch({ type: 'ADD_CONNECTION', payload: newConnection })
     return newConnection
-  }, [dispatch, state.connections])
+  }, [dispatch, state.connections, state.designerMode, validateArchitectureModeConnection, validateWorkflowModeConnection])
 
   const deleteConnection = useCallback((connectionId: string) => {
     dispatch({ type: 'DELETE_CONNECTION', payload: connectionId })

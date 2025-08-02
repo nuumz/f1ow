@@ -1825,7 +1825,7 @@
 /* === ARCHITECTURE MODE STYLES === */
 .canvas-container.architecture-mode .connection .connection-path {
   stroke: #7c3aed; /* Purple for architecture connections */
-  stroke-width: 2.5;
+  stroke-width: 1.5;
   stroke-dasharray: 8, 6; /* Dashed line for architecture diagrams */
   marker-end: url(#arrowhead-architecture);
   transition: stroke 0.2s ease, stroke-width 0.2s ease;
@@ -1835,7 +1835,7 @@
 
 .canvas-container.architecture-mode .connection-hover .connection-path {
   stroke: #6d28d9 !important; /* Darker purple on hover */
-  stroke-width: 3.5 !important;
+  stroke-width: 2.5 !important;
   marker-end: url(#arrowhead-architecture-hover) !important;
   filter: drop-shadow(0 3px 10px rgba(109, 40, 217, 0.4));
   opacity: 1;
@@ -1844,7 +1844,7 @@
 
 .canvas-container.architecture-mode .connection-selected .connection-path {
   stroke: #dc2626 !important; /* Red for selected architecture connections */
-  stroke-width: 4 !important;
+  stroke-width: 3 !important;
   marker-end: url(#arrowhead-architecture-selected) !important;
   filter: drop-shadow(0 3px 12px rgba(220, 38, 38, 0.5));
   stroke-dasharray: 8, 6; /* Consistent dash pattern */
@@ -1867,6 +1867,184 @@
 .canvas-container.architecture-mode .workflow-canvas.connecting .output-port-group {
   opacity: 1 !important;
   pointer-events: all !important;
+}
+
+/* Multiple Connection Support in Architecture Mode */
+.canvas-container.architecture-mode .input-port-group.drop-target-port {
+  opacity: 1 !important;
+  pointer-events: all !important;
+}
+
+.canvas-container.architecture-mode .input-port-group.drop-target-port .input-port-circle {
+  fill: #4CAF50 !important;
+  stroke: #388E3C !important;
+  stroke-width: 2 !important;
+  filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.4));
+  animation: portPulse 1.2s ease-in-out infinite;
+}
+
+/* Enhanced visual feedback for multi-connection ports in architecture mode */
+.canvas-container.architecture-mode .input-port-group.has-multiple-connections .input-port-circle {
+  fill: #FF9800 !important;
+  stroke: #F57C00 !important;
+  stroke-width: 3 !important;
+  filter: drop-shadow(0 2px 10px rgba(255, 152, 0, 0.5));
+}
+
+.canvas-container.architecture-mode .input-port-group.has-multiple-connections::after {
+  content: "M";
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #FF9800;
+  color: white;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* Legacy endpoint indicator */
+.canvas-container.architecture-mode .node.legacy-endpoint .node-background {
+  stroke: #9C27B0 !important;
+  stroke-width: 3 !important;
+  stroke-dasharray: 10, 5 !important;
+  filter: drop-shadow(0 3px 12px rgba(156, 39, 176, 0.3));
+}
+
+/* Legacy endpoint badge */
+.canvas-container.architecture-mode .node.legacy-endpoint .legacy-badge {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  background: linear-gradient(135deg, #9C27B0, #7B1FA2);
+  color: white;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: bold;
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 2px 6px rgba(156, 39, 176, 0.3);
+}
+
+/* Multiple connection grouping visual */
+.canvas-container.architecture-mode .connection-group {
+  opacity: 0.9;
+}
+
+.canvas-container.architecture-mode .connection-group:hover {
+  opacity: 1;
+}
+
+/* Connection count indicator for grouped connections */
+.canvas-container.architecture-mode .connection-count-badge {
+  fill: #FF5722;
+  stroke: #D84315;
+  stroke-width: 2;
+}
+
+.canvas-container.architecture-mode .connection-count-text {
+  fill: white;
+  font-size: 12px;
+  font-weight: bold;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+/* Enhanced port highlighting for legacy endpoints */
+.canvas-container.architecture-mode .node.legacy-endpoint .input-port-circle {
+  stroke: #9C27B0 !important;
+  stroke-width: 2 !important;
+}
+
+.canvas-container.architecture-mode .node.legacy-endpoint .output-port-circle {
+  stroke: #9C27B0 !important;
+  stroke-width: 2 !important;
+}
+
+/* Port capacity indicator */
+.canvas-container.architecture-mode .port-capacity-indicator {
+  position: absolute;
+  bottom: -15px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 9px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.canvas-container.architecture-mode .input-port-group:hover .port-capacity-indicator,
+.canvas-container.architecture-mode .output-port-group:hover .port-capacity-indicator {
+  opacity: 1;
+}
+
+/* Connection path offset for multiple connections */
+.canvas-container.architecture-mode .connection-path.multiple-connection {
+  stroke-dasharray: none;
+  animation: connectionFlow 3s linear infinite;
+}
+
+.canvas-container.architecture-mode .connection-path.multiple-connection.secondary {
+  stroke-dasharray: 5, 5;
+  stroke-dashoffset: 0;
+  animation: dashFlow 2s linear infinite;
+}
+
+.canvas-container.architecture-mode .connection-path.multiple-connection.tertiary {
+  stroke-dasharray: 3, 7;
+  stroke-dashoffset: 0;
+  animation: dashFlow 1.5s linear infinite reverse;
+}
+
+/* Connection animation keyframes */
+@keyframes connectionFlow {
+  0% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 20; }
+}
+
+@keyframes dashFlow {
+  0% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 10; }
+}
+
+/* Multiple connections between same nodes visual grouping */
+.canvas-container.architecture-mode .connection-bundle {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.canvas-container.architecture-mode .connection-bundle:hover {
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
+}
+
+.canvas-container.architecture-mode .node.legacy-endpoint::before {
+  content: "LEGACY";
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #9C27B0;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 8px;
+  font-weight: bold;
+  pointer-events: none;
+}
+
+@keyframes portPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
 }
 
 .canvas-container.architecture-mode .input-port circle,
@@ -1930,12 +2108,12 @@
 @keyframes architecturePulse {
   0%, 100% {
     opacity: 1;
-    stroke-width: 4;
+    stroke-width: 3;
     filter: drop-shadow(0 3px 12px rgba(220, 38, 38, 0.5));
   }
   50% {
     opacity: 0.8;
-    stroke-width: 5;
+    stroke-width: 4;
     filter: drop-shadow(0 4px 16px rgba(220, 38, 38, 0.7));
   }
 }

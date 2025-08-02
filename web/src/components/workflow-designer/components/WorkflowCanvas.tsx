@@ -960,7 +960,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr('fill', '#f7f7f7')  
       .attr('class', 'svg-canvas-background')
 
-    // Arrow markers with direction-aware positioning
+    // Arrow markers with direction-aware positioning and optimized refX
     const createArrowMarker = (id: string, color: string, size = 14, direction: 'right' | 'left' = 'right') => {
       const marker = defs.append('marker')
         .attr('id', id)
@@ -971,8 +971,9 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       
       if (direction === 'right') {
         // Right-pointing arrow (default)
+        // refX positioned at center of arrow tip for better alignment
         marker
-          .attr('refX', size - 1)
+          .attr('refX', size / 2)
           .attr('refY', size / 2)
           .append('polygon')
           .attr('points', `0,0 ${size - 1},${size / 2} 0,${size}`)
@@ -981,7 +982,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       } else {
         // Left-pointing arrow for connections entering from left
         marker
-          .attr('refX', 1)
+          .attr('refX', size / 2)
           .attr('refY', size / 2)
           .append('polygon')
           .attr('points', `${size - 1},0 0,${size / 2} ${size - 1},${size}`)
@@ -1963,6 +1964,120 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
               console.log('🎯✅ Found best bottom port target:', targetNodeId, targetPortId, 'distance:', distance)
             }
           })
+
+          // If no port target found, check for node background drop areas
+          if (!targetNodeId) {
+            console.log('🎯 No port target found, checking node background areas')
+            
+            // Find all nodes and check if mouse is within their boundaries
+            const allNodes = svgSelection.selectAll('g[data-node-id]')
+            let minNodeDistance = Infinity
+            
+            allNodes.each(function(nodeData: any) {
+              const nodeGroup = d3.select(this)
+              const nodeId = nodeGroup.attr('data-node-id')
+              
+              // Skip if this is the source node (can't connect to self)
+              if (connectionStart && nodeId === connectionStart.nodeId) {
+                return
+              }
+              
+              // Check if we can drop on this node
+              if (!canDropOnNode || !canDropOnNode(nodeId)) {
+                return
+              }
+              
+              // Get node transform (position)
+              const transform = nodeGroup.attr('transform')
+              let nodeSvgX = 0, nodeSvgY = 0
+              
+              if (transform) {
+                const match = /translate\(([^,]+),([^)]+)\)/.exec(transform)
+                if (match) {
+                  nodeSvgX = parseFloat(match[1])
+                  nodeSvgY = parseFloat(match[2])
+                }
+              }
+              
+              // Get node dimensions and shape
+              const nodeDimensions = getShapeAwareDimensions(nodeData)
+              const nodeShape = getNodeShape(nodeData.type)
+              
+              console.log('🎯 Checking node background area:', {
+                nodeId,
+                nodePosition: { x: nodeSvgX, y: nodeSvgY },
+                mousCanvas: { x: canvasX, y: canvasY },
+                dimensions: nodeDimensions,
+                shape: nodeShape
+              })
+              
+              // Check if mouse is within node boundaries
+              let isWithinNode = false
+              const tolerance = 10 // Small tolerance for easier dropping
+              
+              if (nodeShape === 'circle') {
+                // Circular node - check radius
+                const radius = Math.max(nodeDimensions.width, nodeDimensions.height) / 2
+                const distance = Math.sqrt((canvasX - nodeSvgX) ** 2 + (canvasY - nodeSvgY) ** 2)
+                isWithinNode = distance <= (radius + tolerance)
+                
+                if (isWithinNode && distance < minNodeDistance) {
+                  minNodeDistance = distance
+                  targetNodeId = nodeId
+                  console.log('🎯✅ Found node background target (circle):', nodeId, 'distance:', distance)
+                }
+              } else {
+                // Rectangular node - check bounds
+                const halfWidth = nodeDimensions.width / 2
+                const halfHeight = nodeDimensions.height / 2
+                
+                const isWithinX = canvasX >= (nodeSvgX - halfWidth - tolerance) && 
+                                 canvasX <= (nodeSvgX + halfWidth + tolerance)
+                const isWithinY = canvasY >= (nodeSvgY - halfHeight - tolerance) && 
+                                 canvasY <= (nodeSvgY + halfHeight + tolerance)
+                
+                isWithinNode = isWithinX && isWithinY
+                
+                if (isWithinNode) {
+                  // Calculate distance from node center for priority
+                  const distance = Math.sqrt((canvasX - nodeSvgX) ** 2 + (canvasY - nodeSvgY) ** 2)
+                  
+                  if (distance < minNodeDistance) {
+                    minNodeDistance = distance
+                    targetNodeId = nodeId
+                    console.log('🎯✅ Found node background target (rectangle):', nodeId, 'distance:', distance)
+                  }
+                }
+              }
+            })
+            
+            // If we found a node background target, use smart port selection
+            if (targetNodeId) {
+              console.log('🎯 Node background drop detected, finding best input port for:', targetNodeId)
+              
+              // Find the target node data
+              const targetNode = nodes.find(n => n.id === targetNodeId)
+              if (targetNode && targetNode.inputs && targetNode.inputs.length > 0) {
+                // Smart port selection: find the best available input port
+                const availableInputPorts = targetNode.inputs.filter((port: any) => {
+                  if (!canDropOnPort || !targetNodeId) return true
+                  return canDropOnPort(targetNodeId, port.id, 'input')
+                })
+                
+                if (availableInputPorts.length > 0) {
+                  // Strategy: prefer first available port, could be enhanced with type matching
+                  targetPortId = availableInputPorts[0].id
+                  console.log('🎯✅ Selected input port for node background drop:', targetPortId)
+                } else {
+                  console.log('⚠️ No available input ports on target node:', targetNodeId)
+                  targetNodeId = undefined // Reset if no valid ports
+                }
+              } else {
+                console.log('⚠️ Target node has no input ports:', targetNodeId)
+                targetNodeId = undefined // Reset if no input ports
+              }
+            }
+          }
 
           console.log('🏁 Final target result:', { targetNodeId, targetPortId, minDistance })
           onPortDragEnd(targetNodeId, targetPortId)

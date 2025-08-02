@@ -397,7 +397,8 @@
   gap: 8px;
 }
 
-.action-button {
+/* Scoped impact panel buttons to avoid global action-button conflicts */
+.impact-panel-action-button {
   padding: 8px 16px;
   border-radius: 6px;
   font-size: 13px;
@@ -407,29 +408,29 @@
   border: 1px solid;
 }
 
-.action-button.secondary {
+.impact-panel-action-button.secondary {
   background: white;
   border-color: #d1d5db;
   color: #374151;
 }
 
-.action-button.secondary:hover {
+.impact-panel-action-button.secondary:hover {
   background: #f9fafb;
   border-color: #9ca3af;
 }
 
-.action-button.primary {
+.impact-panel-action-button.primary {
   background: #3b82f6;
   border-color: #3b82f6;
   color: white;
 }
 
-.action-button.primary:hover:not(:disabled) {
+.impact-panel-action-button.primary:hover:not(:disabled) {
   background: #2563eb;
   border-color: #2563eb;
 }
 
-.action-button:disabled {
+.impact-panel-action-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

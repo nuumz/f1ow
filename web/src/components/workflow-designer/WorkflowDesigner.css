@@ -433,7 +433,19 @@
 
 .action-button {
   /* Extends .btn base styles */
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
   border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  font-family: inherit;
   background: white;
   color: #333;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -443,15 +455,21 @@
   background: #f8f9fa;
   border-color: #d0d0d0;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
 }
 
 .action-button:active:not(:disabled) {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transform: translateY(0);
 }
 
 .action-button:disabled {
   background: #f3f4f6;
   color: #9ca3af;
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 /* Specific workflow button variants */
@@ -1764,7 +1782,6 @@
   marker-end: url(#arrowhead-workflow);
   transition: stroke 0.2s ease, stroke-width 0.2s ease;
   cursor: pointer;
-  stroke-dasharray: none; /* Solid lines for workflow */
 }
 
 .canvas-container.workflow-mode .connection-hover .connection-path {
@@ -1809,10 +1826,10 @@
 .canvas-container.architecture-mode .connection .connection-path {
   stroke: #7c3aed; /* Purple for architecture connections */
   stroke-width: 2.5;
+  stroke-dasharray: 8, 6; /* Dashed line for architecture diagrams */
   marker-end: url(#arrowhead-architecture);
   transition: stroke 0.2s ease, stroke-width 0.2s ease;
   cursor: pointer;
-  stroke-dasharray: 8,4; /* Dashed lines for architecture */
   opacity: 0.85;
 }
 
@@ -1822,7 +1839,7 @@
   marker-end: url(#arrowhead-architecture-hover) !important;
   filter: drop-shadow(0 3px 10px rgba(109, 40, 217, 0.4));
   opacity: 1;
-  stroke-dasharray: 8,4; /* Keep same dash pattern to prevent instability */
+  stroke-dasharray: 8, 6; /* Consistent dash pattern */
 }
 
 .canvas-container.architecture-mode .connection-selected .connection-path {
@@ -1830,7 +1847,7 @@
   stroke-width: 4 !important;
   marker-end: url(#arrowhead-architecture-selected) !important;
   filter: drop-shadow(0 3px 12px rgba(220, 38, 38, 0.5));
-  stroke-dasharray: none; /* Solid when selected */
+  stroke-dasharray: 8, 6; /* Consistent dash pattern */
   animation: architecturePulse 1.5s infinite;
   opacity: 1;
 }
@@ -1866,7 +1883,7 @@
   fill: #f3e8ff;
   stroke: #6d28d9;
   stroke-width: 3.5;
-  stroke-dasharray: none; /* Solid on hover */
+  stroke-dasharray: 8, 6; /* Keep dash pattern on hover */
   filter: drop-shadow(0 2px 8px rgba(109, 40, 217, 0.3));
   transform: scale(1.1);
 }
@@ -1875,7 +1892,7 @@
 .canvas-container.architecture-mode .output-port.connected circle {
   fill: #dc2626;
   stroke: #b91c1c;
-  stroke-dasharray: none;
+  stroke-dasharray: 8, 6;
   animation: architecturePortPulse 2s infinite;
 }
 
@@ -1883,7 +1900,7 @@
 
 /* Enhanced hover detection for dashed lines */
 .connection .connection-path {
-  stroke-linecap: round; /* Rounded ends help with gaps */
+  stroke-linecap: round; /* Square ends prevent overflow on arrow markers */
   stroke-linejoin: round; /* Rounded joins */
 }
 

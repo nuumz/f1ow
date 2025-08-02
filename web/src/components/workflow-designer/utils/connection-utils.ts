@@ -105,28 +105,48 @@ export function generateVariantAwareConnectionPath(
   const sourcePos = calculatePortPosition(sourceNode, sourcePortId, sourcePortType, variant)
   const targetPos = calculatePortPosition(targetNode, targetPortId, targetPortType, variant)
 
+  // Calculate arrow marker offset to align line with arrow center
+  // Arrow markers have refX positioning that determines where the line ends
+  // Default arrow size is ~14px with refX at size-1 (13px)
+  // We need to shorten the line by approximately half the arrow width (7px)
+  const arrowOffset = 7
+  
   const dx = targetPos.x - sourcePos.x
   const dy = targetPos.y - sourcePos.y
+  const distance = Math.sqrt(dx * dx + dy * dy)
+  
+  // Calculate adjusted target position (shortened by arrow offset)
+  let adjustedTargetX = targetPos.x
+  let adjustedTargetY = targetPos.y
+  
+  if (distance > 0) {
+    const offsetRatio = arrowOffset / distance
+    adjustedTargetX = targetPos.x - (dx * offsetRatio)
+    adjustedTargetY = targetPos.y - (dy * offsetRatio)
+  }
+  
+  const adjustedDx = adjustedTargetX - sourcePos.x
+  const adjustedDy = adjustedTargetY - sourcePos.y
   
   let cp1x, cp1y, cp2x, cp2y
   
   if (isSourceBottomPort) {
     // For bottom ports: first control point goes straight down, second goes to target
-    const controlOffset = Math.max(Math.abs(dy) / 2.5, 60)
+    const controlOffset = Math.max(Math.abs(adjustedDy) / 2.5, 60)
     cp1x = sourcePos.x // Keep same x position (straight down)
     cp1y = sourcePos.y + controlOffset // Go down from source
-    cp2x = targetPos.x // Go to target x position
-    cp2y = targetPos.y - Math.max(Math.abs(dx) / 2.5, 40) // Approach target from above/side
+    cp2x = adjustedTargetX // Go to adjusted target x position
+    cp2y = adjustedTargetY - Math.max(Math.abs(adjustedDx) / 2.5, 40) // Approach target from above/side
   } else {
     // Regular horizontal flow for normal output ports
-    const controlOffset = Math.max(Math.abs(dx) / 2.5, 60)
+    const controlOffset = Math.max(Math.abs(adjustedDx) / 2.5, 60)
     cp1x = sourcePos.x + controlOffset
-    cp1y = sourcePos.y + dy * 0.1
-    cp2x = targetPos.x - controlOffset  
-    cp2y = targetPos.y - dy * 0.1
+    cp1y = sourcePos.y + adjustedDy * 0.1
+    cp2x = adjustedTargetX - controlOffset  
+    cp2y = adjustedTargetY - adjustedDy * 0.1
   }
 
-  return `M ${sourcePos.x} ${sourcePos.y} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${targetPos.x} ${targetPos.y}`
+  return `M ${sourcePos.x} ${sourcePos.y} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${adjustedTargetX} ${adjustedTargetY}`
 }
 
 /**
@@ -144,26 +164,42 @@ export function calculateConnectionPreviewPath(
   
   const sourcePos = calculatePortPosition(sourceNode, sourcePortId, portType, variant)
   
+  // Apply arrow marker offset for preview path as well
+  const arrowOffset = 7
   const dx = previewPosition.x - sourcePos.x
   const dy = previewPosition.y - sourcePos.y
+  const distance = Math.sqrt(dx * dx + dy * dy)
+  
+  // Calculate adjusted preview position (shortened by arrow offset)
+  let adjustedPreviewX = previewPosition.x
+  let adjustedPreviewY = previewPosition.y
+  
+  if (distance > 0) {
+    const offsetRatio = arrowOffset / distance
+    adjustedPreviewX = previewPosition.x - (dx * offsetRatio)
+    adjustedPreviewY = previewPosition.y - (dy * offsetRatio)
+  }
+  
+  const adjustedDx = adjustedPreviewX - sourcePos.x
+  const adjustedDy = adjustedPreviewY - sourcePos.y
   
   let cp1x, cp1y, cp2x, cp2y
   
   if (isBottomPort) {
     // For bottom ports: first control point goes straight down, second goes to preview position
-    const controlOffset = Math.max(Math.abs(dy) / 2.5, 60)
+    const controlOffset = Math.max(Math.abs(adjustedDy) / 2.5, 60)
     cp1x = sourcePos.x // Keep same x position (straight down)
     cp1y = sourcePos.y + controlOffset // Go down from source
-    cp2x = previewPosition.x // Go to preview x position
-    cp2y = previewPosition.y - Math.max(Math.abs(dx) / 2.5, 40) // Approach preview from above/side
+    cp2x = adjustedPreviewX // Go to adjusted preview x position
+    cp2y = adjustedPreviewY - Math.max(Math.abs(adjustedDx) / 2.5, 40) // Approach preview from above/side
   } else {
     // Regular horizontal flow for normal output ports
-    const controlOffset = Math.max(Math.abs(dx) / 2.5, 60)
+    const controlOffset = Math.max(Math.abs(adjustedDx) / 2.5, 60)
     cp1x = sourcePos.x + controlOffset
-    cp1y = sourcePos.y + dy * 0.1
-    cp2x = previewPosition.x - controlOffset  
-    cp2y = previewPosition.y - dy * 0.1
+    cp1y = sourcePos.y + adjustedDy * 0.1
+    cp2x = adjustedPreviewX - controlOffset  
+    cp2y = adjustedPreviewY - adjustedDy * 0.1
   }
 
-  return `M ${sourcePos.x} ${sourcePos.y} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${previewPosition.x} ${previewPosition.y}`
+  return `M ${sourcePos.x} ${sourcePos.y} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${adjustedPreviewX} ${adjustedPreviewY}`
 }

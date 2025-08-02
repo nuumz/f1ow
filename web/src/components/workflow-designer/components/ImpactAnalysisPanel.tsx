@@ -236,13 +236,13 @@ export function ImpactAnalysisPanel({
           </div>
           <div className="test-action-buttons">
             <button 
-              className="action-button secondary"
+              className="impact-panel-action-button secondary"
               onClick={handleSelectAllTests}
             >
               Select All
             </button>
             <button 
-              className="action-button primary"
+              className="impact-panel-action-button primary"
               onClick={handleRunSelectedTests}
               disabled={selectedTests.size === 0}
             >

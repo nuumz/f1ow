@@ -45,6 +45,13 @@
 
   /* Critical Layer - System critical elements */
   --z-critical: 99999;
+
+  /* Port group variables */
+  --port-transition: opacity 0.2s ease, transform 0.15s ease;
+  --port-hover-scale: 1.05;
+  --port-connected-stroke-width: 2.5px;
+  --port-multiple-stroke-width: 3px;
+  --port-drop-target-stroke-width: 2px;
 }
 
 /* Layout Fixes */
@@ -268,18 +275,42 @@
 
 /* Valid ports highlighting during connection */
 .workflow-canvas.connecting .input-port-circle[fill="#4CAF50"],
-.workflow-canvas.connecting .output-port-circle[fill="#4CAF50"] {
+.workflow-canvas.connecting .output-port-circle[fill="#4CAF50"],
+.workflow-canvas.connecting .port-circle[fill="#4CAF50"] {
+  opacity: 1 !important;
   filter: drop-shadow(0 0 8px rgba(76, 175, 80, 0.8));
 }
 
-/* Invalid ports dimming during connection */
-.workflow-canvas.connecting .input-port-circle[fill="#ccc"],
-.workflow-canvas.connecting .output-port-circle[fill="#ccc"] {
-  opacity: 0.3;
+/* Ensure valid ports in architecture mode override multiple connection styling */
+.canvas-container.architecture-mode .workflow-canvas.connecting .port-circle[fill="#4CAF50"] {
+  fill: #4CAF50 !important;
+  filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.8)) !important;
+  opacity: 1 !important;
+}
+
+/* Orange ports (multiple connections) visibility during connection */
+.workflow-canvas.connecting .input-port-circle[fill="#FF9800"],
+.workflow-canvas.connecting .output-port-circle[fill="#FF9800"] {
+  opacity: 1 !important;
+  filter: drop-shadow(0 0 8px rgba(255, 152, 0, 0.8));
+}
+
+/* Port groups with multiple connections visibility during connection */
+.workflow-canvas.connecting .port-group.has-multiple-connections {
+  opacity: 1 !important;
+}
+
+/* Port circle general selectors - maintaining compatibility */
+.input-port-circle,
+.output-port-circle,
+.port-circle {
+  transition: fill 0.15s ease, stroke 0.15s ease, stroke-width 0.1s ease;
+  will-change: fill, stroke, stroke-width; /* Optimize paint operations */
 }
 
 /* Bottom ports (diamond shapes) during connection */
 .workflow-canvas.connecting .bottom-port-diamond[fill="#4CAF50"] {
+  opacity: 1 !important;
   filter: drop-shadow(0 0 8px rgba(76, 175, 80, 0.8));
 }
 
@@ -1852,46 +1883,155 @@
   opacity: 1;
 }
 
-/* Architecture Mode Port Styles */
-.canvas-container.architecture-mode .input-port-group,
-.canvas-container.architecture-mode .output-port-group {
+/* ===== PORT GROUP STYLES (CONSOLIDATED) ===== */
+
+/* Port group CSS variables - added to existing :root */
+
+/* Base port group styles */
+.port-group,
+.input-port-group,
+.output-port-group {
+  transition: var(--port-transition);
+  cursor: crosshair;
+  opacity: 1; /* Visible by default in workflow mode */
+  pointer-events: all;
+  transform-origin: center; /* Ensure consistent scaling origin */
+  position: relative; /* Stable positioning context */
+  will-change: transform, opacity; /* Optimize animations */
+}
+
+/* ===== WORKFLOW MODE PORT STYLES ===== */
+.canvas-container.workflow-mode .port-group:hover {
+  transform: scale(var(--port-hover-scale));
+  transform-origin: center;
+  transition-delay: 0.03s; /* Small delay to prevent rapid flickering */
+}
+
+/* Disable hover scaling for connected ports to prevent position shifting */
+.canvas-container.workflow-mode .port-group.connected:hover {
+  transform: none;
+}
+
+/* Also disable hover scaling during connection dragging */
+.canvas-container .workflow-canvas.connecting .port-group:hover {
+  transform: none;
+  transition: none; /* Disable transitions during connection to prevent interference */
+}
+
+/* ===== DISABLE CONNECTION INTERACTIONS DURING CONNECTING ===== */
+
+/* Main connections - disable all interactions and add visual fade */
+.canvas-container .workflow-canvas.connecting .connection {
+  pointer-events: none !important;
+  cursor: default !important;
+  opacity: 0.7 !important; /* Slightly fade connections to show they're non-interactive */
+}
+
+/* Connection paths - disable hover effects */
+.canvas-container .workflow-canvas.connecting .connection-hover .connection-path {
+  stroke: inherit !important;
+  stroke-width: inherit !important;
+  marker-end: inherit !important;
+  filter: none !important;
+  pointer-events: none !important;
+}
+
+/* Connection hitboxes - disable click/hover detection */
+.canvas-container .workflow-canvas.connecting .connection-hitbox {
+  pointer-events: none !important;
+}
+
+/* Connection groups and bundles - disable hover effects */
+.canvas-container .workflow-canvas.connecting .connection-group:hover {
+  opacity: inherit !important;
+}
+
+.canvas-container .workflow-canvas.connecting .connection-bundle:hover {
+  filter: inherit !important;
+}
+
+/* Connection UI elements - disable interactions */
+.canvas-container .workflow-canvas.connecting .connection-label {
+  pointer-events: none !important;
+}
+
+.canvas-container .workflow-canvas.connecting .connection-count-badge,
+.canvas-container .workflow-canvas.connecting .connection-count-text {
+  pointer-events: none !important;
+}
+
+.canvas-container.workflow-mode .port-group:hover .port-circle {
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.2));
+  transition-delay: 0.05s; /* Prevent rapid flickering */
+}
+
+.canvas-container.workflow-mode .port-group.connected .port-circle {
+  fill: #10b981 !important;
+  stroke: #059669 !important;
+  stroke-width: var(--port-connected-stroke-width) !important;
+}
+
+/* ===== ARCHITECTURE MODE PORT STYLES ===== */
+.canvas-container.architecture-mode .port-group {
   opacity: 0; /* Hidden by default in architecture mode */
   pointer-events: none;
-  transition: opacity 0.3s ease;
+  transition: var(--port-transition);
 }
 
-/* Show all ports when hovering over node - this will be controlled by JavaScript */
-
-/* Override architecture mode port hiding when connecting */
-.canvas-container.architecture-mode .workflow-canvas.connecting .input-port-group,
-.canvas-container.architecture-mode .workflow-canvas.connecting .output-port-group {
+/* Show ports during connection in architecture mode */
+.canvas-container.architecture-mode .workflow-canvas.connecting .port-group {
   opacity: 1 !important;
   pointer-events: all !important;
 }
 
-/* Multiple Connection Support in Architecture Mode */
-.canvas-container.architecture-mode .input-port-group.drop-target-port {
+/* Connected ports in architecture mode */
+.canvas-container.architecture-mode .port-group.connected .port-circle {
+  stroke-width: var(--port-connected-stroke-width) !important;
+}
+
+/* ===== SPECIAL PORT STATES ===== */
+
+/* Drop target ports */
+.canvas-container.architecture-mode .port-group.drop-target-port {
   opacity: 1 !important;
   pointer-events: all !important;
 }
 
-.canvas-container.architecture-mode .input-port-group.drop-target-port .input-port-circle {
+.canvas-container.architecture-mode .port-group.drop-target-port .port-circle {
   fill: #4CAF50 !important;
   stroke: #388E3C !important;
-  stroke-width: 2 !important;
+  stroke-width: var(--port-drop-target-stroke-width) !important;
   filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.4));
   animation: portPulse 1.2s ease-in-out infinite;
 }
 
-/* Enhanced visual feedback for multi-connection ports in architecture mode */
-.canvas-container.architecture-mode .input-port-group.has-multiple-connections .input-port-circle {
-  fill: #FF9800 !important;
-  stroke: #F57C00 !important;
-  stroke-width: 3 !important;
-  filter: drop-shadow(0 2px 10px rgba(255, 152, 0, 0.5));
+/* Multiple connection ports */
+.canvas-container.architecture-mode .port-group.has-multiple-connections {
+  position: relative; /* For ::after element positioning */
 }
 
-.canvas-container.architecture-mode .input-port-group.has-multiple-connections::after {
+.canvas-container.architecture-mode .port-group.connected .port-circle {
+  stroke-width: var(--port-multiple-stroke-width) !important;
+  filter: drop-shadow(0 0 2px rgba(255, 152, 0, 0.5));
+}
+
+/* Override: Valid ports should be green during connection, even if they have multiple connections */
+.canvas-container.architecture-mode .workflow-canvas.connecting .port-group.has-multiple-connections .port-circle[fill="#4CAF50"] {
+  fill: #4CAF50 !important;
+  stroke: #388E3C !important;
+  stroke-width: 3 !important;
+  filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.8)) !important;
+}
+
+/* Also ensure drop-target-port with multiple connections shows green */
+.canvas-container.architecture-mode .workflow-canvas.connecting .port-group.has-multiple-connections.drop-target-port .port-circle {
+  fill: #4CAF50 !important;
+  stroke: #388E3C !important;
+  stroke-width: 3 !important;
+  filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.8)) !important;
+}
+
+.canvas-container.architecture-mode .port-group.has-multiple-connections::after {
   content: "M";
   position: absolute;
   top: -8px;
@@ -1907,6 +2047,7 @@
   align-items: center;
   justify-content: center;
   pointer-events: none;
+  z-index: 10;
 }
 
 /* Legacy endpoint styling removed - unnecessary visual clutter */
@@ -1938,6 +2079,22 @@
 /* Legacy endpoint port highlighting removed - unnecessary visual differentiation */
 
 /* Port capacity indicators removed - they were cluttering the UI without adding value */
+
+/* Connection label styling */
+.connection-label {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  fill: #4a5568;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  pointer-events: none;
+  text-shadow: 0 0 3px rgba(255, 255, 255, 0.8), 0 0 6px rgba(255, 255, 255, 0.6);
+}
+
+.canvas-container.architecture-mode .connection-label {
+  text-shadow: 0 0 3px rgba(255, 255, 255, 0.9), 0 0 6px rgba(255, 255, 255, 0.7);
+}
 
 /* Connection animation keyframes */
 @keyframes connectionFlow {

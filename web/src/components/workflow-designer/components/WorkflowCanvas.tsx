@@ -1456,7 +1456,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         if (!sourceNode || !targetNode) return 0
         
         const groupInfo = getConnectionGroupInfo(d.id, connections)
-        const yOffset = groupInfo.isMultiple ? (groupInfo.index - 1) * 15 - 10 : 0
+        // Position label close to the connection line (minimal offset)
+        const yOffset = -8 // Small offset above the connection line
         
         return (sourceNode.y + targetNode.y) / 2 + yOffset
       })
@@ -1588,7 +1589,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         
         if (isArchitectureMode) {
           // Show ports on hover in architecture mode
-          nodeElement.selectAll('.input-port-group, .output-port-group')
+          nodeElement.selectAll('.port-group')
             .style('opacity', 1)
             .style('pointer-events', 'all')
         }
@@ -1597,9 +1598,10 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const nodeElement = d3.select(this)
         const isArchitectureMode = workflowContextState.designerMode === 'architecture'
         
-        if (isArchitectureMode) {
+        if (isArchitectureMode && !isConnecting) {
           // Hide ALL ports when not hovering in architecture mode (including connected ones)
-          nodeElement.selectAll('.input-port-group, .output-port-group')
+          // BUT keep them visible during connection dragging
+          nodeElement.selectAll('.port-group')
             .style('opacity', 0)
             .style('pointer-events', 'none')
         }
@@ -1640,7 +1642,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           d3.select(event.currentTarget).classed('can-drop', true)
           
           // Highlight available input ports
-          nodeElement.selectAll('.input-port')
+          nodeElement.selectAll('.input-port-group')
             .classed('drop-target-port', function(this: any, portData: any) {
               // Type-safe port data access
               const typedPortData = portData as (NodePort & { nodeId: string })
@@ -1670,7 +1672,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         d3.select(event.currentTarget).classed('can-drop', false)
         
         // Remove port highlighting
-        nodeElement.selectAll('.input-port').classed('drop-target-port', false)
+        nodeElement.selectAll('.input-port-group').classed('drop-target-port', false)
       })
       .on('drop', (event: any, d: WorkflowNode) => {
         event.preventDefault()
@@ -1680,7 +1682,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const nodeElement = d3.select(event.currentTarget.parentNode)
         nodeElement.classed('can-drop-node', false)
         d3.select(event.currentTarget).classed('can-drop', false)
-        nodeElement.selectAll('.input-port').classed('drop-target-port', false)
+        nodeElement.selectAll('.input-port-group').classed('drop-target-port', false)
         
         // Handle connection drop on node
         if (isConnecting && canDropOnNode?.(d.id)) {
@@ -1882,7 +1884,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')
       .attr('font-size', (d: any) => getConfigurableDimensions(d).iconSize || 18)
-      .attr('fill', '#333')
+      .attr('fill', '#8d8d8d')
       .text((d: any) => getNodeIcon(d.type))
 
     // Node label
@@ -1926,7 +1928,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         )
         
         // Add architecture mode specific classes
-        const baseClass = hasConnection ? 'input-port-group connected' : 'input-port-group'
+        const baseClass = hasConnection ? 'port-group input-port-group connected' : 'port-group input-port-group'
         const highlightClass = getPortHighlightClass(d.nodeId, d.id, 'input')
         
         return `${baseClass} ${highlightClass}`.trim()
@@ -2009,7 +2011,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
     inputPortGroups.selectAll('circle').remove()
     inputPortGroups.append('circle')
-      .attr('class', 'input-port-circle')
+      .attr('class', 'port-circle input-port-circle')
       .attr('cx', (d: any, i: number) => {
         const positions = getPortPositions(d.nodeData, 'input')
         return positions[i]?.x || 0
@@ -2022,7 +2024,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr('fill', (d: any) => {
         if (isConnecting && connectionStart && connectionStart.type === 'output') {
           const canDrop = canDropOnPort(d.nodeId, d.id, 'input')
-          return canDrop ? '#4CAF50' : getPortColor('any')
+          return canDrop ? '#4CAF50' : '#ccc'
         }
         return getPortColor('any')
       })
@@ -2048,7 +2050,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const hasConnection = connections.some(conn => 
           conn.sourceNodeId === d.nodeId && conn.sourcePortId === d.id
         )
-        return hasConnection ? 'output-port-group connected' : 'output-port-group'
+        return hasConnection ? 'port-group output-port-group connected' : 'port-group output-port-group'
       })
       .style('cursor', 'crosshair')
       .style('pointer-events', 'all')
@@ -2346,7 +2348,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     // Create output port circles
     outputPortGroups.selectAll('circle').remove()
     outputPortGroups.append('circle')
-      .attr('class', 'output-port-circle')
+      .attr('class', 'port-circle output-port-circle')
       .attr('cx', (d: any, i: number) => {
         const positions = getPortPositions(d.nodeData, 'output')
         return positions[i]?.x || 0
@@ -2359,7 +2361,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr('fill', (d: any) => {
         if (isConnecting && connectionStart && connectionStart.type === 'input') {
           const canDrop = canDropOnPort(d.nodeId, d.id, 'output')
-          return canDrop ? '#4CAF50' : getPortColor('any')
+          return canDrop ? '#4CAF50' : '#ccc'
         }
         return getPortColor('any')
       })
@@ -2368,7 +2370,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           const canDrop = canDropOnPort(d.nodeId, d.id, 'output')
           return canDrop ? '#4CAF50' : '#ff5722'
         }
-        return '#333'
+        return '#8d8d8d'
       })
       .attr('stroke-width', 2)
 
@@ -3051,7 +3053,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           targetRadius = safeCanDrop ? baseDimensions.portRadius * 1.5 : baseDimensions.portRadius
         } else {
           targetFill = getPortColor('any')
-          targetStroke = '#333'
+          targetStroke = '#8d8d8d'
           targetStrokeWidth = 2
           targetRadius = baseDimensions.portRadius
         }
@@ -3088,7 +3090,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const baseDimensions = getConfigurableDimensions(d.nodeData)
         
         const targetFill = isConnectionActive ? (safeCanDrop ? '#4CAF50' : '#ccc') : getPortColor('any')
-        const targetStroke = isConnectionActive ? (safeCanDrop ? '#4CAF50' : '#ff5722') : '#333'
+        const targetStroke = isConnectionActive ? (safeCanDrop ? '#4CAF50' : '#ff5722') : '#8d8d8d'
         const targetStrokeWidth = isConnectionActive ? (safeCanDrop ? 3 : 2) : 2
         const targetRadius = isConnectionActive ? (safeCanDrop ? baseDimensions.portRadius * 1.5 : baseDimensions.portRadius) : baseDimensions.portRadius
         
@@ -3124,7 +3126,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const baseDimensions = getConfigurableDimensions(d.nodeData)
         
         const targetFill = isConnectionActive ? (safeCanDrop ? '#4CAF50' : '#ccc') : getPortColor('any')
-        const targetStroke = isConnectionActive ? (safeCanDrop ? '#4CAF50' : '#ff5722') : '#333'
+        const targetStroke = isConnectionActive ? (safeCanDrop ? '#4CAF50' : '#ff5722') : '#8d8d8d'
         const targetStrokeWidth = isConnectionActive ? (safeCanDrop ? 3 : 2) : 2
         const targetRadius = isConnectionActive ? (safeCanDrop ? baseDimensions.portRadius * 1.5 : baseDimensions.portRadius) : baseDimensions.portRadius
         
@@ -3149,6 +3151,28 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       })
       
   }, [isConnecting, connectionStart, connectionPreview, nodeVariant, nodeMap, isInitialized, canDropOnPort, svgRef, getConfigurableDimensions])
+  
+  // Architecture mode port visibility during connection
+  useEffect(() => {
+    if (!svgRef.current || !isInitialized) return
+    
+    const svg = d3.select(svgRef.current)
+    const isArchitectureMode = workflowContextState.designerMode === 'architecture'
+    
+    if (isArchitectureMode) {
+      if (isConnecting) {
+        // Show all ports during connection in architecture mode
+        svg.selectAll('.port-group')
+          .style('opacity', 1)
+          .style('pointer-events', 'all')
+      } else {
+        // Hide ports when not connecting and not hovering in architecture mode
+        svg.selectAll('.port-group')
+          .style('opacity', 0)
+          .style('pointer-events', 'none')
+      }
+    }
+  }, [isConnecting, workflowContextState.designerMode, isInitialized, svgRef])
   
   // Canvas state effect
   useEffect(() => {

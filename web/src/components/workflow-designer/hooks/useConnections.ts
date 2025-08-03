@@ -5,6 +5,7 @@ export type { Connection, ConnectionStart } from '../types' // Re-export for bac
 
 export interface UseConnectionsProps {
   nodes: WorkflowNode[]
+  designerMode?: 'workflow' | 'architecture'
 }
 
 export interface UseConnectionsReturn {
@@ -38,7 +39,8 @@ export interface UseConnectionsReturn {
 }
 
 export function useConnections({
-  nodes
+  nodes,
+  designerMode = 'workflow'
 }: UseConnectionsProps): UseConnectionsReturn {
   
   const [connections, setConnections] = useState<Connection[]>([])
@@ -74,14 +76,18 @@ export function useConnections({
       return { valid: false, reason: 'Connection already exists' }
     }
 
-    // Check if target port is already connected (inputs should be unique)
-    const targetPortConnected = connections.find(c =>
-      c.targetNodeId === targetNode.id && c.targetPortId === targetPortId
-    )
+    // Check if target port is already connected (inputs should be unique in workflow mode)
+    if (designerMode === 'workflow') {
+      const targetPortConnected = connections.find(c =>
+        c.targetNodeId === targetNode.id && c.targetPortId === targetPortId
+      )
 
-    if (targetPortConnected) {
-      return { valid: false, reason: `Input port already connected to ${targetPortConnected.sourceNodeId}` }
+      if (targetPortConnected) {
+        return { valid: false, reason: `Input port already connected to ${targetPortConnected.sourceNodeId}` }
+      }
     }
+    
+    // In architecture mode, allow multiple connections to the same input port
 
     // Allow multiple connections with same port types between different nodes
     // Only prevent exact same connection (same source AND target nodes)
@@ -102,7 +108,7 @@ export function useConnections({
     }
 
     return { valid: true }
-  }, [connections])
+  }, [connections, designerMode])
 
   const createConnection = useCallback((
     sourceNodeId: string,

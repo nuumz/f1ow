@@ -775,7 +775,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
   // Memoized connection path calculation with drag position support and memory management
   const getConnectionPath = useCallback((connection: Connection, useDragPositions = false) => {
-    const cacheKey = `${connection.sourceNodeId}-${connection.sourcePortId}-${connection.targetNodeId}-${connection.targetPortId}-${nodeVariant}${useDragPositions ? '-drag' : ''}`
+    const cacheKey = `${connection.id}-${connection.sourceNodeId}-${connection.sourcePortId}-${connection.targetNodeId}-${connection.targetPortId}-${nodeVariant}${useDragPositions ? '-drag' : ''}`
     
     // Skip cache for drag positions to ensure real-time updates
     if (!useDragPositions) {
@@ -803,31 +803,28 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     // Check if this is part of multiple connections between same nodes
     const groupInfo = getConnectionGroupInfo(connection.id, connections)
     
+    console.log('🔍 Connection group info:', {
+      connectionId: connection.id,
+      sourceNodeId: connection.sourceNodeId,
+      targetNodeId: connection.targetNodeId,
+      groupInfo,
+      totalConnections: connections.length
+    })
+    
     let path: string
     if (groupInfo.isMultiple) {
-      // Use production-ready multiple connection path
-      if (enhancedConnectionsEnabled && productionManagerRef.current) {
-        path = generateProductionConnectionPath(
-          sourceNode,
-          connection.sourcePortId,
-          targetNode,
-          connection.targetPortId,
-          groupInfo.index,
-          groupInfo.total,
-          nodeVariant,
-          true // enable enhanced features
-        )
-      } else {
-        path = generateMultipleConnectionPath(
-          sourceNode,
-          connection.sourcePortId,
-          targetNode,
-          connection.targetPortId,
-          groupInfo.index,
-          groupInfo.total,
-          nodeVariant
-        )
-      }
+      console.log('🔧 Using generateMultipleConnectionPath for multiple connections')
+      // For multiple connections, always use the working generateMultipleConnectionPath
+      // Skip production manager to avoid NaN issues with path smoothing
+      path = generateMultipleConnectionPath(
+        sourceNode,
+        connection.sourcePortId,
+        targetNode,
+        connection.targetPortId,
+        groupInfo.index,
+        groupInfo.total,
+        nodeVariant
+      )
     } else {
       // Use production-ready standard connection path for single connections
       if (enhancedConnectionsEnabled && productionManagerRef.current) {

@@ -216,67 +216,84 @@ export function generateMultipleConnectionPath(
   totalConnections: number = 1,
   variant: NodeVariant = 'standard'
 ): string {
-  // Use base connection path generation
-  const basePath = generateVariantAwareConnectionPath(sourceNode, sourcePortId, targetNode, targetPortId, variant)
+  console.log('🔧 generateMultipleConnectionPath called:', {
+    sourceNode: sourceNode.id,
+    targetNode: targetNode.id,
+    connectionIndex,
+    totalConnections,
+    sourceX: sourceNode.x,
+    sourceY: sourceNode.y,
+    targetX: targetNode.x,
+    targetY: targetNode.y,
+    sourcePortId,
+    targetPortId
+  })
   
-  // If only one connection, return base path
+  // If only one connection, use base path
   if (totalConnections <= 1) {
-    return basePath
+    return generateVariantAwareConnectionPath(sourceNode, sourcePortId, targetNode, targetPortId, variant)
   }
+  
+  // Validate input nodes have valid positions
+  if (!isFinite(sourceNode.x) || !isFinite(sourceNode.y) || 
+      !isFinite(targetNode.x) || !isFinite(targetNode.y)) {
+    console.warn('Invalid node positions, using fallback')
+    return generateVariantAwareConnectionPath(sourceNode, sourcePortId, targetNode, targetPortId, variant)
+  }
+  
+  // Simple fixed approach with debugging
+  const sourceX = sourceNode.x + 100 // Right side of source node
+  const sourceY = sourceNode.y
+  const targetX = targetNode.x - 100 // Left side of target node  
+  const targetY = targetNode.y
   
   // Calculate offset for multiple connections
-  const sourcePos = calculatePortPosition(sourceNode, sourcePortId, 
-    sourceNode.bottomPorts?.some(p => p.id === sourcePortId) ? 'bottom' : 'output', variant)
-  const targetPos = calculatePortPosition(targetNode, targetPortId,
-    targetNode.bottomPorts?.some(p => p.id === targetPortId) ? 'bottom' : 'input', variant)
+  const spacing = 20 // Pixels between connections
+  let yOffset = 0
   
-  // Calculate connection offset based on index and total connections
-  const maxOffset = Math.min(30, 10 + (totalConnections * 3)) // Maximum offset of 30px
-  const spacing = maxOffset / Math.max(1, totalConnections - 1)
-  const offset = totalConnections === 1 ? 0 : (connectionIndex * spacing) - (maxOffset / 2)
-  
-  // Apply offset perpendicular to connection direction
-  const dx = targetPos.x - sourcePos.x
-  const dy = targetPos.y - sourcePos.y
-  const distance = Math.sqrt(dx * dx + dy * dy)
-  
-  if (distance === 0) return basePath
-  
-  // Calculate perpendicular offset vector
-  const perpX = (-dy / distance) * offset
-  const perpY = (dx / distance) * offset
-  
-  // Apply arrow marker offset
-  const arrowOffset = 7
-  const offsetRatio = arrowOffset / distance
-  const adjustedTargetX = targetPos.x - (dx * offsetRatio) + perpX
-  const adjustedTargetY = targetPos.y - (dy * offsetRatio) + perpY
-  
-  const adjustedSourceX = sourcePos.x + perpX
-  const adjustedSourceY = sourcePos.y + perpY
-  
-  const adjustedDx = adjustedTargetX - adjustedSourceX
-  const adjustedDy = adjustedTargetY - adjustedSourceY
-  
-  // Calculate control points with offset
-  const isSourceBottomPort = sourceNode.bottomPorts?.some(p => p.id === sourcePortId)
-  let cp1x, cp1y, cp2x, cp2y
-  
-  if (isSourceBottomPort) {
-    const controlOffset = Math.max(Math.abs(adjustedDy) / 2.5, 60)
-    cp1x = adjustedSourceX
-    cp1y = adjustedSourceY + controlOffset
-    cp2x = adjustedTargetX
-    cp2y = adjustedTargetY - Math.max(Math.abs(adjustedDx) / 2.5, 40)
-  } else {
-    const controlOffset = Math.max(Math.abs(adjustedDx) / 2.5, 60)
-    cp1x = adjustedSourceX + controlOffset
-    cp1y = adjustedSourceY + adjustedDy * 0.1
-    cp2x = adjustedTargetX - controlOffset
-    cp2y = adjustedTargetY - adjustedDy * 0.1
+  if (totalConnections === 2) {
+    // For 2 connections: one above center, one below center
+    yOffset = connectionIndex === 0 ? -spacing/2 : spacing/2
+  } else if (totalConnections > 2) {
+    // For 3+ connections: spread them out evenly
+    const totalSpacing = spacing * (totalConnections - 1)
+    yOffset = (connectionIndex * spacing) - (totalSpacing / 2)
   }
   
-  return `M ${adjustedSourceX} ${adjustedSourceY} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${adjustedTargetX} ${adjustedTargetY}`
+  // Apply offset to start and end points
+  const startX = sourceX
+  const startY = sourceY + yOffset
+  const endX = targetX  
+  const endY = targetY + yOffset
+  
+  // Calculate control points for smooth curve
+  const dx = endX - startX
+  const controlOffset = Math.abs(dx) / 2
+  
+  const cp1x = startX + controlOffset
+  const cp1y = startY
+  const cp2x = endX - controlOffset
+  const cp2y = endY
+  
+  // Debug all calculated values
+  console.log('🔧 Calculated values:', {
+    startX, startY, endX, endY,
+    cp1x, cp1y, cp2x, cp2y,
+    yOffset, spacing, dx, controlOffset
+  })
+  
+  // Validate all values are finite numbers
+  const values = [startX, startY, cp1x, cp1y, cp2x, cp2y, endX, endY]
+  if (values.some(val => !isFinite(val))) {
+    console.warn('❌ Invalid values detected:', values)
+    // Return a simple straight line as ultimate fallback
+    return `M ${sourceNode.x + 100} ${sourceNode.y} L ${targetNode.x - 100} ${targetNode.y}`
+  }
+  
+  const path = `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}`
+  console.log('✅ Generated path:', path)
+  
+  return path
 }
 
 /**

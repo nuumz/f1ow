@@ -1909,29 +1909,7 @@
   pointer-events: none;
 }
 
-/* Legacy endpoint indicator */
-.canvas-container.architecture-mode .node.legacy-endpoint .node-background {
-  stroke: #9C27B0 !important;
-  stroke-width: 3 !important;
-  stroke-dasharray: 10, 5 !important;
-  filter: drop-shadow(0 3px 12px rgba(156, 39, 176, 0.3));
-}
-
-/* Legacy endpoint badge */
-.canvas-container.architecture-mode .node.legacy-endpoint .legacy-badge {
-  position: absolute;
-  top: -10px;
-  right: -10px;
-  background: linear-gradient(135deg, #9C27B0, #7B1FA2);
-  color: white;
-  border-radius: 6px;
-  padding: 2px 6px;
-  font-size: 10px;
-  font-weight: bold;
-  pointer-events: none;
-  z-index: 10;
-  box-shadow: 0 2px 6px rgba(156, 39, 176, 0.3);
-}
+/* Legacy endpoint styling removed - unnecessary visual clutter */
 
 /* Multiple connection grouping visual */
 .canvas-container.architecture-mode .connection-group {
@@ -1957,55 +1935,9 @@
   dominant-baseline: central;
 }
 
-/* Enhanced port highlighting for legacy endpoints */
-.canvas-container.architecture-mode .node.legacy-endpoint .input-port-circle {
-  stroke: #9C27B0 !important;
-  stroke-width: 2 !important;
-}
+/* Legacy endpoint port highlighting removed - unnecessary visual differentiation */
 
-.canvas-container.architecture-mode .node.legacy-endpoint .output-port-circle {
-  stroke: #9C27B0 !important;
-  stroke-width: 2 !important;
-}
-
-/* Port capacity indicator */
-.canvas-container.architecture-mode .port-capacity-indicator {
-  position: absolute;
-  bottom: -15px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.7);
-  color: white;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-size: 9px;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.canvas-container.architecture-mode .input-port-group:hover .port-capacity-indicator,
-.canvas-container.architecture-mode .output-port-group:hover .port-capacity-indicator {
-  opacity: 1;
-}
-
-/* Connection path offset for multiple connections */
-.canvas-container.architecture-mode .connection-path.multiple-connection {
-  stroke-dasharray: none;
-  animation: connectionFlow 3s linear infinite;
-}
-
-.canvas-container.architecture-mode .connection-path.multiple-connection.secondary {
-  stroke-dasharray: 5, 5;
-  stroke-dashoffset: 0;
-  animation: dashFlow 2s linear infinite;
-}
-
-.canvas-container.architecture-mode .connection-path.multiple-connection.tertiary {
-  stroke-dasharray: 3, 7;
-  stroke-dashoffset: 0;
-  animation: dashFlow 1.5s linear infinite reverse;
-}
+/* Port capacity indicators removed - they were cluttering the UI without adding value */
 
 /* Connection animation keyframes */
 @keyframes connectionFlow {
@@ -2027,20 +1959,7 @@
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
 }
 
-.canvas-container.architecture-mode .node.legacy-endpoint::before {
-  content: "LEGACY";
-  position: absolute;
-  top: -12px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #9C27B0;
-  color: white;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 8px;
-  font-weight: bold;
-  pointer-events: none;
-}
+/* Legacy badge ::before removed - unnecessary visual clutter */
 
 @keyframes portPulse {
   0%, 100% { transform: scale(1); }

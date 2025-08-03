@@ -22,19 +22,8 @@ import {
   calculatePortPosition,
   getConnectionGroupInfo
 } from '../utils/connection-utils'
-import { 
-  initializeProductionConnections,
-  generateProductionConnectionPath,
-  getProductionConnectionManager,
-  applyProductionEffects,
-  animateProductionConnection,
-  type ProductionConnectionConfig
-} from '../utils/enhanced-connection-production'
-import { 
-  getOptimalConfig,
-  PERFORMANCE_THRESHOLDS,
-  FEATURE_FLAGS
-} from '../utils/connection-config'
+// Production connection imports removed - simplified to use standard connection paths
+// Connection config imports removed - simplified architecture
 
 // Type aliases for better maintainability
 type CallbackPriority = 'high' | 'normal' | 'low'
@@ -132,24 +121,9 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     endDragging 
   } = useWorkflowContext()
   
-  // Production connection system state
-  const [enhancedConnectionsEnabled, setEnhancedConnectionsEnabled] = useState(FEATURE_FLAGS.ENABLE_ENHANCED_CONNECTIONS)
-  const productionManagerRef = useRef<any>(null)
-  const performanceMetricsRef = useRef<any>({})
-  const lastMaintenanceRef = useRef<number>(Date.now())
+  // Production connection system removed - simplified to use standard paths
 
-  // Expose controls for debugging/testing (can be removed in production)
-  React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      (window as any).toggleEnhancedConnections = () => {
-        setEnhancedConnectionsEnabled(prev => {
-          console.log('🔄 Enhanced connections toggled:', !prev)
-          return !prev
-        })
-      }
-      (window as any).getEnhancedConnectionManager = () => productionManagerRef.current
-    }
-  }, [])
+  // Debug controls removed - production connection system simplified
   
   // Remove hover state from React - manage it directly in D3
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -184,105 +158,15 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       if (batchedVisualUpdateRef.current) {
         cancelAnimationFrame(batchedVisualUpdateRef.current)
       }
-      // Cleanup production connection manager
-      if (productionManagerRef.current) {
-        productionManagerRef.current.dispose()
-      }
+      // Production connection manager cleanup removed
     }
   }, [])
 
-  // Initialize enhanced connection system
-  useEffect(() => {
-    if (!svgRef.current || !enhancedConnectionsEnabled) return
+  // Enhanced connection system initialization removed - simplified to standard paths
 
-    try {
-      // Get canvas bounds
-      const rect = svgRef.current.getBoundingClientRect()
-      const canvasBounds = {
-        x: canvasTransform.x,
-        y: canvasTransform.y,
-        width: rect.width,
-        height: rect.height,
-        zoom: canvasTransform.k
-      }
+  // Enhanced connection manager viewport updates removed
 
-      // Intelligent configuration based on context
-      const productionConfig = getOptimalConfig({
-        nodeCount: nodes.length,
-        connectionCount: connections.length,
-        isMobile: window.innerWidth < 768,
-        isArchitectureMode: workflowContextState.designerMode === 'architecture'
-      })
-
-      // Initialize production connection manager
-      const svg = d3.select(svgRef.current)
-      const defs = svg.select<SVGDefsElement>('defs')
-      
-      productionManagerRef.current = initializeProductionConnections(
-        defs.empty() ? undefined : defs,
-        productionConfig
-      )
-
-      console.log('🚀 Production connection system initialized', {
-        mode: workflowContextState.designerMode,
-        config: productionConfig,
-        nodesCount: nodes.length,
-        connectionsCount: connections.length
-      })
-    } catch (error) {
-      console.warn('⚠️ Failed to initialize enhanced connections, falling back to standard:', error)
-      setEnhancedConnectionsEnabled(false)
-    }
-  }, [svgRef, workflowContextState.designerMode, enhancedConnectionsEnabled, nodes.length, connections.length, canvasTransform])
-
-  // Update enhanced connection manager when canvas changes
-  useEffect(() => {
-    if (!productionManagerRef.current || !svgRef.current) return
-
-    // Update viewport for performance optimization if available
-    if (productionManagerRef.current.updateViewport) {
-      const rect = svgRef.current.getBoundingClientRect()
-      const canvasBounds = {
-        x: canvasTransform.x,
-        y: canvasTransform.y,
-        width: rect.width,
-        height: rect.height,
-        zoom: canvasTransform.k
-      }
-
-      productionManagerRef.current.updateViewport(canvasBounds)
-    }
-  }, [canvasTransform, nodes.length, svgRef])
-
-  // Performance monitoring and maintenance
-  useEffect(() => {
-    if (!productionManagerRef.current || !FEATURE_FLAGS.ENABLE_PERFORMANCE_MONITORING) return
-
-    const monitorPerformance = () => {
-      try {
-        const metrics = productionManagerRef.current.getMetrics()
-        performanceMetricsRef.current = metrics
-
-        // Log performance warnings if needed
-        if (metrics.renderTime > PERFORMANCE_THRESHOLDS.MAX_RENDER_TIME_MS) {
-          console.warn('🐌 Slow connection rendering detected:', metrics)
-        }
-
-        // Perform maintenance if needed
-        const now = Date.now()
-        if (now - lastMaintenanceRef.current > PERFORMANCE_THRESHOLDS.MEMORY_CLEANUP_INTERVAL_MS) {
-          productionManagerRef.current.performMaintenance()
-          lastMaintenanceRef.current = now
-          console.log('🧹 Connection system maintenance completed')
-        }
-      } catch (error) {
-        console.warn('⚠️ Performance monitoring error:', error)
-      }
-    }
-
-    const interval = setInterval(monitorPerformance, 10000) // Monitor every 10 seconds
-    return () => clearInterval(interval)
-  }, [enhancedConnectionsEnabled])
+  // Performance monitoring removed - simplified architecture
   
   // Track current transform with ref for immediate access
   const currentTransformRef = useRef(canvasTransform)
@@ -735,16 +619,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     }
   }, [connections])
 
-  // Helper function to determine if a node is a legacy endpoint
-  const isLegacyEndpoint = useCallback((node: WorkflowNode) => {
-    // Mark nodes as legacy endpoints based on certain criteria
-    return node.config?.isLegacyEndpoint || 
-           node.type === 'legacy-api' || 
-           node.type === 'legacy-service' ||
-           (node.inputs && node.inputs.length > 3) || // Many input ports suggest legacy system
-           (workflowContextState.designerMode === 'architecture' && 
-            connections.filter(conn => conn.targetNodeId === node.id).length > 2) // Multiple incoming connections
-  }, [connections, workflowContextState.designerMode])
+  // Legacy endpoint detection removed - no longer needed since legacy badges are removed
 
   // Enhanced port highlighting for architecture mode
   const getPortHighlightClass = useCallback((nodeId: string, portId: string, portType: 'input' | 'output') => {
@@ -816,6 +691,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       console.log('🔧 Using generateMultipleConnectionPath for multiple connections')
       // For multiple connections, always use the working generateMultipleConnectionPath
       // Skip production manager to avoid NaN issues with path smoothing
+      const currentMode = workflowContextState.designerMode === 'architecture' ? 'architecture' : 'workflow'
       path = generateMultipleConnectionPath(
         sourceNode,
         connection.sourcePortId,
@@ -823,30 +699,18 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         connection.targetPortId,
         groupInfo.index,
         groupInfo.total,
-        nodeVariant
+        nodeVariant,
+        currentMode
       )
     } else {
-      // Use production-ready standard connection path for single connections
-      if (enhancedConnectionsEnabled && productionManagerRef.current) {
-        path = generateProductionConnectionPath(
-          sourceNode, 
-          connection.sourcePortId, 
-          targetNode, 
-          connection.targetPortId,
-          0, // connectionIndex
-          1, // totalConnections
-          nodeVariant,
-          true // enable enhanced features
-        )
-      } else {
-        path = generateVariantAwareConnectionPath(
-          sourceNode, 
-          connection.sourcePortId, 
-          targetNode, 
-          connection.targetPortId,
-          nodeVariant
-        )
-      }
+      // Use standard variant-aware connection path for single connections
+      path = generateVariantAwareConnectionPath(
+        sourceNode, 
+        connection.sourcePortId, 
+        targetNode, 
+        connection.targetPortId,
+        nodeVariant
+      )
     }
     
     if (!useDragPositions) {
@@ -858,7 +722,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       }
     }
     return path
-  }, [nodeMap, nodeVariant, connections, enhancedConnectionsEnabled, cleanupConnectionCache])
+  }, [nodeMap, nodeVariant, connections, cleanupConnectionCache])
 
   // Memoized configurable dimensions calculation (shape-aware)
   const getConfigurableDimensions = useMemo(() => {
@@ -1464,18 +1328,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           clearTimeout(hoverTimeoutRef.current)
         }
 
-        // Apply production hover effects if available
-        if (enhancedConnectionsEnabled && productionManagerRef.current) {
-          try {
-            applyProductionEffects(
-              connectionGroup,
-              connectionPath.node() as SVGPathElement,
-              'hover'
-            )
-          } catch (error) {
-            console.warn('⚠️ Failed to apply enhanced hover effects:', error)
-          }
-        }
+        // Production hover effects removed - simplified styling
         
         // Apply hover immediately for non-selected connections
         if (!isSelected) {
@@ -1493,18 +1346,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const connectionPath = connectionGroup.select('.connection-path')
         const isSelected = selectedConnection?.id === d.id
         
-        // Apply production effects to reset hover state
-        if (enhancedConnectionsEnabled && productionManagerRef.current) {
-          try {
-            applyProductionEffects(
-              connectionGroup,
-              connectionPath.node() as SVGPathElement,
-              isSelected ? 'selected' : 'default'
-            )
-          } catch (error) {
-            console.warn('⚠️ Failed to apply enhanced leave effects:', error)
-          }
-        }
+        // Production effects removed - using CSS-based styling
         
         // Remove hover class
         connectionGroup.classed('connection-hover', false)
@@ -1527,15 +1369,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr('fill', 'none')
       .style('pointer-events', 'none') // Disable events on visible path
       .each(function() {
-        // Animate new connection drawing if production features are available
-        if (enhancedConnectionsEnabled && productionManagerRef.current) {
-          try {
-            const pathElement = this as SVGPathElement
-            animateProductionConnection(pathElement)
-          } catch (error) {
-            console.warn('⚠️ Failed to animate connection drawing:', error)
-          }
-        }
+        // Connection animation removed - simplified approach
       })
 
     // Add connection labels (only in architecture mode for multiple connections)
@@ -1554,6 +1388,16 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     // Update hitbox path (invisible but wide for better hover detection)
     connectionUpdate.select('.connection-hitbox')
       .attr('d', (d: any) => getConnectionPath(d))
+      .style('display', (d: any) => {
+        // In architecture mode, hide hitbox for secondary connections
+        if (workflowContextState.designerMode === 'architecture') {
+          const groupInfo = getConnectionGroupInfo(d.id, connections)
+          if (groupInfo.isMultiple && groupInfo.index > 0) {
+            return 'none' // Hide secondary/tertiary connection hitboxes
+          }
+        }
+        return 'block'
+      })
 
     // Update visible path with enhanced features
     connectionUpdate.select('.connection-path')
@@ -1561,24 +1405,18 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr('stroke', 'white') // Default stroke - CSS will override for selection/hover
       .attr('stroke-width', 2) // Default width - CSS will override for selection/hover
       .attr('marker-end', (d: any) => getConnectionMarker(d, 'default')) // Dynamic marker based on direction
-      .each(function(d: any) {
-        // Apply production effects if available
-        if (enhancedConnectionsEnabled && productionManagerRef.current) {
-          const pathElement = this as SVGPathElement
-          const parentElement = (this as SVGElement).parentElement
-          if (!parentElement) return
-          const connectionGroup = d3.select(parentElement as unknown as SVGGElement)
-          
-          try {
-            applyProductionEffects(
-              connectionGroup,
-              pathElement,
-              'default'
-            )
-          } catch (error) {
-            console.warn('⚠️ Failed to apply enhanced effects:', error)
+      .style('display', (d: any) => {
+        // In architecture mode, hide secondary connections (show only primary)
+        if (workflowContextState.designerMode === 'architecture') {
+          const groupInfo = getConnectionGroupInfo(d.id, connections)
+          if (groupInfo.isMultiple && groupInfo.index > 0) {
+            return 'none' // Hide secondary/tertiary connections
           }
         }
+        return 'block'
+      })
+      .each(function(d: any) {
+        // Production effects removed - using CSS-based styling
       })
       .attr('class', (d: any) => {
         const groupInfo = getConnectionGroupInfo(d.id, connections)
@@ -1600,7 +1438,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         if (workflowContextState.designerMode !== 'architecture') return 'none'
         
         const groupInfo = getConnectionGroupInfo(d.id, connections)
-        return groupInfo.isMultiple ? 'block' : 'none'
+        // Only show count badge for the first connection in the group
+        return groupInfo.isMultiple && groupInfo.index === 0 ? 'block' : 'none'
       })
       .attr('x', (d: any) => {
         // Position label at midpoint of connection
@@ -1628,6 +1467,11 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const groupInfo = getConnectionGroupInfo(d.id, connections)
         
         if (!sourceNode || !targetNode || !groupInfo.isMultiple) return ''
+        
+        // For architecture mode, show connection count badge
+        if (workflowContextState.designerMode === 'architecture') {
+          return `${groupInfo.total} connections`
+        }
         
         // Generate meaningful labels based on port types and node types
         const sourcePort = sourceNode.outputs?.find(p => p.id === d.sourcePortId)
@@ -1933,12 +1777,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       const nodeElement = d3.select(this)
       const isSelected = isNodeSelected(d.id)
       
-      // Add legacy endpoint class for architecture mode
-      if (workflowContextState.designerMode === 'architecture' && isLegacyEndpoint(d)) {
-        nodeElement.classed('legacy-endpoint', true)
-      } else {
-        nodeElement.classed('legacy-endpoint', false)
-      }
+      // Legacy endpoint class assignment removed - no longer needed
       
       // Enhanced dragging state detection with context-based state using fresh values
       let isNodeDragging = false
@@ -2051,50 +1890,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr('class', 'node-label')
       .style('pointer-events', 'none')
 
-    // Legacy endpoint badge (only in architecture mode)
-    nodeEnter.append('g')
-      .attr('class', 'legacy-badge-group')
-      .style('display', (d: any) => {
-        return workflowContextState.designerMode === 'architecture' && isLegacyEndpoint(d) ? 'block' : 'none'
-      })
-    
-    const legacyBadgeGroup = nodeEnter.select('.legacy-badge-group')
-    
-    // Badge background
-    legacyBadgeGroup.append('rect')
-      .attr('class', 'legacy-badge-bg')
-      .attr('x', (d: any) => {
-        const dimensions = getConfigurableDimensions(d)
-        return (dimensions.width / 2) - 15
-      })
-      .attr('y', (d: any) => {
-        const dimensions = getConfigurableDimensions(d)
-        return -(dimensions.height / 2) - 10
-      })
-      .attr('width', 30)
-      .attr('height', 16)
-      .attr('rx', 3)
-      .attr('fill', '#9C27B0')
-      .attr('stroke', '#7B1FA2')
-      .attr('stroke-width', 1)
-    
-    // Badge text
-    legacyBadgeGroup.append('text')
-      .attr('class', 'legacy-badge-text')
-      .attr('x', (d: any) => {
-        const dimensions = getConfigurableDimensions(d)
-        return (dimensions.width / 2)
-      })
-      .attr('y', (d: any) => {
-        const dimensions = getConfigurableDimensions(d)
-        return -(dimensions.height / 2) - 2
-      })
-      .attr('text-anchor', 'middle')
-      .attr('dominant-baseline', 'middle')
-      .attr('font-size', 9)
-      .attr('font-weight', 'bold')
-      .attr('fill', 'white')
-      .text('LEGACY')
+    // Legacy badge removed - it was visual clutter without adding meaningful value
     
     nodeGroups.select('.node-label')
       .attr('x', (d: any) => {
@@ -2116,11 +1912,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         return nodeTypeInfo?.label || d.label || d.type
       })
 
-    // Update legacy badge visibility for existing nodes
-    nodeGroups.select('.legacy-badge-group')
-      .style('display', (d: any) => {
-        return workflowContextState.designerMode === 'architecture' && isLegacyEndpoint(d) ? 'block' : 'none'
-      })
+    // Legacy badge update removed - badge has been completely removed
 
     // Render simple ports for both variants
     // Input ports
@@ -2245,31 +2037,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
     //console.log('🔵 Created', inputPortGroups.selectAll('circle').size(), 'input port circles')
 
-    // Add port capacity indicators (only in architecture mode)
-    inputPortGroups.selectAll('.port-capacity-indicator').remove()
-    inputPortGroups.filter(() => workflowContextState.designerMode === 'architecture')
-      .append('text')
-      .attr('class', 'port-capacity-indicator')
-      .attr('x', (d: any, i: number) => {
-        const positions = getPortPositions(d.nodeData, 'input')
-        return positions[i]?.x || 0
-      })
-      .attr('y', (d: any, i: number) => {
-        const positions = getPortPositions(d.nodeData, 'input')
-        return (positions[i]?.y || 0) + 20
-      })
-      .attr('text-anchor', 'middle')
-      .attr('font-size', 9)
-      .attr('fill', '#666')
-      .attr('pointer-events', 'none')
-      .text((d: any) => {
-        const connectionCount = connections.filter(conn => 
-          conn.targetNodeId === d.nodeId && conn.targetPortId === d.id
-        ).length
-        
-        if (connectionCount === 0) return 'Multi ∞'
-        return `${connectionCount} conn${connectionCount !== 1 ? 's' : ''}`
-      })
+    // Port capacity indicators removed - they were cluttering the UI without adding value
 
     // Output ports
     const outputPortGroups = nodeGroups.selectAll('.output-port-group')
@@ -2606,31 +2374,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
     //console.log('🔴 Created', outputPortGroups.selectAll('circle').size(), 'output port circles')
 
-    // Add output port capacity indicators (only in architecture mode)
-    outputPortGroups.selectAll('.port-capacity-indicator').remove()
-    outputPortGroups.filter(() => workflowContextState.designerMode === 'architecture')
-      .append('text')
-      .attr('class', 'port-capacity-indicator')
-      .attr('x', (d: any, i: number) => {
-        const positions = getPortPositions(d.nodeData, 'output')
-        return positions[i]?.x || 0
-      })
-      .attr('y', (d: any, i: number) => {
-        const positions = getPortPositions(d.nodeData, 'output')
-        return (positions[i]?.y || 0) + 20
-      })
-      .attr('text-anchor', 'middle')
-      .attr('font-size', 9)
-      .attr('fill', '#666')
-      .attr('pointer-events', 'none')
-      .text((d: any) => {
-        const connectionCount = connections.filter(conn => 
-          conn.sourceNodeId === d.nodeId && conn.sourcePortId === d.id
-        ).length
-        
-        if (connectionCount === 0) return 'Multi ∞'
-        return `${connectionCount} conn${connectionCount !== 1 ? 's' : ''}`
-      })
+    // Output port capacity indicators removed - they were cluttering the UI without adding value
 
     // Bottom ports - สำหรับ AI Agent nodes ที่มี bottomPorts
     const bottomPortGroups = nodeGroups.filter((d: any) => d.bottomPorts && d.bottomPorts.length > 0)
@@ -3214,18 +2958,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         // Update selection class
         connectionGroup.classed('connection-selected', isSelected)
 
-        // Apply production selection effects if available
-        if (enhancedConnectionsEnabled && productionManagerRef.current) {
-          try {
-            applyProductionEffects(
-              connectionGroup,
-              pathElement.node() as SVGPathElement,
-              isSelected ? 'selected' : 'default'
-            )
-          } catch (error) {
-            console.warn('⚠️ Failed to apply enhanced selection effects:', error)
-          }
-        }
+        // Production selection effects removed - using CSS-based styling
         
         // Only update visual attributes if not currently hovered
         if (!isCurrentlyHovered) {

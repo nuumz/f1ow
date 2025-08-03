@@ -17,7 +17,10 @@
       "Bash(pnpm run:*)",
       "Bash(awk:*)",
       "Bash(npm run typecheck:*)",
-      "Bash(npm run lint:*)"
+      "Bash(npm run lint:*)",
+      "Bash(find:*)",
+      "Bash(rm:*)",
+      "Bash(npx vite build:*)"
     ],
     "deny": []
   }

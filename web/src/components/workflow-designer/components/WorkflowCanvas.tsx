@@ -303,10 +303,13 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     const transformString = `${roundedTransform.x},${roundedTransform.y},${roundedTransform.k}`
     const cached = gridCacheRef.current
     
-    // Use cached grid if transform hasn't changed significantly
-    if (cached && cached.transform === transformString) {
-      return
-    }
+    console.log('🔍 Grid Cache Debug:', { cached, transformString, currentTransform: transformString })
+    
+    // TEMPORARILY DISABLE CACHE to debug
+    // if (cached && cached.transform === transformString) {
+    //   console.log('🎯 Using cached grid')
+    //   return
+    // }
 
     // Calculate dot appearance based on zoom level
     const dotRadius = Math.max(0.8, Math.min(2.5, transform.k * 1.2))
@@ -354,6 +357,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     // Calculate bounds with some padding for smooth scrolling
     const bounds = getVisibleCanvasBounds(transform, viewportWidth, viewportHeight, 200)
     
+    console.log('🔍 Grid Bounds Debug:', { bounds, transform, viewportWidth, viewportHeight })
+    
     // Create a single rectangle that uses the pattern
     gridLayer.append('rect')
       .attr('class', 'grid-pattern-rect')
@@ -363,6 +368,14 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr('height', bounds.height)
       .attr('fill', `url(#${patternId})`)
       .style('pointer-events', 'none')
+
+    console.log('🎯 Grid Rect Created:', {
+      x: bounds.minX,
+      y: bounds.minY,
+      width: bounds.width,
+      height: bounds.height,
+      pattern: `url(#${patternId})`
+    })
 
     // Cache the result
     gridCacheRef.current = {
@@ -835,7 +848,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     nodeElement.classed('can-drop-node', show)
     nodeElement.select('.node-background').classed('can-drop', show)
     
-    // Set port-level feedback for input ports
+    // CRITICAL: Only manage port highlighting when explicitly showing feedback
+    // Don't remove port highlighting during drag leave when still connecting
     if (show && isConnecting && connectionStart) {
       nodeElement.selectAll('.input-port-group')
         .classed('can-dropped', function(this: any, portData: any) {
@@ -847,10 +861,9 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           // Use canDropOnPort for validation
           return canDropOnPort(nodeId, typedPortData.id)
         })
-    } else {
-      // Remove all port highlighting
-      nodeElement.selectAll('.input-port-group').classed('can-dropped', false)
     }
+    // REMOVED: Don't remove port highlighting during drag leave - let CSS handle visibility
+    // This prevents port drop targets from disappearing when dragging out of nodes
   }, [isConnecting, connectionStart, canDropOnPort])
 
   const applyDragVisualStyle = useCallback((nodeElement: any, nodeId: string) => {
@@ -1158,10 +1171,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     // Store node layer reference
     nodeLayerRef.current = mainNodeLayer.node() as SVGGElement
     
-
-    // Create initial grid
-    const rect = svgRef.current.getBoundingClientRect()
-    createGrid(gridLayer, canvasTransform, rect.width, rect.height)
+    // Note: Grid creation moved to separate useEffect to prevent disappearing during drag
 
     // Zoom behavior
     const zoom = d3.zoom<SVGSVGElement, unknown>()
@@ -1171,7 +1181,13 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         
         g.attr('transform', transform.toString())
         !!onZoomLevelChange && currentTransformRef.current.k!=transform.k && onZoomLevelChange(transform.k)
-        createGrid(gridLayer, transform, rect.width, rect.height)
+        
+        // Get fresh dimensions for grid update during zoom
+        if (svgRef.current && showGrid) {
+          const rect = svgRef.current.getBoundingClientRect()
+          createGrid(gridLayer, transform, rect.width, rect.height)
+        }
+        
         onTransformChange(transform)
         
         // Force nodes to re-render on zoom change by updating their visual state
@@ -1611,31 +1627,12 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       }
     })
 
-    // Add hover events for architecture mode port visibility
-    nodeGroups
-      .on('mouseenter', function() {
-        const nodeElement = d3.select(this)
-        const isArchitectureMode = workflowContextState.designerMode === 'architecture'
-        
-        if (isArchitectureMode) {
-          // Show ports on hover in architecture mode
-          nodeElement.selectAll('.port-group')
-            .style('opacity', 1)
-            .style('pointer-events', 'all')
-        }
-      })
-      .on('mouseleave', function() {
-        const nodeElement = d3.select(this)
-        const isArchitectureMode = workflowContextState.designerMode === 'architecture'
-        
-        if (isArchitectureMode && !isConnecting) {
-          // Hide ALL ports when not hovering in architecture mode (including connected ones)
-          // BUT keep them visible during connection dragging
-          nodeElement.selectAll('.port-group')
-            .style('opacity', 0)
-            .style('pointer-events', 'none')
-        }
-      })
+    // REMOVED: JavaScript hover events for port visibility
+    // CSS now handles all port visibility states via classes:
+    // - .canvas-container.architecture-mode .port-group (hidden by default)
+    // - .canvas-container.architecture-mode .node:hover .port-group (visible on hover)  
+    // - .canvas-container .workflow-canvas.connecting .port-group (visible when connecting)
+    // This prevents inline style conflicts with CSS classes
     
     // Update positions for non-dragging nodes
     nodeGroups
@@ -2890,7 +2887,50 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       allNodeElements?.clear()
     }
 
-  }, [nodes, connections, showGrid, nodeVariant, selectedNodes]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [nodes, connections, nodeVariant]) // Remove showGrid and selectedNodes to prevent grid clearing
+  
+  // 🎯 SEPARATE GRID EFFECT - Prevents grid disappearing during drag operations
+  useEffect(() => {
+    console.log('🔍 Grid Effect Debug:', { 
+      svgRef: !!svgRef.current, 
+      isInitialized, 
+      showGrid, 
+      canvasTransform 
+    })
+    
+    if (!svgRef.current || !isInitialized || !showGrid) return
+    
+    const svg = d3.select(svgRef.current)
+    const gridLayer = svg.select('.grid-layer')
+    
+    console.log('🔍 Grid Layer Debug:', { 
+      gridLayerExists: !gridLayer.empty(),
+      gridLayerNode: gridLayer.node() 
+    })
+    
+    if (gridLayer.empty()) return // Grid layer not ready yet
+    
+    // Get current canvas dimensions
+    const rect = svgRef.current.getBoundingClientRect()
+    
+    console.log('🔍 Canvas Dimensions:', rect)
+    
+    // Clear existing grid and recreate
+    gridLayer.selectAll('*').remove()
+    
+    // Type-safe grid layer access
+    const gridLayerElement = gridLayer.node()
+    if (gridLayerElement) {
+      const typedGridLayer = d3.select(gridLayerElement as SVGGElement)
+      console.log('🎯 Creating Grid:', { width: rect.width, height: rect.height })
+      createGrid(typedGridLayer, canvasTransform, rect.width, rect.height)
+      
+      // Verify grid was created
+      const gridElements = typedGridLayer.selectAll('*')
+      console.log('✅ Grid Elements Created:', gridElements.size())
+    }
+    
+  }, [showGrid, canvasTransform, isInitialized, createGrid, svgRef])
   
   // Remove duplicate CSS since hover styles are already in globals.css
   
@@ -3125,27 +3165,29 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       
   }, [isConnecting, connectionStart, connectionPreview, nodeVariant, nodeMap, isInitialized, canDropOnPort, svgRef, getConfigurableDimensions, workflowContextState.designerMode])
   
-  // Architecture mode port visibility during connection
+  // REMOVED: Architecture mode port visibility JavaScript management
+  // CSS now handles all port visibility states automatically:
+  // - Base state: .canvas-container.architecture-mode .port-group (hidden)
+  // - Hover state: .canvas-container.architecture-mode .node:hover .port-group (visible)
+  // - Connecting state: .canvas-container .workflow-canvas.connecting .port-group (visible)
+  // This prevents inline style conflicts with CSS class-based styling
+  
+  // Connection cleanup effect - clear port highlighting when connection ends
   useEffect(() => {
     if (!svgRef.current || !isInitialized) return
     
-    const svg = d3.select(svgRef.current)
-    const isArchitectureMode = workflowContextState.designerMode === 'architecture'
-    
-    if (isArchitectureMode) {
-      if (isConnecting) {
-        // Show all ports during connection in architecture mode
-        svg.selectAll('.port-group')
-          .style('opacity', 1)
-          .style('pointer-events', 'all')
-      } else {
-        // Hide ports when not connecting and not hovering in architecture mode
-        svg.selectAll('.port-group')
-          .style('opacity', 0)
-          .style('pointer-events', 'none')
-      }
+    // Clear all port highlighting when connection ends
+    if (!isConnecting) {
+      const svg = d3.select(svgRef.current)
+      
+      // Remove can-dropped class from all port groups
+      svg.selectAll('.input-port-group').classed('can-dropped', false)
+      svg.selectAll('.output-port-group').classed('can-dropped', false)
+      svg.selectAll('.port-group').classed('can-dropped', false)
+      
+      console.log('🧹 Cleaned up port highlighting after connection ended')
     }
-  }, [isConnecting, workflowContextState.designerMode, isInitialized, svgRef])
+  }, [isConnecting, isInitialized, svgRef])
   
   // Canvas state effect
   useEffect(() => {

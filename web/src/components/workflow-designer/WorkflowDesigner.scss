@@ -546,6 +546,28 @@ $button-variants: (
     }
   }
 
+  // CRITICAL: Force ALL input ports visible during connection in workflow mode too
+  .workflow-canvas.connecting .input-port-group {
+    @include visible-state;
+    pointer-events: all !important;
+    
+    &,
+    &:hover,
+    &:not(:hover),
+    &.can-dropped,
+    &:not(.can-dropped) {
+      @include visible-state;
+      pointer-events: all !important;
+    }
+    
+    .port-circle {
+      fill: #4CAF50 !important;
+      stroke: #388E3C !important;
+      stroke-width: var(--port-drop-target-stroke-width) !important;
+      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+    }
+  }
+
   .input-port,
   .output-port {
     circle {
@@ -575,6 +597,21 @@ $button-variants: (
   .port-group {
     @include hidden-state;
     transition: var(--port-transition);
+    
+    // Override for drop targets in architecture mode - highest priority
+    &.can-dropped,
+    &.drop-target-port {
+      @include visible-state;
+      pointer-events: all !important;
+      
+      .port-circle {
+        fill: #4CAF50 !important;
+        stroke: #388E3C !important;
+        stroke-width: 0 !important;
+        stroke-dasharray: none !important; // Remove architecture dashed style for drop targets
+        filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+      }
+    }
 
     &.connected .port-circle {
       stroke-width: var(--port-connected-stroke-width) !important;
@@ -604,9 +641,52 @@ $button-variants: (
     }
   }
 
+  // Show ports on node hover in architecture mode (when not connecting)
+  .node:hover .port-group {
+    @include visible-state;
+  }
+
   .workflow-canvas.connecting .port-group {
     @include opacity-state(visible);
     pointer-events: all !important;
+    
+    // Force drop targets to stay visible in architecture mode
+    &.can-dropped,
+    &.drop-target-port {
+      @include visible-state;
+      pointer-events: all !important;
+      
+      .port-circle {
+        fill: #4CAF50 !important;
+        stroke: #388E3C !important;
+        stroke-width: 0 !important;
+        stroke-dasharray: none !important;
+        filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+      }
+    }
+  }
+
+  // CRITICAL: Force ALL input ports to be visible during connection in architecture mode
+  .workflow-canvas.connecting .input-port-group {
+    @include visible-state;
+    pointer-events: all !important;
+    
+    &,
+    &:hover,
+    &:not(:hover),
+    &.can-dropped,
+    &:not(.can-dropped) {
+      @include visible-state;
+      pointer-events: all !important;
+    }
+    
+    .port-circle {
+      fill: #4CAF50 !important;
+      stroke: #388E3C !important;
+      stroke-width: 0 !important;
+      stroke-dasharray: none !important;
+      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+    }
   }
 
   .input-port,
@@ -672,7 +752,22 @@ $button-variants: (
     
     .port-circle {
       fill: #4CAF50 !important;
-      stroke-width: var(--port-drop-target-stroke-width) !important;
+      stroke-width: 0 !important;
+      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6));
+    }
+  }
+
+  // Ensure drop targets remain visible even during node hover/unhover
+  .node:hover .port-group.can-dropped,
+  .node:hover .port-group.drop-target-port,
+  .node .port-group.can-dropped:not(:hover),
+  .node .port-group.drop-target-port:not(:hover) {
+    @include visible-state;
+    pointer-events: all !important;
+    
+    .port-circle {
+      fill: #4CAF50 !important;
+      stroke-width: 0 !important;
       filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6));
     }
   }
@@ -766,9 +861,222 @@ $button-variants: (
     
     .port-circle {
       fill: #4CAF50 !important;
-      stroke-width: var(--port-drop-target-stroke-width) !important;
+      stroke-width: 0 !important;
       stroke-dasharray: none !important; // Override architecture mode dashed border
       filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6));
+    }
+  }
+
+  // Override any node hover states that might hide drop targets
+  .node:hover .port-group.can-dropped,
+  .node:hover .port-group.drop-target-port,
+  .node .port-group.can-dropped,
+  .node .port-group.drop-target-port {
+    @include visible-state;
+    pointer-events: all !important;
+    
+    .port-circle {
+      fill: #4CAF50 !important;
+      stroke-width: 0 !important;
+      stroke-dasharray: none !important;
+      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6));
+    }
+  }
+}
+
+// Global override: Highest priority for drop targets visibility during connection
+.canvas-container .workflow-canvas.connecting {
+  // Force drop targets to always be visible, regardless of other states
+  .port-group.can-dropped,
+  .port-group.drop-target-port {
+    @include visible-state;
+    pointer-events: all !important;
+    
+    &,
+    &:hover,
+    &:not(:hover) {
+      @include visible-state;
+      pointer-events: all !important;
+    }
+    
+    .port-circle {
+      fill: #4CAF50 !important;
+      stroke-width: var(--port-drop-target-stroke-width) !important;
+      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+    }
+  }
+
+  // CRITICAL: Force ALL input ports to be visible during connection regardless of classes
+  .input-port-group {
+    @include visible-state;
+    pointer-events: all !important;
+    
+    // Force visibility for ALL input ports during connection - ULTIMATE FALLBACK
+    &,
+    &:hover,
+    &:not(:hover),
+    &.can-dropped,
+    &:not(.can-dropped) {
+      @include visible-state;
+      pointer-events: all !important;
+    }
+    
+    .port-circle {
+      fill: #4CAF50 !important;
+      stroke: #388E3C !important;
+      stroke-width: var(--port-drop-target-stroke-width) !important;
+      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+    }
+  }
+
+  // ULTIMATE FALLBACK: Force ANY input port to be visible during connection
+  .node .input-port-group,
+  .node:hover .input-port-group,
+  .node:not(:hover) .input-port-group {
+    @include visible-state;
+    pointer-events: all !important;
+    
+    .port-circle {
+      fill: #4CAF50 !important;
+      stroke: #388E3C !important;
+      stroke-width: var(--port-drop-target-stroke-width) !important;
+      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+    }
+  }
+
+  // Override node hover states - drop targets should never be hidden
+  .node:hover .port-group.can-dropped,
+  .node:hover .port-group.drop-target-port,
+  .node .port-group.can-dropped:hover,
+  .node .port-group.drop-target-port:hover,
+  .node .port-group.can-dropped:not(:hover),
+  .node .port-group.drop-target-port:not(:hover) {
+    @include visible-state;
+    pointer-events: all !important;
+    transform: none !important; // Prevent any transform changes
+    
+    .port-circle {
+      fill: #4CAF50 !important;
+      stroke: #388E3C !important;
+      stroke-width: 0 !important;
+      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+    }
+  }
+
+  // CRITICAL: Override for drag leave scenarios - keep input ports visible
+  .node:not(:hover) .input-port-group,
+  .node .input-port-group:not(.can-dropped),
+  .node .input-port-group {
+    @include visible-state;
+    pointer-events: all !important;
+    
+    .port-circle {
+      fill: #4CAF50 !important;
+      stroke: #388E3C !important;
+      stroke-width: var(--port-drop-target-stroke-width) !important;
+      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+    }
+  }
+
+  // Architecture mode specific overrides with highest specificity
+  &.architecture-mode {
+    .port-group.can-dropped,
+    .port-group.drop-target-port {
+      @include visible-state;
+      pointer-events: all !important;
+      
+      &,
+      &:hover,
+      &:not(:hover) {
+        @include visible-state;
+        pointer-events: all !important;
+      }
+      
+      .port-circle {
+        fill: #4CAF50 !important;
+        stroke: #388E3C !important;
+        stroke-width: 0 !important;
+        stroke-dasharray: none !important; // Override architecture dashed style
+        filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+      }
+    }
+
+    // CRITICAL: Force ALL input ports visible in architecture mode during connection
+    .input-port-group {
+      @include visible-state;
+      pointer-events: all !important;
+      
+      &,
+      &:hover,
+      &:not(:hover),
+      &.can-dropped,
+      &:not(.can-dropped) {
+        @include visible-state;
+        pointer-events: all !important;
+      }
+      
+      .port-circle {
+        fill: #4CAF50 !important;
+        stroke: #388E3C !important;
+        stroke-width: 0 !important;
+        stroke-dasharray: none !important;
+        filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+      }
+    }
+
+    // ULTIMATE FALLBACK for architecture mode: Force ANY input port visible
+    .node .input-port-group,
+    .node:hover .input-port-group,
+    .node:not(:hover) .input-port-group {
+      @include visible-state;
+      pointer-events: all !important;
+      
+      .port-circle {
+        fill: #4CAF50 !important;
+        stroke: #388E3C !important;
+        stroke-width: 0 !important;
+        stroke-dasharray: none !important;
+        filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+      }
+    }
+
+    // Override node hover states in architecture mode with maximum specificity
+    .node:hover .port-group.can-dropped,
+    .node:hover .port-group.drop-target-port,
+    .node .port-group.can-dropped:hover,
+    .node .port-group.drop-target-port:hover,
+    .node .port-group.can-dropped:not(:hover),
+    .node .port-group.drop-target-port:not(:hover) {
+      @include visible-state;
+      pointer-events: all !important;
+      transform: none !important;
+      
+      .port-circle {
+        fill: #4CAF50 !important;
+        stroke-width: 0 !important;
+        stroke-dasharray: none !important;
+        filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+      }
+    }
+    
+    // Additional ultra-high specificity override for stubborn cases
+    .node.drag-hover .port-group.can-dropped,
+    .node.drag-hover .port-group.drop-target-port,
+    .node:not(.drag-hover) .port-group.can-dropped,
+    .node:not(.drag-hover) .port-group.drop-target-port,
+    .node.drag-hover .input-port-group,
+    .node:not(.drag-hover) .input-port-group {
+      @include visible-state;
+      pointer-events: all !important;
+      transform: none !important;
+      
+      .port-circle {
+        fill: #4CAF50 !important;
+        stroke: #388E3C !important;
+        stroke-width: 0 !important;
+        stroke-dasharray: none !important;
+        filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+      }
     }
   }
 }

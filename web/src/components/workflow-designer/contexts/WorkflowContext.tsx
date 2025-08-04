@@ -478,7 +478,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
     
     case 'CLEAR_CONNECTION_STATE':
       console.log('CLEAR_CONNECTION_STATE reducer called')
-      return {
+      const newState = {
         ...state,
         connectionState: {
           ...state.connectionState,
@@ -487,6 +487,10 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
           connectionPreview: null
         }
       }
+      
+      // Auto-save will be triggered by useEffect after isConnecting becomes false
+      
+      return newState
     
     case 'SET_EXECUTION_STATE':
       return {
@@ -658,10 +662,14 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
         canvasTransform: state.canvasTransform
       }
       
-        autoSaveDraftWorkflow(draftData)
+      // Perform auto-save without triggering re-render
+      autoSaveDraftWorkflow(draftData)
+      console.log('💾 Auto-save completed silently (no re-render)')
       
+      // Return state unchanged to prevent re-render
       return {
-        ...state,
+        ...state,  
+        // Only update timestamp without causing visual changes
         autoSaveState: {
           ...state.autoSaveState,
           lastAutoSaveAttempt: Date.now()
@@ -978,12 +986,48 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     }
   }, [state.nodes, validateConnections])
 
-  // Auto-save draft when workflow changes
+  // Auto-save draft when workflow changes (debounced to prevent flickering during drag)
   useEffect(() => {
     if (state.isDirty && state.nodes.length > 0) {
-      dispatch({ type: 'AUTO_SAVE_DRAFT' })
+      // Skip auto-save during drag operations to prevent port flickering
+      if (state.connectionState.isConnecting) {
+        console.log('🚫 Skipping auto-save during drag operation to prevent flickering')
+        return
+      }
+      
+      // Debounce auto-save to prevent excessive saves during rapid changes
+      const autoSaveTimer = setTimeout(() => {
+        dispatch({ type: 'AUTO_SAVE_DRAFT' })
+      }, 1000) // 1 second debounce
+      
+      return () => clearTimeout(autoSaveTimer)
     }
-  }, [state.isDirty, state.nodes, state.connections, state.workflowName, dispatch])
+  }, [state.isDirty, state.nodes, state.connections, state.workflowName, state.connectionState.isConnecting, dispatch])
+  
+  // Auto-save after drag operations complete (without triggering re-render)
+  useEffect(() => {
+    if (!state.connectionState.isConnecting && state.isDirty && state.nodes.length > 0) {
+      // If we just finished a drag operation and need to save
+      const dragEndAutoSaveTimer = setTimeout(() => {
+        console.log('💾 Silent auto-save triggered after drag completion (no re-render)')
+        
+        // Perform auto-save directly without dispatch to avoid re-render
+        const draftId = `auto-save-${state.workflowName}`
+        const draftData = {
+          id: draftId,
+          name: state.workflowName,
+          nodes: state.nodes,
+          connections: state.connections,
+          canvasTransform: state.canvasTransform
+        }
+        
+        // Direct auto-save without Redux action
+        autoSaveDraftWorkflow(draftData)
+      }, 250) // 250ms delay after drag ends
+      
+      return () => clearTimeout(dragEndAutoSaveTimer)
+    }
+  }, [state.connectionState.isConnecting, state.isDirty, state.nodes, state.connections, state.workflowName, state.canvasTransform])
   
   const contextValue: WorkflowContextType = useMemo(() => ({
     state,

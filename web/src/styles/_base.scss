@@ -1,0 +1,35 @@
+@use 'sass:map';
+
+// ===== BASE STYLES =====
+
+@use 'variables' as *;
+@use 'functions' as *;
+
+// CSS Reset
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+body {
+  font-family: $font-family-base;
+  background: color(bg-body) !important;
+  background-image: none !important;
+  color: color(text-primary);
+  line-height: line-height(normal);
+}
+
+// CSS Custom Properties for dynamic theming
+:root {
+  // Z-Index Layer System
+  @each $name, $value in $z-index {
+    --z-#{$name}: #{$value};
+  }
+}

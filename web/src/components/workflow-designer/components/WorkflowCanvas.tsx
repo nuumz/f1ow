@@ -72,7 +72,7 @@ export interface WorkflowCanvasProps {
   // Drag & Drop handlers
   onPortDragStart: (nodeId: string, portId: string, portType: 'input' | 'output') => void
   onPortDrag: (x: number, y: number) => void
-  onPortDragEnd: (targetNodeId?: string, targetPortId?: string) => void
+  onPortDragEnd: (targetNodeId?: string, targetPortId?: string, canvasX?: number, canvasY?: number) => void
   
   // Drop validation
   canDropOnPort: (targetNodeId: string, targetPortId: string, targetPortType?: 'input' | 'output') => boolean
@@ -154,6 +154,41 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     lastUpdate?: number
   }>({})
   
+  // DRAG STATE: Store drag connection data independent of React state
+  const dragConnectionDataRef = useRef<{ nodeId: string; portId: string; type: 'input' | 'output' } | null>(null)
+  
+  // PORT HIGHLIGHTING: Debounce port highlighting to prevent flickering
+  const portHighlightTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const lastPortHighlightStateRef = useRef<Map<string, boolean>>(new Map())
+  
+  // Debounced port highlighting to prevent flickering
+  const updatePortHighlighting = useCallback((portKey: string, canDrop: boolean, portGroup: d3.Selection<any, any, any, any>) => {
+    const lastState = lastPortHighlightStateRef.current.get(portKey)
+    
+    // Only update if state actually changed
+    if (lastState !== canDrop) {
+      // Clear existing timeout
+      if (portHighlightTimeoutRef.current) {
+        clearTimeout(portHighlightTimeoutRef.current)
+      }
+      
+      // Debounce the update by 16ms (roughly 1 frame at 60fps)
+      portHighlightTimeoutRef.current = setTimeout(() => {
+        portGroup.classed('can-dropped', canDrop)
+        lastPortHighlightStateRef.current.set(portKey, canDrop)
+      }, 16)
+    }
+  }, [])
+  
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (portHighlightTimeoutRef.current) {
+        clearTimeout(portHighlightTimeoutRef.current)
+      }
+    }
+  }, [])
+
   // PERFORMANCE: Cached D3 selection getter
   const getCachedSelection = useCallback((type: 'svg' | 'nodeLayer' | 'connectionLayer' | 'gridLayer') => {
     if (!svgRef.current) return null
@@ -861,12 +896,6 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     // Reduced connection debug logging - only log multiple connections occasionally
     let path: string
     if (groupInfo.isMultiple) {
-      if (process.env.NODE_ENV === 'development' && Math.random() < 0.1) {
-        console.log('🔍 Multiple Connection (10% sample):', {
-          connectionId: connection.id,
-          groupCount: groupInfo.total
-        })
-      }
       // For multiple connections, always use the working generateMultipleConnectionPath
       // Skip production manager to avoid NaN issues with path smoothing
       const currentMode = workflowContextState.designerMode === 'architecture' ? 'architecture' : 'workflow'
@@ -2225,6 +2254,11 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           event.sourceEvent.stopPropagation()
           event.sourceEvent.preventDefault()
           console.log('🚀 Output port drag START:', d.nodeId, d.id)
+          
+          // CRITICAL: Capture drag connection data in ref for reliable access
+          dragConnectionDataRef.current = { nodeId: d.nodeId, portId: d.id, type: 'output' }
+          console.log('🔒 Stored drag connection data:', dragConnectionDataRef.current)
+          
           onPortDragStart(d.nodeId, d.id, 'output')
         })
         .on('drag', (event: any) => {
@@ -2236,6 +2270,16 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         })
         .on('end', (event: any) => {
           console.log('🚀 Output port drag END')
+          
+          // CRITICAL: Use stored drag connection data (independent of React state)
+          const capturedConnectionStart = dragConnectionDataRef.current
+          console.log('🔒 Using stored drag connection data:', capturedConnectionStart)
+          console.log('🔒 Connection start comparison:', { 
+            storedData: dragConnectionDataRef.current,
+            propData: connectionStart, 
+            isConnecting, 
+            hasStoredData: !!dragConnectionDataRef.current 
+          })
           
           // Get correct SVG element and apply zoom transform
           const svgElement = event.sourceEvent.target.ownerSVGElement
@@ -2396,17 +2440,39 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
             const allNodes = svgSelection.selectAll('g[data-node-id]')
             let minNodeDistance = Infinity
             
-            allNodes.each(function(nodeData: any) {
+            console.log('🎯 Found nodes for background check:', allNodes.size())
+            
+            allNodes.each(function(d: any) {
               const nodeGroup = d3.select(this)
               const nodeId = nodeGroup.attr('data-node-id')
               
+              console.log('🎯 Processing node for background drop:', nodeId)
+              
               // Skip if this is the source node (can't connect to self)
-              if (connectionStart && nodeId === connectionStart.nodeId) {
+              if (capturedConnectionStart && nodeId === capturedConnectionStart.nodeId) {
+                console.log('🎯 Skipping source node:', nodeId)
                 return
               }
               
               // Check if we can drop on this node
-              if (!canDropOnNode?.(nodeId)) {
+              // Use captured connection start to avoid timing issues
+              const canDrop = capturedConnectionStart && 
+                             capturedConnectionStart.nodeId !== nodeId && 
+                             capturedConnectionStart.type === 'output'
+              console.log('🎯 canDropOnNode check (fixed):', { 
+                nodeId, 
+                sourceNodeId: capturedConnectionStart?.nodeId,
+                sourceType: capturedConnectionStart?.type,
+                canDrop 
+              })
+              if (!canDrop) {
+                return
+              }
+              
+              // Find the actual node data from the nodes array
+              const nodeData = nodes.find(n => n.id === nodeId)
+              if (!nodeData) {
+                console.log('⚠️ Node data not found for:', nodeId)
                 return
               }
               
@@ -2429,48 +2495,28 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
               console.log('🎯 Checking node background area:', {
                 nodeId,
                 nodePosition: { x: nodeSvgX, y: nodeSvgY },
-                mousCanvas: { x: canvasX, y: canvasY },
+                mouseCanvas: { x: canvasX, y: canvasY },
                 dimensions: nodeDimensions,
-                shape: nodeShape
+                shape: nodeShape,
+                canDropOnNode: canDropOnNode?.(nodeId)
               })
               
-              // Check if mouse is within node boundaries
-              let isWithinNode = false
-              const tolerance = 10 // Small tolerance for easier dropping
+              // Simplified circular detection for all nodes - more user-friendly
+              const tolerance = 120 // Generous tolerance for easier node background dropping
+              const distance = Math.sqrt((canvasX - nodeSvgX) ** 2 + (canvasY - nodeSvgY) ** 2)
               
-              if (nodeShape === 'circle') {
-                // Circular node - check radius
-                const radius = Math.max(nodeDimensions.width, nodeDimensions.height) / 2
-                const distance = Math.sqrt((canvasX - nodeSvgX) ** 2 + (canvasY - nodeSvgY) ** 2)
-                isWithinNode = distance <= (radius + tolerance)
-                
-                if (isWithinNode && distance < minNodeDistance) {
-                  minNodeDistance = distance
-                  targetNodeId = nodeId
-                  console.log('🎯✅ Found node background target (circle):', nodeId, 'distance:', distance)
-                }
-              } else {
-                // Rectangular node - check bounds
-                const halfWidth = nodeDimensions.width / 2
-                const halfHeight = nodeDimensions.height / 2
-                
-                const isWithinX = canvasX >= (nodeSvgX - halfWidth - tolerance) && 
-                                 canvasX <= (nodeSvgX + halfWidth + tolerance)
-                const isWithinY = canvasY >= (nodeSvgY - halfHeight - tolerance) && 
-                                 canvasY <= (nodeSvgY + halfHeight + tolerance)
-                
-                isWithinNode = isWithinX && isWithinY
-                
-                if (isWithinNode) {
-                  // Calculate distance from node center for priority
-                  const distance = Math.sqrt((canvasX - nodeSvgX) ** 2 + (canvasY - nodeSvgY) ** 2)
-                  
-                  if (distance < minNodeDistance) {
-                    minNodeDistance = distance
-                    targetNodeId = nodeId
-                    console.log('🎯✅ Found node background target (rectangle):', nodeId, 'distance:', distance)
-                  }
-                }
+              console.log('🎯 Distance check:', {
+                nodeId,
+                distance,
+                tolerance,
+                isWithinTolerance: distance <= tolerance
+              })
+              
+              // Check if within tolerance distance
+              if (distance <= tolerance && distance < minNodeDistance) {
+                minNodeDistance = distance
+                targetNodeId = nodeId
+                console.log('🎯✅ Found node background target:', nodeId, 'distance:', distance)
               }
             })
             
@@ -2482,9 +2528,22 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
               const targetNode = nodes.find(n => n.id === targetNodeId)
               if (targetNode?.inputs?.length) {
                 // Smart port selection: find the best available input port
+                // Use stored connection data instead of potentially cleared React props
                 const availableInputPorts = targetNode.inputs.filter((port: any) => {
-                  if (!canDropOnPort || !targetNodeId) return true
-                  return canDropOnPort(targetNodeId, port.id, 'input')
+                  if (!capturedConnectionStart || !targetNodeId) return true
+                  
+                  // Simulate canDropOnPort logic using stored connection data
+                  console.log('🔍 Checking port availability with stored data:', {
+                    targetNodeId,
+                    targetPortId: port.id,
+                    storedConnectionStart: capturedConnectionStart
+                  })
+                  
+                  // Basic validation: different node and correct direction (output -> input)
+                  if (capturedConnectionStart.nodeId === targetNodeId) return false
+                  if (capturedConnectionStart.type !== 'output') return false
+                  
+                  return true // In architecture mode, allow multiple connections
                 })
                 
                 if (availableInputPorts.length > 0) {
@@ -2502,8 +2561,27 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
             }
           }
 
+          // If no specific target found, check if we should create a new node on canvas background
+          if (!targetNodeId && !targetPortId && isConnecting && connectionStart) {
+            console.log('🎯 No target found, checking for canvas background drop')
+            
+            // Check if mouse position is on empty canvas (not over any node)
+            const isOverEmptyCanvas = true // Since we already checked nodes and ports above
+            
+            if (isOverEmptyCanvas) {
+              console.log('✅ Canvas background drop detected, creating new node at:', canvasX, canvasY)
+              // Signal canvas background drop with special values
+              onPortDragEnd('__CANVAS_DROP__', undefined, canvasX, canvasY)
+              return
+            }
+          }
+
           console.log('🏁 Final target result:', { targetNodeId, targetPortId, minDistance })
           onPortDragEnd(targetNodeId, targetPortId)
+          
+          // CLEANUP: Clear stored drag connection data
+          dragConnectionDataRef.current = null
+          console.log('🧹 Cleared drag connection data')
         })
       )
 
@@ -3221,13 +3299,17 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const isConnectionActive = isConnecting && connectionStart && connectionStart.type === 'output'
         const canDrop = isConnectionActive ? canDropOnPort(d.nodeId, d.id, 'input') : false
         
-        // Add/remove can-dropped class based on validation
+        // Add/remove can-dropped class based on validation with debouncing
         if (portGroup) {
+          const portKey = `${d.nodeId}-${d.id}`
+          
           if (isConnectionActive) {
-            portGroup.classed('can-dropped', canDrop)
-            // Debug log for architecture mode
-            if (process.env.NODE_ENV === 'development') {
-              console.log('🎯 Input port can-dropped:', {
+            // Use debounced highlighting to prevent flickering
+            updatePortHighlighting(portKey, canDrop, portGroup)
+            
+            // Debug log for architecture mode (sample to reduce noise)
+            if (process.env.NODE_ENV === 'development' && Math.random() < 0.1) {
+              console.log('🎯 Input port can-dropped (sampled):', {
                 nodeId: d.nodeId,
                 portId: d.id,
                 canDrop,
@@ -3235,7 +3317,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
               })
             }
           } else {
-            portGroup.classed('can-dropped', false)
+            // Clear highlighting when not connecting
+            updatePortHighlighting(portKey, false, portGroup)
           }
         }
         

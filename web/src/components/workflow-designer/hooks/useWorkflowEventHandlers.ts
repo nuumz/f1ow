@@ -164,13 +164,15 @@ export function useWorkflowEventHandlers() {
     }
   }, [dispatch])
 
-  const handlePortDragEnd = useCallback((targetNodeId?: string, targetPortId?: string) => {
+  const handlePortDragEnd = useCallback((targetNodeId?: string, targetPortId?: string, canvasX?: number, canvasY?: number) => {
     // Get fresh connection state from ref
     const currentConnectionState = connectionStateRef.current
     
     console.log('🔥 handlePortDragEnd called:', {
       targetNodeId,
       targetPortId,
+      canvasX,
+      canvasY,
       isConnecting: currentConnectionState.isConnecting,
       connectionStart: currentConnectionState.connectionStart
     })
@@ -181,7 +183,49 @@ export function useWorkflowEventHandlers() {
       return
     }
     
-    if (targetNodeId && targetPortId) {
+    // Handle canvas background drop (create new node + connection)
+    if (targetNodeId === '__CANVAS_DROP__' && canvasX !== undefined && canvasY !== undefined) {
+      const { nodeId: sourceNodeId, portId: sourcePortId, type } = currentConnectionState.connectionStart
+      
+      console.log('🎨 Canvas background drop detected, creating new node and connection:', {
+        sourceNodeId,
+        sourcePortId,
+        sourceType: type,
+        dropPosition: { x: canvasX, y: canvasY }
+      })
+      
+      // Only allow from output ports
+      if (type === 'output') {
+        console.log('✅ Creating new node from canvas drop')
+        
+        // Create a new node at drop position
+        const newNode = operations.addNode('set', { x: canvasX, y: canvasY })
+        
+        if (newNode) {
+          console.log('✅ New node created:', newNode.id)
+          
+          // Create connection from source output to new node's first input port
+          if (newNode.inputs && newNode.inputs.length > 0) {
+            const targetInputPort = newNode.inputs[0]
+            const result = operations.createConnection(sourceNodeId, sourcePortId, newNode.id, targetInputPort.id)
+            
+            if (result) {
+              console.log('✅ Connection created successfully to new node')
+            } else {
+              console.log('❌ Connection creation failed to new node')
+            }
+          } else {
+            console.log('⚠️ New node has no input ports to connect to')
+          }
+        } else {
+          console.log('❌ Failed to create new node')
+        }
+      } else {
+        console.log('❌ Canvas drop only supported from output ports')
+      }
+    }
+    // Handle regular port-to-port connections
+    else if (targetNodeId && targetPortId) {
       const { nodeId: sourceNodeId, portId: sourcePortId, type } = currentConnectionState.connectionStart
       
       console.log('🔗 Attempting to create connection:', {

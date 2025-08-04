@@ -9,6 +9,8 @@ import {
   Timer,
   Activity
 } from 'lucide-react'
+import AppFooter from './AppFooter'
+import { FOOTER_CONFIGS } from '../hooks/useFooter'
 
 interface Execution {
   id: string
@@ -331,6 +333,9 @@ export default function ExecutionHistory() {
           </div>
         </div>
       )}
+      
+      {/* App Footer */}
+      <AppFooter config={FOOTER_CONFIGS.PAGE} />
     </div>
   )
 }

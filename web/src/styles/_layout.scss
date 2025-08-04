@@ -1,0 +1,185 @@
+@use 'sass:math';
+
+// ===== LAYOUT STYLES =====
+
+@use 'variables' as *;
+@use 'functions' as *;
+
+// App Layout
+.app {
+  @include flex-column;
+  height: 100%;
+  background: color(bg-body) !important;
+  background-image: none !important;
+}
+
+// Main Layout
+.main-content {
+  flex: 1;
+  @include flex-column;
+  min-height: calc(100vh - #{$navbar-height});
+  height: calc(100vh - #{$navbar-height});
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: color(bg-light);
+}
+
+// Container
+.container {
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 spacing(4);
+  
+  @include respond-from(sm) {
+    max-width: $container-sm;
+  }
+  
+  @include respond-from(md) {
+    max-width: $container-md;
+  }
+  
+  @include respond-from(lg) {
+    max-width: $container-lg;
+  }
+  
+  @include respond-from(xl) {
+    max-width: $container-xl;
+  }
+}
+
+// Page Container - Common layout for all pages
+.page-container {
+  min-height: calc(100vh - #{$navbar-height});
+  padding: spacing(6) 0;
+  background: color(bg-light);
+  
+  .container {
+    @include flex-column;
+    gap: spacing(6);
+  }
+}
+
+// Grid system
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 spacing(-2);
+}
+
+.col {
+  flex: 1;
+  padding: 0 spacing(2);
+}
+
+// Generate column classes
+@for $i from 1 through $grid-columns {
+  .col-#{$i} {
+    flex: 0 0 math.percentage(math.div($i, $grid-columns));
+    max-width: math.percentage(math.div($i, $grid-columns));
+    padding: 0 spacing(2);
+  }
+}
+
+// Responsive columns
+@each $breakpoint, $value in $breakpoints {
+  @include respond-from($breakpoint) {
+    @for $i from 1 through $grid-columns {
+      .col-#{$breakpoint}-#{$i} {
+        flex: 0 0 math.percentage(math.div($i, $grid-columns));
+        max-width: math.percentage(math.div($i, $grid-columns));
+      }
+    }
+  }
+}
+
+// Flexbox utilities
+.d-flex { display: flex; }
+.d-inline-flex { display: inline-flex; }
+.flex-row { flex-direction: row; }
+.flex-column { flex-direction: column; }
+.flex-wrap { flex-wrap: wrap; }
+.flex-nowrap { flex-wrap: nowrap; }
+
+.justify-start { justify-content: flex-start; }
+.justify-center { justify-content: center; }
+.justify-end { justify-content: flex-end; }
+.justify-between { justify-content: space-between; }
+.justify-around { justify-content: space-around; }
+
+.items-start { align-items: flex-start; }
+.items-center { align-items: center; }
+.items-end { align-items: flex-end; }
+.items-stretch { align-items: stretch; }
+
+.flex-1 { flex: 1; }
+.flex-auto { flex: auto; }
+.flex-none { flex: none; }
+
+// Position utilities
+.relative { position: relative; }
+.absolute { position: absolute; }
+.fixed { position: fixed; }
+.sticky { position: sticky; }
+
+// Display utilities
+.block { display: block; }
+.inline-block { display: inline-block; }
+.inline { display: inline; }
+.hidden { display: none; }
+
+@include respond-to(md) {
+  .hidden-mobile { display: none; }
+}
+
+@include respond-from(md) {
+  .hidden-desktop { display: none; }
+}
+
+// Overflow utilities
+.overflow-hidden { overflow: hidden; }
+.overflow-auto { overflow: auto; }
+.overflow-scroll { overflow: scroll; }
+.overflow-x-hidden { overflow-x: hidden; }
+.overflow-y-hidden { overflow-y: hidden; }
+.overflow-x-auto { overflow-x: auto; }
+.overflow-y-auto { overflow-y: auto; }
+
+// Width and height utilities
+.w-full { width: 100%; }
+.h-full { height: 100%; }
+.w-auto { width: auto; }
+.h-auto { height: auto; }
+
+// Generate width/height classes
+$sizes: (25, 50, 75, 100);
+@each $size in $sizes {
+  .w-#{$size} { width: math.percentage(math.div($size, 100)); }
+  .h-#{$size} { height: math.percentage(math.div($size, 100)); }
+}
+
+// Min/Max width and height
+.min-w-0 { min-width: 0; }
+.min-h-0 { min-height: 0; }
+.max-w-full { max-width: 100%; }
+.max-h-full { max-height: 100%; }
+
+// Spacing utilities
+@each $property in (margin, padding) {
+  $abbrev: if($property == margin, m, p);
+  
+  @each $size-name, $size-value in $spacing {
+    .#{$abbrev}-#{$size-name} { #{$property}: $size-value; }
+    .#{$abbrev}t-#{$size-name} { #{$property}-top: $size-value; }
+    .#{$abbrev}r-#{$size-name} { #{$property}-right: $size-value; }
+    .#{$abbrev}b-#{$size-name} { #{$property}-bottom: $size-value; }
+    .#{$abbrev}l-#{$size-name} { #{$property}-left: $size-value; }
+    .#{$abbrev}x-#{$size-name} {
+      #{$property}-left: $size-value;
+      #{$property}-right: $size-value;
+    }
+    .#{$abbrev}y-#{$size-name} {
+      #{$property}-top: $size-value;
+      #{$property}-bottom: $size-value;
+    }
+  }
+}

@@ -10,6 +10,9 @@ import {
   BarChart3,
   PieChart
 } from 'lucide-react'
+import ModernExecutionChart from './ModernExecutionChart'
+import AppFooter from './AppFooter'
+import { FOOTER_CONFIGS } from '../hooks/useFooter'
 
 interface DashboardStats {
   totalWorkflows: number
@@ -43,14 +46,31 @@ export default function Dashboard() {
   
   const [chartData, setChartData] = useState<ChartData[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   useEffect(() => {
     loadDashboardData()
+    
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(() => {
+      if (!loading) {
+        loadDashboardData(true)
+      }
+    }, 30000)
+    
+    return () => clearInterval(interval)
   }, [])
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (isRefresh = false) => {
     try {
-      setLoading(true)
+      if (!isRefresh) {
+        setLoading(true)
+      }
+      setError(null)
+      
+      // Simulate API call delay
+      await new Promise(resolve => setTimeout(resolve, isRefresh ? 500 : 1000))
       
       // Mock data - replace with actual API calls
       const mockStats: DashboardStats = {
@@ -59,9 +79,9 @@ export default function Dashboard() {
         totalExecutions: 1547,
         successfulExecutions: 1401,
         failedExecutions: 89,
-        runningExecutions: 3,
+        runningExecutions: Math.floor(Math.random() * 5) + 1, // Simulate real-time changes
         avgExecutionTime: 45.6,
-        executionsToday: 23
+        executionsToday: 23 + Math.floor(Math.random() * 10) // Simulate new executions
       }
       
       const mockChartData: ChartData[] = [
@@ -76,11 +96,21 @@ export default function Dashboard() {
       
       setStats(mockStats)
       setChartData(mockChartData)
+      setLastUpdated(new Date())
     } catch (error) {
       console.error('Failed to load dashboard data:', error)
+      setError('Failed to load dashboard data. Please try again.')
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleRefresh = () => {
+    loadDashboardData(true)
+  }
+
+  const handleRetry = () => {
+    loadDashboardData(false)
   }
 
   const calculateSuccessRate = () => {
@@ -88,23 +118,56 @@ export default function Dashboard() {
     return Math.round((stats.successfulExecutions / stats.totalExecutions) * 100)
   }
 
-  if (loading) {
+  if (loading && !stats.totalWorkflows) {
     return (
-      <div className="dashboard-loading">
-        <div className="loading-spinner"></div>
-        <p>Loading dashboard...</p>
+      <div className="dashboard">
+        <div className="dashboard-loading">
+          <div className="spinner"></div>
+          <p className="loading-text">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error && !stats.totalWorkflows) {
+    return (
+      <div className="dashboard">
+        <div className="dashboard-loading">
+          <div className="error-state">
+            <XCircle size={48} className="error-icon" />
+            <h3>Unable to load dashboard</h3>
+            <p>{error}</p>
+            <button className="btn btn-primary" onClick={handleRetry}>
+              Try Again
+            </button>
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="dashboard">
+      <div className="dashboard-content">
       <div className="dashboard-header">
         <div className="header-content">
           <h1>f1ow Dashboard</h1>
           <p>Monitor your workflow automation performance</p>
+          {lastUpdated && (
+            <p className="last-updated">
+              Last updated: {lastUpdated.toLocaleTimeString()}
+            </p>
+          )}
         </div>
         <div className="header-actions">
+          <button 
+            className="btn btn-secondary" 
+            onClick={handleRefresh}
+            disabled={loading}
+            title="Refresh dashboard data"
+          >
+            {loading ? 'Refreshing...' : 'Refresh'}
+          </button>
           <button className="btn btn-primary" onClick={() => window.location.href = '/designer'}>
             Create Workflow
           </button>
@@ -235,40 +298,8 @@ export default function Dashboard() {
 
       {/* Charts Section */}
       <div className="charts-section">
-        <div className="chart-card">
-          <div className="chart-header">
-            <h3>Execution Trends</h3>
-            <div className="chart-legend">
-              <div className="legend-item">
-                <div className="legend-color success"></div>
-                <span>Successful</span>
-              </div>
-              <div className="legend-item">
-                <div className="legend-color failed"></div>
-                <span>Failed</span>
-              </div>
-            </div>
-          </div>
-          <div className="chart-content">
-            <div className="simple-chart">
-              {chartData.map((data, index) => (
-                <div key={index} className="chart-bar">
-                  <div className="bar-container">
-                    <div 
-                      className="bar success" 
-                      style={{ height: `${(data.success / Math.max(...chartData.map(d => d.executions))) * 80}%` }}
-                    ></div>
-                    <div 
-                      className="bar failed" 
-                      style={{ height: `${(data.failed / Math.max(...chartData.map(d => d.executions))) * 80}%` }}
-                    ></div>
-                  </div>
-                  <div className="bar-label">{new Date(data.date).getDate()}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        {/* Modern Execution Chart */}
+        <ModernExecutionChart data={chartData} />
 
         <div className="chart-card">
           <div className="chart-header">
@@ -282,7 +313,7 @@ export default function Dashboard() {
           <div className="chart-content">
             <div className="performance-metrics">
               <div className="metric-item">
-                <Zap className="metric-icon" size={20} />
+                <Zap className="performance-metric-icon" size={20} />
                 <div className="metric-details">
                   <div className="metric-title">Throughput</div>
                   <div className="metric-value">342 exec/hr</div>
@@ -290,7 +321,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="metric-item">
-                <BarChart3 className="metric-icon" size={20} />
+                <BarChart3 className="performance-metric-icon" size={20} />
                 <div className="metric-details">
                   <div className="metric-title">Peak Load</div>
                   <div className="metric-value">89 concurrent</div>
@@ -298,7 +329,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="metric-item">
-                <PieChart className="metric-icon" size={20} />
+                <PieChart className="performance-metric-icon" size={20} />
                 <div className="metric-details">
                   <div className="metric-title">Resource Usage</div>
                   <div className="metric-value">67% CPU</div>
@@ -347,6 +378,16 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Dashboard Footer */}
+      <AppFooter 
+        config={FOOTER_CONFIGS.DASHBOARD}
+        stats={{
+          totalExecutions: stats.totalExecutions,
+          successRate: calculateSuccessRate()
+        }}
+      />
       </div>
     </div>
   )

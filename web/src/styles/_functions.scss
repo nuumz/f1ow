@@ -1,0 +1,356 @@
+// ===== HELPER FUNCTIONS & MIXINS =====
+
+@use 'sass:color';
+@use 'sass:map';
+@use 'variables' as *;
+
+// Get color from palette
+@function color($name) {
+  @return map.get($colors, $name);
+}
+
+// Get spacing value
+@function spacing($size) {
+  @return map.get($spacing, $size);
+}
+
+// Function to get font size
+@function font-size($size) {
+  @return map.get($font-sizes, $size);
+}
+
+// Function to get font weight
+@function font-weight($weight) {
+  @return map.get($font-weights, $weight);
+}
+
+// Function to get border radius
+@function border-radius($size) {
+  @return map.get($border-radius, $size);
+}
+
+// Function to get shadow
+@function shadow($size) {
+  @return map.get($shadows, $size);
+}
+
+// Function to get z-index
+@function z-index($layer) {
+  @return map.get($z-index, $layer);
+}
+
+// Function to get transition
+@function transition($speed) {
+  @return map.get($transitions, $speed);
+}
+
+// Function to get line-height
+@function line-height($size) {
+  @return map.get($line-heights, $size);
+}
+
+// Mixin for responsive breakpoints
+@mixin respond-to($breakpoint) {
+  $value: map.get($breakpoints, $breakpoint);
+  @if $value {
+    @media (max-width: $value) {
+      @content;
+    }
+  }
+}
+
+// Mixin for responsive breakpoints (min-width)
+@mixin respond-from($breakpoint) {
+  $value: map.get($breakpoints, $breakpoint);
+  @if $value {
+    @media (min-width: $value) {
+      @content;
+    }
+  }
+}
+
+// Mixin for flex center
+@mixin flex-start {
+  display: flex;
+  align-items: center;
+  justify-content: start;
+}
+
+// Mixin for flex center
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+// Mixin for flex between
+@mixin flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+// Mixin for flex column
+@mixin flex-column {
+  display: flex;
+  flex-direction: column;
+}
+
+// Mixin for absolute positioning
+@mixin absolute($top: null, $right: null, $bottom: null, $left: null) {
+  position: absolute;
+  @if $top { top: $top; }
+  @if $right { right: $right; }
+  @if $bottom { bottom: $bottom; }
+  @if $left { left: $left; }
+}
+
+// Mixin for card styles
+@mixin card($padding: $card-padding) {
+  background: color(bg-white);
+  border: 1px solid color(border-color);
+  border-radius: $card-border-radius;
+  padding: $padding;
+  box-shadow: shadow(sm);
+  transition: transition(base);
+}
+
+// Mixin for hover effects
+@mixin hover-lift($shadow: shadow(md)) {
+  transition: all transition(base);
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: $shadow;
+  }
+}
+
+// Mixin for button base styles
+@mixin button-base {
+  display: inline-flex;
+  align-items: center;
+  gap: spacing(2);
+  padding: $button-padding-y $button-padding-x;
+  border: $button-border-width solid transparent;
+  border-radius: border-radius(base);
+  font-size: font-size(sm);
+  font-weight: font-weight(medium);
+  text-decoration: none;
+  cursor: pointer;
+  transition: transition(base);
+  white-space: nowrap;
+  font-family: inherit;
+  
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: shadow(sm);
+  }
+  
+  &:active {
+    transform: translateY(0);
+  }
+  
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+}
+
+// Mixin for button variant
+@mixin button-variant($bg-color, $hover-color: darken($bg-color, 10%)) {
+  background: $bg-color;
+  color: white;
+  border-color: $bg-color;
+  
+  &:hover:not(:disabled) {
+    background: $hover-color;
+    border-color: $hover-color;
+  }
+}
+
+// Mixin for text truncation
+@mixin text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Mixin for multiline text truncation
+@mixin text-truncate-lines($lines: 2) {
+  display: -webkit-box;
+  -webkit-line-clamp: $lines;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+// Mixin for clearfix
+@mixin clearfix {
+  &::after {
+    content: '';
+    display: table;
+    clear: both;
+  }
+}
+
+// Mixin for visually hidden content (for accessibility)
+@mixin visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+// Mixin for focus styles
+@mixin focus-ring($color: color(primary)) {
+  outline: 2px solid $color;
+  outline-offset: 2px;
+}
+
+// Mixin for scrollbar styling
+@mixin custom-scrollbar($width: 8px, $track-color: color(gray-100), $thumb-color: color(gray-300)) {
+  &::-webkit-scrollbar {
+    width: $width;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: $track-color;
+    border-radius: border-radius(full);
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: $thumb-color;
+    border-radius: border-radius(full);
+    
+    &:hover {
+      background: color.scale($thumb-color, $lightness: -10%);
+    }
+  }
+}
+
+// Mixin for glass morphism effect
+@mixin glass-morphism($bg-opacity: 0.9, $blur: 8px) {
+  background: rgba(255, 255, 255, $bg-opacity);
+  backdrop-filter: blur($blur);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+// Mixin for loading skeleton
+@mixin skeleton-loading($bg: color(gray-200)) {
+  background: linear-gradient(90deg, $bg 25%, lighten($bg, 5%) 50%, $bg 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+// Keyframe for skeleton loading animation
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+// Mixin for pulse animation
+@mixin pulse($color: color(primary)) {
+  animation: pulse-animation 2s infinite;
+  
+  @keyframes pulse-animation {
+    0% {
+      box-shadow: 0 0 0 0 rgba($color, 0.7);
+    }
+    70% {
+      box-shadow: 0 0 0 10px rgba($color, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba($color, 0);
+    }
+  }
+}
+
+// Mixin for fade in animation
+@mixin fade-in($duration: $animation-duration-base) {
+  animation: fade-in $duration ease-in-out;
+  
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+// Mixin for slide in animation
+@mixin slide-in($direction: 'up', $distance: 20px, $duration: $animation-duration-base) {
+  animation: slide-in-#{$direction} $duration ease-out;
+  
+  @if $direction == 'up' {
+    @keyframes slide-in-up {
+      from {
+        opacity: 0;
+        transform: translateY($distance);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  } @else if $direction == 'down' {
+    @keyframes slide-in-down {
+      from {
+        opacity: 0;
+        transform: translateY(-$distance);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  } @else if $direction == 'left' {
+    @keyframes slide-in-left {
+      from {
+        opacity: 0;
+        transform: translateX(-$distance);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+  } @else if $direction == 'right' {
+    @keyframes slide-in-right {
+      from {
+        opacity: 0;
+        transform: translateX($distance);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+  }
+}
+
+// Utility mixin for aspect ratio
+@mixin aspect-ratio($width: 16, $height: 9) {
+  position: relative;
+  
+  &::before {
+    content: '';
+    display: block;
+    padding-top: ($height / $width) * 100%;
+  }
+  
+  > * {
+    @include absolute(0, 0, 0, 0);
+  }
+}

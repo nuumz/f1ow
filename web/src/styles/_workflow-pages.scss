@@ -1,0 +1,334 @@
+@use 'sass:map';
+
+// ===== WORKFLOW PAGES STYLES =====
+
+@use 'variables' as *;
+@use 'functions' as *;
+
+// ===== WORKFLOW LIST STYLES =====
+.workflow-list {
+  @extend .page-container !optional;
+}
+
+.list-header {
+  @include flex-between;
+  align-items: flex-start;
+  margin-bottom: spacing(6);
+  padding-bottom: spacing(4);
+  border-bottom: 1px solid color(border-light);
+
+  @include respond-to(md) {
+    flex-direction: column;
+    gap: spacing(4);
+    align-items: stretch;
+  }
+
+  .header-title {
+    h1 {
+      font-size: font-size("3xl");
+      font-weight: font-weight(bold);
+      color: color(text-dark);
+      margin: 0 0 spacing(2) 0;
+      line-height: line-height(tight);
+    }
+
+    p {
+      font-size: font-size(lg);
+      color: color(text-secondary);
+      margin: 0;
+      line-height: line-height(relaxed);
+    }
+  }
+}
+
+.list-controls {
+  @include flex-between;
+  gap: spacing(4);
+  margin-bottom: spacing(6);
+  padding: spacing(4);
+  background: color(surface);
+  border-radius: border-radius(lg);
+  border: 1px solid color(border-light);
+
+  @include respond-to(md) {
+    flex-direction: column;
+    gap: spacing(3);
+  }
+
+  .search-box {
+    @include flex-center;
+    gap: spacing(3);
+    flex: 1;
+    position: relative;
+    max-width: 400px;
+
+    @include respond-to(md) {
+      max-width: none;
+    }
+
+    svg {
+      position: absolute;
+      left: spacing(3);
+      color: color(text-light);
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    input {
+      width: 100%;
+      padding: spacing(3) spacing(3) spacing(3) spacing(10);
+      border: 1px solid color(border-color);
+      border-radius: border-radius(md);
+      font-size: font-size(base);
+      background: white;
+      transition: border-color transition(base);
+
+      &:focus {
+        outline: none;
+        border-color: color(primary);
+        box-shadow: 0 0 0 3px rgba(color(primary), 0.1);
+      }
+
+      &::placeholder {
+        color: color(text-light);
+      }
+    }
+  }
+
+  .control-group {
+    @include flex-center;
+    gap: spacing(3);
+
+    @include respond-to(md) {
+      flex-wrap: wrap;
+    }
+
+    select {
+      padding: spacing(2) spacing(4);
+      border: 1px solid color(border-color);
+      border-radius: border-radius(md);
+      background: white;
+      font-size: font-size(sm);
+      color: color(text-primary);
+      cursor: pointer;
+      transition: border-color transition(base);
+
+      &:focus {
+        outline: none;
+        border-color: color(primary);
+      }
+    }
+  }
+}
+
+// Workflow Grid
+.workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: spacing(6);
+
+  @include respond-to(md) {
+    grid-template-columns: 1fr;
+    gap: spacing(4);
+  }
+}
+
+.workflow-card {
+  background: color(surface);
+  border: 1px solid color(border-light);
+  border-radius: border-radius(lg);
+  overflow: hidden;
+  transition: all transition(base);
+  box-shadow: shadow(sm);
+
+  &:hover {
+    border-color: rgba(color(primary), 0.3);
+    box-shadow: shadow(md);
+    transform: translateY(-2px);
+  }
+
+  .card-header {
+    @include flex-between;
+    align-items: flex-start;
+    padding: spacing(5);
+    border-bottom: 1px solid color(border-light);
+    background: color(bg-light);
+
+    h3 {
+      font-size: font-size(lg);
+      font-weight: font-weight(semibold);
+      color: color(text-dark);
+      margin: 0;
+      line-height: line-height(tight);
+    }
+
+    .card-actions {
+      @include flex-center;
+      gap: spacing(2);
+    }
+
+    .action-btn {
+      @include flex-center;
+      width: 32px;
+      height: 32px;
+      border: 1px solid color(border-color);
+      border-radius: border-radius(md);
+      background: white;
+      color: color(text-secondary);
+      cursor: pointer;
+      transition: all transition(base);
+
+      &:hover {
+        border-color: color(primary);
+        color: color(primary);
+        background: rgba(color(primary), 0.05);
+      }
+
+      &.danger {
+        &:hover {
+          border-color: color(danger);
+          color: color(danger);
+          background: rgba(color(danger), 0.05);
+        }
+      }
+    }
+  }
+
+  .card-content {
+    padding: spacing(5);
+
+    .workflow-description {
+      font-size: font-size(sm);
+      color: color(text-secondary);
+      line-height: line-height(relaxed);
+      margin: 0 0 spacing(4) 0;
+    }
+
+    .workflow-stats {
+      @include flex-center;
+      gap: spacing(6);
+
+      .stat {
+        @include flex-center;
+        gap: spacing(2);
+
+        .stat-label {
+          font-size: font-size(xs);
+          color: color(text-light);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+          font-size: font-size(sm);
+          font-weight: font-weight(semibold);
+          color: color(text-primary);
+        }
+      }
+    }
+  }
+
+  .card-footer {
+    @include flex-between;
+    align-items: center;
+    padding: spacing(4) spacing(5);
+    background: color(bg-light);
+    border-top: 1px solid color(border-light);
+
+    .workflow-status {
+      .status-badge {
+        padding: spacing(1) spacing(3);
+        border-radius: border-radius(full);
+        font-size: font-size(xs);
+        font-weight: font-weight(medium);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+
+        &.active {
+          background: rgba(color(success), 0.1);
+          color: color(success);
+          border: 1px solid rgba(color(success), 0.3);
+        }
+
+        &.draft {
+          background: rgba(color(warning), 0.1);
+          color: color(warning);
+          border: 1px solid rgba(color(warning), 0.3);
+        }
+
+        &.inactive {
+          background: rgba(color(text-light), 0.1);
+          color: color(text-light);
+          border: 1px solid rgba(color(text-light), 0.3);
+        }
+      }
+    }
+
+    .workflow-date {
+      @include flex-center;
+      gap: spacing(2);
+      font-size: font-size(xs);
+      color: color(text-light);
+
+      svg {
+        opacity: 0.7;
+      }
+    }
+  }
+}
+
+// Empty State
+.empty-state {
+  text-align: center;
+  padding: spacing(12) spacing(6);
+  grid-column: 1 / -1;
+
+  .empty-icon {
+    font-size: 4rem;
+    margin-bottom: spacing(4);
+    opacity: 0.5;
+  }
+
+  h3 {
+    font-size: font-size(xl);
+    font-weight: font-weight(semibold);
+    color: color(text-dark);
+    margin: 0 0 spacing(2) 0;
+  }
+
+  p {
+    font-size: font-size(base);
+    color: color(text-secondary);
+    margin: 0 0 spacing(6) 0;
+    line-height: line-height(relaxed);
+  }
+}
+
+// Loading States
+.workflow-list-loading {
+  @extend .page-container !optional;
+  @include flex-column;
+  @include flex-center;
+  min-height: 300px;
+  gap: spacing(4);
+
+  .loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid color(border-light);
+    border-top: 3px solid color(primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  p {
+    font-size: font-size(base);
+    color: color(text-secondary);
+    margin: 0;
+  }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}

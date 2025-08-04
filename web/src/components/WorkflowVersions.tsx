@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { GitBranch, Clock, User, Tag, Download, Eye, Plus, RotateCcw, AlertCircle } from 'lucide-react'
+import AppFooter from './AppFooter'
+import { FOOTER_CONFIGS } from '../hooks/useFooter'
 
 interface WorkflowVersion {
   id: string
@@ -22,7 +24,7 @@ interface WorkflowVersionsProps {
   onCreateVersion?: (version: Partial<WorkflowVersion>) => void
 }
 
-export default function WorkflowVersions({ workflowId, onVersionSelect, onCreateVersion }: WorkflowVersionsProps) {
+export function WorkflowVersions({ workflowId, onVersionSelect, onCreateVersion }: WorkflowVersionsProps) {
   const [versions, setVersions] = useState<WorkflowVersion[]>([])
   const [selectedVersion, setSelectedVersion] = useState<WorkflowVersion | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -425,3 +427,16 @@ function Archive({ size }: { size: number }) {
     </svg>
   )
 }
+
+// Main component that includes AppFooter
+const WorkflowVersionsWithFooter = (props: { workflowId: string }) => {
+  return (
+    <div>
+      <WorkflowVersions {...props} />
+      {/* App Footer */}
+      <AppFooter config={FOOTER_CONFIGS.PAGE} />
+    </div>
+  )
+}
+
+export default WorkflowVersionsWithFooter

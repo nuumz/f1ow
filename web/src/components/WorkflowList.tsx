@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Plus, Play, Edit, Trash2, Search, Calendar } from 'lucide-react'
 import { WorkflowService, Workflow } from '../services/workflow.service'
+import AppFooter from './AppFooter'
+import { FOOTER_CONFIGS } from '../hooks/useFooter'
 
 export default function WorkflowList() {
   const [workflows, setWorkflows] = useState<Workflow[]>([])
@@ -190,6 +192,9 @@ export default function WorkflowList() {
           ))
         )}
       </div>
+
+      {/* App Footer */}
+      <AppFooter config={FOOTER_CONFIGS.PAGE} />
     </div>
   )
 }

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, Edit, Trash2, Eye, EyeOff, Lock, Key, Shield, AlertTriangle } from 'lucide-react'
+import AppFooter from './AppFooter'
+import { FOOTER_CONFIGS } from '../hooks/useFooter'
 
 interface Credential {
   id: string
@@ -436,6 +438,9 @@ export default function CredentialManager() {
           </div>
         </div>
       )}
+      
+      {/* App Footer */}
+      <AppFooter config={FOOTER_CONFIGS.PAGE} />
     </div>
   )
 }

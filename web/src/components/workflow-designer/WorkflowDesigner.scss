@@ -688,6 +688,10 @@ $button-variants: (
 .canvas-container.architecture-mode {
   @include connection-mode(map.get($colors, architecture), #6d28d9, #dc2626, '8, 6');
 
+  .node:hover .port-group {
+    @include visible-state;
+  }
+
   .port-group {
     @include hidden-state;
     transition: var(--port-transition);

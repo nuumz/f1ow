@@ -670,13 +670,20 @@ function WorkflowDesignerContent({
                 return true
               }}
               canDropOnNode={(targetNodeId: string) => {
-                const { connectionStart } = state.connectionState
-                if (!connectionStart || connectionStart.nodeId === targetNodeId) {
-                  return false
-                }
+                const { connectionStart, isConnecting } = state.connectionState
                 
-                // Allow dropping on different nodes when connecting
-                return state.connectionState.isConnecting
+                // Simple and reliable check: allow if we have connectionStart and it's not the same node
+                const canDrop = !!(connectionStart && connectionStart.nodeId !== targetNodeId && connectionStart.type === 'output')
+                
+                console.log('🔍 canDropOnNode called:', {
+                  targetNodeId,
+                  sourceNodeId: connectionStart?.nodeId,
+                  sourceType: connectionStart?.type,
+                  isConnecting,
+                  canDrop
+                })
+                
+                return canDrop
               }}
               onPlusButtonClick={(nodeId: string, portId: string) => {
                 console.log('Plus button clicked:', { nodeId, portId })

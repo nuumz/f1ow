@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Download, Search, Star, Clock, Tag, Eye } from 'lucide-react'
 // import { WorkflowService } from '../services/workflow.service'
+import AppFooter from './AppFooter'
+import { FOOTER_CONFIGS } from '../hooks/useFooter'
 
 interface WorkflowTemplate {
   id: string
@@ -357,6 +359,9 @@ export default function WorkflowTemplates({ onUseTemplate }: WorkflowTemplatesPr
           </div>
         </div>
       )}
+      
+      {/* App Footer */}
+      <AppFooter config={FOOTER_CONFIGS.PAGE} />
     </div>
   )
 }

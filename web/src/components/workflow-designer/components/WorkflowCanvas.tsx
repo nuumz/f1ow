@@ -722,7 +722,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       }
     }
     return path
-  }, [nodeMap, nodeVariant, connections, cleanupConnectionCache])
+  }, [nodeMap, nodeVariant, connections, cleanupConnectionCache, workflowContextState.designerMode])
 
   // Memoized configurable dimensions calculation (shape-aware)
   const getConfigurableDimensions = useMemo(() => {
@@ -827,6 +827,32 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     batchedVisualUpdateRef.current = null
   }, [])
 
+  // Unified drop state management
+  const setDropFeedback = useCallback((nodeElement: any, show: boolean) => {
+    if (!nodeElement) return
+    
+    // Set node-level feedback
+    nodeElement.classed('can-drop-node', show)
+    nodeElement.select('.node-background').classed('can-drop', show)
+    
+    // Set port-level feedback for input ports
+    if (show && isConnecting && connectionStart) {
+      nodeElement.selectAll('.input-port-group')
+        .classed('can-dropped', function(this: any, portData: any) {
+          const typedPortData = portData as (NodePort & { nodeId: string })
+          const nodeId = nodeElement.datum()?.id
+          
+          if (!nodeId || !connectionStart) return false
+          
+          // Use canDropOnPort for validation
+          return canDropOnPort(nodeId, typedPortData.id)
+        })
+    } else {
+      // Remove all port highlighting
+      nodeElement.selectAll('.input-port-group').classed('can-dropped', false)
+    }
+  }, [isConnecting, connectionStart, canDropOnPort])
+
   const applyDragVisualStyle = useCallback((nodeElement: any, nodeId: string) => {
     // CRITICAL: Apply visual styling IMMEDIATELY during drag start for stable feedback
     const nodeBackground = nodeElement.select('.node-background')
@@ -907,7 +933,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     } else {
       batchedConnectionUpdateRef.current = null
     }
-  }, [nodeConnectionsMap, getConnectionPath, connectionBatchSize])
+  }, [nodeConnectionsMap, getConnectionPath, connectionBatchSize, svgRef])
 
   const updateDraggedNodePosition = useCallback((nodeId: string, newX: number, newY: number) => {
     // Always update node position immediately for smooth dragging
@@ -1049,13 +1075,18 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         draggedElementRef.current = null
       }
     }
-  }, [isDragging, draggedNodeId]) // svgRef doesn't need to be in deps as it's stable
+  }, [isDragging, draggedNodeId, svgRef]) // svgRef doesn't need to be in deps as it's stable
 
   // Main D3 rendering effect - split into smaller, focused effects
   useEffect(() => {
     if (!svgRef.current) return
 
-    const svg = d3.select(svgRef.current)
+    // Copy refs at the start of the effect for cleanup
+    const currentSvgRef = svgRef.current
+    const connectionPathCache = connectionPathCacheRef.current
+    const allNodeElements = allNodeElementsRef.current
+
+    const svg = d3.select(currentSvgRef)
     svg.selectAll('*').remove()
 
     // Add definitions for patterns and markers
@@ -1415,7 +1446,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         }
         return 'block'
       })
-      .each(function(d: any) {
+      .each(function() {
         // Production effects removed - using CSS-based styling
       })
       .attr('class', (d: any) => {
@@ -1455,7 +1486,6 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const targetNode = nodeMap.get(d.targetNodeId)
         if (!sourceNode || !targetNode) return 0
         
-        const groupInfo = getConnectionGroupInfo(d.id, connections)
         // Position label close to the connection line (minimal offset)
         const yOffset = -8 // Small offset above the connection line
         
@@ -1636,53 +1666,23 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         if (isConnecting && canDropOnNode?.(d.id)) {
           event.preventDefault()
           event.stopPropagation()
-          // Add visual feedback with enhanced styling
+          // Use unified drop feedback
           const nodeElement = d3.select(event.currentTarget.parentNode)
-          nodeElement.classed('can-drop-node', true)
-          d3.select(event.currentTarget).classed('can-drop', true)
-          
-          // Highlight available input ports
-          nodeElement.selectAll('.input-port-group')
-            .classed('drop-target-port', function(this: any, portData: any) {
-              // Type-safe port data access
-              const typedPortData = portData as (NodePort & { nodeId: string })
-              
-              // In architecture mode, allow multiple connections to the same port
-              if (workflowContextState.designerMode === 'architecture') {
-                // Only highlight if not an exact duplicate connection
-                return !connections.some((conn: Connection) => 
-                  conn.sourceNodeId === connectionStart?.nodeId &&
-                  conn.sourcePortId === connectionStart?.portId &&
-                  conn.targetNodeId === d.id && 
-                  conn.targetPortId === typedPortData.id
-                )
-              }
-              
-              // In workflow mode, use original logic (no multiple connections to same port)
-              return !connections.some((conn: Connection) => 
-                conn.targetNodeId === d.id && conn.targetPortId === typedPortData.id
-              )
-            })
+          setDropFeedback(nodeElement, true)
         }
       })
       .on('dragleave', (event: any) => {
-        // Remove visual feedback
+        // Remove visual feedback using unified function
         const nodeElement = d3.select(event.currentTarget.parentNode)
-        nodeElement.classed('can-drop-node', false)
-        d3.select(event.currentTarget).classed('can-drop', false)
-        
-        // Remove port highlighting
-        nodeElement.selectAll('.input-port-group').classed('drop-target-port', false)
+        setDropFeedback(nodeElement, false)
       })
       .on('drop', (event: any, d: WorkflowNode) => {
         event.preventDefault()
         event.stopPropagation()
         
-        // Remove visual feedback
+        // Remove visual feedback using unified function
         const nodeElement = d3.select(event.currentTarget.parentNode)
-        nodeElement.classed('can-drop-node', false)
-        d3.select(event.currentTarget).classed('can-drop', false)
-        nodeElement.selectAll('.input-port-group').classed('drop-target-port', false)
+        setDropFeedback(nodeElement, false)
         
         // Handle connection drop on node
         if (isConnecting && canDropOnNode?.(d.id)) {
@@ -2021,20 +2021,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         return positions[i]?.y || 0
       })
       .attr('r', (d: any) => getConfigurableDimensions(d.nodeData).portRadius || 6)
-      .attr('fill', (d: any) => {
-        if (isConnecting && connectionStart && connectionStart.type === 'output') {
-          const canDrop = canDropOnPort(d.nodeId, d.id, 'input')
-          return canDrop ? '#4CAF50' : '#ccc'
-        }
-        return getPortColor('any')
-      })
-      .attr('stroke', (d: any) => {
-        if (isConnecting && connectionStart && connectionStart.type === 'output') {
-          const canDrop = canDropOnPort(d.nodeId, d.id, 'input')
-          return canDrop ? '#4CAF50' : '#ff5722'
-        }
-        return '#333'
-      })
+      .attr('fill', getPortColor('any'))
+      .attr('stroke', '#333')
       .attr('stroke-width', 2)
 
     //console.log('🔵 Created', inputPortGroups.selectAll('circle').size(), 'input port circles')
@@ -2358,20 +2346,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         return positions[i]?.y || 0
       })
       .attr('r', (d: any) => getConfigurableDimensions(d.nodeData).portRadius || 6)
-      .attr('fill', (d: any) => {
-        if (isConnecting && connectionStart && connectionStart.type === 'input') {
-          const canDrop = canDropOnPort(d.nodeId, d.id, 'output')
-          return canDrop ? '#4CAF50' : '#ccc'
-        }
-        return getPortColor('any')
-      })
-      .attr('stroke', (d: any) => {
-        if (isConnecting && connectionStart && connectionStart.type === 'input') {
-          const canDrop = canDropOnPort(d.nodeId, d.id, 'output')
-          return canDrop ? '#4CAF50' : '#ff5722'
-        }
-        return '#8d8d8d'
-      })
+      .attr('fill', getPortColor('any'))
+      .attr('stroke', '#8d8d8d')
       .attr('stroke-width', 2)
 
     //console.log('🔴 Created', outputPortGroups.selectAll('circle').size(), 'output port circles')
@@ -2900,19 +2876,21 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       
       draggedElementRef.current = null
       draggedNodeElementRef.current = null
-      
-      // Save refs for cleanup
-      const connectionPathCache = connectionPathCacheRef.current
-      const allNodeElements = allNodeElementsRef.current
-      
-      // Clear DOM and caches
-      svg.selectAll('*').remove()
-      connectionPathCache.clear()
-      gridCacheRef.current = null
-      allNodeElements.clear()
     }
 
-  }, [nodes, connections, showGrid, nodeVariant, selectedNodes])
+    return () => {
+      // Save refs for cleanup at cleanup time
+      
+      // Clear DOM and caches
+      if (currentSvgRef) {
+        d3.select(currentSvgRef).selectAll('*').remove()
+      }
+      connectionPathCache?.clear()
+      gridCacheRef.current = null
+      allNodeElements?.clear()
+    }
+
+  }, [nodes, connections, showGrid, nodeVariant, selectedNodes]) // eslint-disable-line react-hooks/exhaustive-deps
   
   // Remove duplicate CSS since hover styles are already in globals.css
   
@@ -2978,7 +2956,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         }
       })
       
-  }, [selectedNodes, selectedConnection, isNodeSelected, getNodeColor, isInitialized, organizeNodeZIndex])
+  }, [selectedNodes, selectedConnection, isNodeSelected, isInitialized, organizeNodeZIndex, getConnectionMarker, isDragging, svgRef])
   
   // Connection state effect
   useEffect(() => {
@@ -3033,8 +3011,28 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     nodeLayer.selectAll('.input-port-circle')
       .each(function(d: any) {
         const portElement = d3.select(this)
+        const parentElement = (this as any)?.parentNode
+        const portGroup = parentElement ? d3.select(parentElement) : null
         const isConnectionActive = isConnecting && connectionStart && connectionStart.type === 'output'
         const canDrop = isConnectionActive ? canDropOnPort(d.nodeId, d.id, 'input') : false
+        
+        // Add/remove can-dropped class based on validation
+        if (portGroup) {
+          if (isConnectionActive) {
+            portGroup.classed('can-dropped', canDrop)
+            // Debug log for architecture mode
+            if (process.env.NODE_ENV === 'development') {
+              console.log('🎯 Input port can-dropped:', {
+                nodeId: d.nodeId,
+                portId: d.id,
+                canDrop,
+                designerMode: workflowContextState.designerMode
+              })
+            }
+          } else {
+            portGroup.classed('can-dropped', false)
+          }
+        }
         
         // Calculate target values using inline logic (performance optimized)
         const safeCanDrop = Boolean(canDrop)
@@ -3082,8 +3080,19 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     nodeLayer.selectAll('.output-port-circle')
       .each(function(d: any) {
         const portElement = d3.select(this)
+        const parentElement = (this as any)?.parentNode
+        const portGroup = parentElement ? d3.select(parentElement) : null
         const isConnectionActive = isConnecting && connectionStart && connectionStart.type === 'input'
         const canDrop = isConnectionActive ? canDropOnPort(d.nodeId, d.id, 'output') : false
+        
+        // Add/remove can-dropped class based on validation
+        if (portGroup) {
+          if (isConnectionActive) {
+            portGroup.classed('can-dropped', canDrop)
+          } else {
+            portGroup.classed('can-dropped', false)
+          }
+        }
         
         // Calculate target values using inline logic (performance optimized)
         const safeCanDrop = Boolean(canDrop)
@@ -3114,43 +3123,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         }
       })
       
-    // Update output ports visual state with change detection
-    nodeLayer.selectAll('.output-port-circle')
-      .each(function(d: any) {
-        const portElement = d3.select(this)
-        const isConnectionActive = isConnecting && connectionStart && connectionStart.type === 'input'
-        const canDrop = isConnectionActive ? canDropOnPort(d.nodeId, d.id, 'output') : false
-        
-        // Calculate target values using inline logic (performance optimized)
-        const safeCanDrop = Boolean(canDrop)
-        const baseDimensions = getConfigurableDimensions(d.nodeData)
-        
-        const targetFill = isConnectionActive ? (safeCanDrop ? '#4CAF50' : '#ccc') : getPortColor('any')
-        const targetStroke = isConnectionActive ? (safeCanDrop ? '#4CAF50' : '#ff5722') : '#8d8d8d'
-        const targetStrokeWidth = isConnectionActive ? (safeCanDrop ? 3 : 2) : 2
-        const targetRadius = isConnectionActive ? (safeCanDrop ? baseDimensions.portRadius * 1.5 : baseDimensions.portRadius) : baseDimensions.portRadius
-        
-        // Only update if values changed to prevent flickering
-        const currentFill = portElement.attr('fill')
-        const currentStroke = portElement.attr('stroke')
-        const currentStrokeWidth = parseInt(portElement.attr('stroke-width') || '2')
-        const currentRadius = parseFloat(portElement.attr('r') || '0')
-        
-        if (currentFill !== targetFill) {
-          portElement.attr('fill', targetFill)
-        }
-        if (currentStroke !== targetStroke) {
-          portElement.attr('stroke', targetStroke)
-        }
-        if (currentStrokeWidth !== targetStrokeWidth) {
-          portElement.attr('stroke-width', targetStrokeWidth)
-        }
-        if (Math.abs(currentRadius - targetRadius) > 0.1) {
-          portElement.attr('r', targetRadius)
-        }
-      })
-      
-  }, [isConnecting, connectionStart, connectionPreview, nodeVariant, nodeMap, isInitialized, canDropOnPort, svgRef, getConfigurableDimensions])
+  }, [isConnecting, connectionStart, connectionPreview, nodeVariant, nodeMap, isInitialized, canDropOnPort, svgRef, getConfigurableDimensions, workflowContextState.designerMode])
   
   // Architecture mode port visibility during connection
   useEffect(() => {

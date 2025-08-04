@@ -1,8 +1,8 @@
 import { useEffect, useCallback, useState } from 'react'
 import { Save, Play, Download, Upload, Clock, Layers, ChevronDown, Box, Webhook, Target, Network, Grid, Eye, Settings } from 'lucide-react'
 
-// Import CSS styles
-import './WorkflowDesigner.css'
+// Import SCSS styles
+import './WorkflowDesigner.scss'
 
 // Import provider and hooks
 import { WorkflowProvider, useWorkflowContext } from './contexts/WorkflowContext'
@@ -517,69 +517,145 @@ function WorkflowDesignerContent({
               onPortDragStart={handlers.handlePortDragStart}
               onPortDrag={handlers.handlePortDrag}
               onPortDragEnd={handlers.handlePortDragEnd}
-              canDropOnPort={(targetNodeId: string, targetPortId: string) => {
+              canDropOnPort={(targetNodeId: string, targetPortId: string, portType?: 'input' | 'output') => {
                 const { connectionStart } = state.connectionState
+                
+                // Debug log entry point
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('🔍 canDropOnPort called:', {
+                    targetNodeId,
+                    targetPortId,
+                    portType,
+                    connectionStart,
+                    designerMode: state.designerMode
+                  })
+                }
+                
                 if (!connectionStart || connectionStart.nodeId === targetNodeId) {
-                  return false
-                }
-                
-                // Check for exact duplicate connection
-                const exactDuplicateExists = state.connections.find(conn => {
-                  if (connectionStart.type === 'output') {
-                    return conn.sourceNodeId === connectionStart.nodeId &&
-                           conn.sourcePortId === connectionStart.portId &&
-                           conn.targetNodeId === targetNodeId &&
-                           conn.targetPortId === targetPortId
-                  } else {
-                    return conn.sourceNodeId === targetNodeId &&
-                           conn.sourcePortId === targetPortId &&
-                           conn.targetNodeId === connectionStart.nodeId &&
-                           conn.targetPortId === connectionStart.portId
+                  if (process.env.NODE_ENV === 'development') {
+                    console.log('❌ canDropOnPort: No connectionStart or same node', {
+                      hasConnectionStart: !!connectionStart,
+                      sameNode: connectionStart?.nodeId === targetNodeId
+                    })
                   }
-                })
-                
-                // Always prevent exact duplicate connections
-                if (exactDuplicateExists) {
                   return false
                 }
                 
-                // In architecture mode, allow multiple connections to support legacy endpoints
+                // In architecture mode, skip duplicate check and allow multiple connections
                 if (state.designerMode === 'architecture') {
-                  // Get target node for enhanced validation
-                  const targetNode = state.nodes.find(n => n.id === targetNodeId)
-                  const sourceNode = state.nodes.find(n => n.id === connectionStart.nodeId)
+                  if (process.env.NODE_ENV === 'development') {
+                    console.log('🏗️ Architecture mode: SKIPPING duplicate check, allowing multiple connections')
+                  }
                   
-                  // Enhanced legacy system detection
-                  const isLegacyTarget = targetNode && (
-                    targetNode.config?.isLegacyEndpoint ||
-                    targetNode.type?.includes('legacy') ||
-                    (targetNode.inputs && targetNode.inputs.length > 3) || // Many input ports
-                    state.connections.filter(c => c.targetNodeId === targetNodeId).length >= 2 // Already has multiple connections
-                  )
-                  
-                  const isLegacySource = sourceNode && (
-                    sourceNode.config?.isLegacyEndpoint ||
-                    sourceNode.type?.includes('legacy') ||
-                    (sourceNode.outputs && sourceNode.outputs.length > 3) // Many output ports
-                  )
-                  
-                  // Allow multiple connections for legacy systems or when nodes are connected through different endpoints
-                  if (isLegacyTarget || isLegacySource) {
-                    console.log('🏗️ Architecture mode: Allowing multiple connections for legacy system')
+                  // Check if this is a valid connection direction (output -> input)
+                  if (connectionStart.type === 'output' && portType === 'input') {
+                    console.log('✅ Architecture mode: Allowing output -> input connection', {
+                      sourceNodeId: connectionStart.nodeId,
+                      sourcePortId: connectionStart.portId,
+                      targetNodeId,
+                      targetPortId
+                    })
                     return true
                   }
                   
-                  // For non-legacy systems in architecture mode, still allow multiple connections
-                  // but provide console feedback for architecture design awareness
-                  const existingConnectionsCount = state.connections.filter(conn => 
-                    conn.sourceNodeId === connectionStart.nodeId && conn.targetNodeId === targetNodeId
-                  ).length
-                  
-                  if (existingConnectionsCount > 0) {
-                    console.log(`🔄 Architecture mode: Creating additional connection between ${connectionStart.nodeId} and ${targetNodeId} (${existingConnectionsCount + 1} total)`)
+                  // Check if this is a valid reverse connection (input -> output) - rarely used
+                  if (connectionStart.type === 'input' && portType === 'output') {
+                    console.log('✅ Architecture mode: Allowing input -> output connection (reverse)', {
+                      sourceNodeId: connectionStart.nodeId,
+                      sourcePortId: connectionStart.portId,
+                      targetNodeId,
+                      targetPortId
+                    })
+                    return true
                   }
                   
-                  return true
+                  // If no portType specified, allow for backward compatibility
+                  if (!portType) {
+                    console.log('✅ Architecture mode: Allowing connection (no portType specified)')
+                    return true
+                  }
+                  
+                  console.log('❌ Architecture mode: Invalid connection direction', {
+                    connectionStartType: connectionStart.type,
+                    targetPortType: portType
+                  })
+                  return false
+                }
+                
+                // For workflow mode, check exact duplicates
+                const exactDuplicateExists = state.connections.find(conn => {
+                  if (connectionStart.type === 'output') {
+                    const isDuplicate = conn.sourceNodeId === connectionStart.nodeId &&
+                           conn.sourcePortId === connectionStart.portId &&
+                           conn.targetNodeId === targetNodeId &&
+                           conn.targetPortId === targetPortId
+                    
+                    if (process.env.NODE_ENV === 'development' && isDuplicate) {
+                      console.log('🔍 Found duplicate (output->input):', {
+                        existing: {
+                          sourceNodeId: conn.sourceNodeId,
+                          sourcePortId: conn.sourcePortId,
+                          targetNodeId: conn.targetNodeId,
+                          targetPortId: conn.targetPortId
+                        },
+                        attempted: {
+                          sourceNodeId: connectionStart.nodeId,
+                          sourcePortId: connectionStart.portId,
+                          targetNodeId,
+                          targetPortId
+                        }
+                      })
+                    }
+                    return isDuplicate
+                  } else {
+                    const isDuplicate = conn.sourceNodeId === targetNodeId &&
+                           conn.sourcePortId === targetPortId &&
+                           conn.targetNodeId === connectionStart.nodeId &&
+                           conn.targetPortId === connectionStart.portId
+                    
+                    if (process.env.NODE_ENV === 'development' && isDuplicate) {
+                      console.log('🔍 Found duplicate (input->output):', {
+                        existing: {
+                          sourceNodeId: conn.sourceNodeId,
+                          sourcePortId: conn.sourcePortId,
+                          targetNodeId: conn.targetNodeId,
+                          targetPortId: conn.targetPortId
+                        },
+                        attempted: {
+                          sourceNodeId: targetNodeId,
+                          sourcePortId: targetPortId,
+                          targetNodeId: connectionStart.nodeId,
+                          targetPortId: connectionStart.portId
+                        }
+                      })
+                    }
+                    return isDuplicate
+                  }
+                })
+                
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('🔍 Duplicate check result (workflow mode):', {
+                    exactDuplicateExists: !!exactDuplicateExists,
+                    totalConnections: state.connections.length,
+                    connectionStart,
+                    target: { targetNodeId, targetPortId, portType },
+                    allConnections: state.connections.map(c => ({
+                      id: c.id,
+                      source: `${c.sourceNodeId}:${c.sourcePortId}`,
+                      target: `${c.targetNodeId}:${c.targetPortId}`
+                    }))
+                  })
+                }
+                
+                if (exactDuplicateExists) {
+                  if (process.env.NODE_ENV === 'development') {
+                    console.log('❌ canDropOnPort: Exact duplicate exists (workflow mode)')
+                  }
+                  return false
+                }
+                
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('✅ canDropOnPort: Entering workflow mode logic')
                 }
                 
                 // In workflow mode, use stricter validation

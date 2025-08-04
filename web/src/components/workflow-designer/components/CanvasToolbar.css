@@ -1,5 +1,5 @@
 /* Canvas Toolbar Styles */
-@import '../WorkflowDesigner.css';
+@import '../WorkflowDesigner.scss';
 .canvas-toolbar {
   position: absolute;
   top: 16px;

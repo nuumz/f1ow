@@ -1,0 +1,1386 @@
+// Enhanced Workflow Designer Styles - SCSS Version
+
+// Import Sass modules
+@use "sass:map";
+@use "sass:string";
+@use "sass:color";
+@use "sass:list";
+
+// ===== SCSS VARIABLES =====
+
+// Opacity values
+$opacity: (
+  hidden: 0,
+  visible: 1,
+  dimmed: 0.7,
+  muted: 0.3,
+  semi: 0.5,
+  strong: 0.85,
+  faded: 0.6
+);
+
+// Z-Index Layer System
+$z-layers: (
+  base: 1,
+  canvas: 5,
+  grid: 10,
+  content: 100,
+  nodes: 110,
+  connections: 105,
+  ports: 115,
+  labels: 120,
+  selection: 125,
+  header: 1000,
+  toolbar: 1010,
+  sidebar: 1020,
+  footer: 1030,
+  canvas-toolbar: 1040,
+  tooltip: 9000,
+  dropdown: 9010,
+  popover: 9020,
+  notification: 9030,
+  modal-backdrop: 9900,
+  modal: 9910,
+  modal-header: 9920,
+  critical: 99999
+);
+
+// Color variables
+$colors: (
+  primary: #3b82f6,
+  success: #10b981,
+  warning: #f59e0b,
+  error: #ef4444,
+  purple: #8b5cf6,
+  architecture: #7c3aed,
+  workflow: #2563eb,
+  border: #e9ecef,
+  background: #fcfcfc,
+  architecture-bg: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)
+);
+
+// Port variables
+$port: (
+  transition: "opacity 0.2s ease, transform 0.15s ease",
+  hover-scale: 1.05,
+  connected-stroke-width: 2.5px,
+  multiple-stroke-width: 3px,
+  drop-target-stroke-width: 3px
+);
+
+// Breakpoints
+$breakpoints: (
+  mobile: 480px,
+  tablet: 768px,
+  desktop: 1024px
+);
+
+// ===== MIXINS =====
+
+@mixin z-index($layer) {
+  z-index: map.get($z-layers, $layer);
+}
+
+@mixin opacity-state($state: visible) {
+  opacity: map.get($opacity, $state);
+}
+
+@mixin visible-state {
+  @include opacity-state(visible);
+  pointer-events: all;
+}
+
+@mixin hidden-state {
+  @include opacity-state(hidden);
+  pointer-events: none;
+}
+
+@mixin dimmed-state {
+  @include opacity-state(dimmed);
+  pointer-events: none;
+}
+
+@mixin button-base {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  font-family: inherit;
+  background: white;
+  color: #333;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+
+  &:hover:not(:disabled) {
+    background: #f8f9fa;
+    border-color: #d0d0d0;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+  }
+
+  &:active:not(:disabled) {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    background: #f3f4f6;
+    color: #9ca3af;
+    @include opacity-state(faded);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+}
+
+@mixin connection-mode($stroke-color, $hover-color, $selected-color, $dash-pattern: none) {
+  .connection .connection-path {
+    stroke: $stroke-color;
+    stroke-width: 2;
+    @if $dash-pattern {
+      stroke-dasharray: $dash-pattern;
+      marker-end: url(#arrowhead-architecture);
+    } @else {
+      marker-end: url(#arrowhead-workflow);
+    }
+    transition: stroke 0.2s ease, stroke-width 0.2s ease;
+    cursor: pointer;
+    @if $dash-pattern {
+      @include opacity-state(strong);
+    }
+  }
+
+  .connection-hover .connection-path {
+    stroke: $hover-color !important;
+    @if $dash-pattern {
+      stroke-width: 2.5px !important;
+    } @else {
+      stroke-width: 3px !important;
+    }
+    @if $dash-pattern {
+      marker-end: url(#arrowhead-architecture-hover) !important;
+      filter: drop-shadow(0 3px 10px #{rgba($hover-color, 0.3)});
+    } @else {
+      marker-end: url(#arrowhead-workflow-hover) !important;
+      filter: drop-shadow(0 2px 8px #{rgba($hover-color, 0.3)});
+    }
+    @if $dash-pattern {
+      @include opacity-state(visible);
+      stroke-dasharray: $dash-pattern;
+    }
+  }
+
+  .connection-selected .connection-path {
+    stroke: $selected-color !important;
+    stroke-width: 3px !important;
+    @if $dash-pattern {
+      marker-end: url(#arrowhead-architecture-selected) !important;
+      filter: drop-shadow(0 3px 12px #{rgba($selected-color, 0.5)});
+      animation: architecturePulse 1.5s infinite;
+    } @else {
+      marker-end: url(#arrowhead-workflow-selected) !important;
+      filter: drop-shadow(0 2px 8px #{rgba($selected-color, 0.4)});
+      animation: workflowPulse 2s infinite;
+    }
+    @if $dash-pattern {
+      stroke-dasharray: $dash-pattern;
+      @include opacity-state(visible);
+    }
+  }
+}
+
+@mixin media($breakpoint) {
+  @media (max-width: map.get($breakpoints, $breakpoint)) {
+    @content;
+  }
+}
+
+// ===== BASE STYLES =====
+
+:root {
+  // Z-Index values
+  @each $layer, $value in $z-layers {
+    --z-#{$layer}: #{$value};
+  }
+
+  // Opacity values
+  @each $state, $value in $opacity {
+    --opacity-#{$state}: #{$value};
+  }
+
+  // Port variables
+  --port-transition: #{string.unquote(map.get($port, transition))};
+  --port-hover-scale: #{map.get($port, hover-scale)};
+  --port-connected-stroke-width: #{map.get($port, connected-stroke-width)};
+  --port-multiple-stroke-width: #{map.get($port, multiple-stroke-width)};
+  --port-drop-target-stroke-width: #{map.get($port, drop-target-stroke-width)};
+}
+
+// ===== LAYOUT COMPONENTS =====
+
+.workflow-designer {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: map.get($colors, background);
+}
+
+.workflow-designer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 2rem;
+  background: white;
+  color: #333;
+  border-bottom: 1px solid map.get($colors, border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  @include z-index(header);
+  flex-shrink: 0;
+  position: relative;
+
+  @include media(tablet) {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+    padding: 8px 12px;
+  }
+}
+
+.workflow-name-section {
+  flex: 1;
+  min-width: 0;
+
+  @include media(tablet) {
+    order: 1;
+  }
+}
+
+.workflow-name-display {
+  display: flex;
+  align-items: center;
+  min-width: 240px;
+  gap: 12px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  transition: background-color 0.2s ease;
+  width: fit-content;
+
+  &:hover {
+    background-color: #f8fafc;
+  }
+}
+
+.workflow-name-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workflow-name-input {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 4px 12px;
+  margin: 0;
+  width: fit-content;
+  min-width: 240px;
+  font-family: inherit;
+  border-radius: 6px;
+  transition: background-color 0.2s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: normal;
+  box-sizing: border-box;
+
+  &:hover {
+    background-color: #f8fafc;
+  }
+
+  &:focus {
+    background-color: #f8fafc;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+  }
+
+  &::placeholder {
+    color: #94a3b8;
+    font-weight: 600;
+  }
+}
+
+.workflow-mode-badge {
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+
+  &.workflow {
+    background: #dbeafe;
+    color: #1d4ed8;
+  }
+
+  &.architecture {
+    background: #f3e8ff;
+    color: #7c3aed;
+  }
+}
+
+.workflow-designer-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+
+  @include media(tablet) {
+    flex-direction: column;
+  }
+}
+
+// ===== ACTIONS AND BUTTONS =====
+
+.workflow-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  @include media(tablet) {
+    order: 2;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+}
+
+.action-button {
+  @include button-base;
+}
+
+.mode-switch-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+
+  &:hover:not(:disabled) {
+    background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+    border-color: transparent;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  }
+
+  &.active {
+    background: linear-gradient(135deg, #ff6b6b 0%, #feca57 100%);
+    box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
+
+    &:hover:not(:disabled) {
+      background: linear-gradient(135deg, #ff5252 0%, #ffb74d 100%);
+      box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4);
+    }
+  }
+}
+
+// Button variants
+$button-variants: (
+  save: (map.get($colors, primary), #2563eb),
+  draft: (map.get($colors, purple), #7C3AED),
+  execute: (map.get($colors, success), #059669),
+  export: (map.get($colors, purple), #7c3aed),
+  import: (map.get($colors, warning), #d97706)
+);
+
+@each $variant, $colors-list in $button-variants {
+  .#{$variant}-button:not(:disabled) {
+    background: list.nth($colors-list, 1);
+    color: white;
+    border-color: list.nth($colors-list, 2);
+
+    &:hover:not(:disabled) {
+      background: list.nth($colors-list, 2);
+      border-color: color.adjust(list.nth($colors-list, 2), $lightness: -10%);
+      transform: translateY(-1px);
+    }
+  }
+}
+
+// ===== CANVAS AND CONTAINERS =====
+
+.node-palette-container {
+  width: auto;
+  max-width: fit-content;
+  background: white;
+  border-right: 1px solid map.get($colors, border);
+  overflow-y: auto;
+  flex-shrink: 0;
+  @include z-index(sidebar);
+  box-sizing: border-box;
+
+  @include media(desktop) {
+    width: 240px;
+    max-width: calc(100vw - 40px);
+  }
+
+  @include media(tablet) {
+    width: 100%;
+    max-width: 100vw;
+    height: 120px;
+    border-right: none;
+    border-bottom: 1px solid map.get($colors, border);
+    order: 1;
+    padding: 8px;
+  }
+
+  @include media(mobile) {
+    padding: 4px;
+    min-width: 0;
+  }
+}
+
+.canvas-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+
+  &.drag-over {
+    background: #e3f2fd;
+  }
+
+  &.architecture-mode {
+    background: map.get($colors, architecture-bg);
+
+    .workflow-canvas {
+      background: transparent;
+
+      &.architecture-canvas {
+        background: transparent;
+      }
+
+      &.connecting {
+        background: radial-gradient(circle at center, rgba(139, 92, 246, 0.05) 0%, transparent 70%);
+      }
+    }
+  }
+
+  &.workflow-mode {
+    background: map.get($colors, background);
+
+    .workflow-canvas.connecting {
+      background: radial-gradient(circle at center, rgba(33, 150, 243, 0.05) 0%, transparent 70%);
+    }
+  }
+
+  @include media(tablet) {
+    order: 2;
+    flex: 1;
+    min-height: 400px;
+  }
+
+  @include media(mobile) {
+    min-width: 0;
+  }
+}
+
+.workflow-canvas {
+  cursor: grab;
+  width: 100%;
+  height: 100%;
+  @include z-index(canvas);
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  &.connecting {
+    cursor: crosshair !important;
+
+    &:active {
+      cursor: crosshair !important;
+    }
+  }
+}
+
+// ===== MODE-SPECIFIC STYLES =====
+
+.canvas-container.workflow-mode {
+  @include connection-mode(map.get($colors, workflow), #1d4ed8, map.get($colors, success));
+
+  .port-group {
+    &:hover {
+      transform: scale(var(--port-hover-scale));
+      transform-origin: center;
+      transition-delay: 0.03s;
+
+      .port-circle {
+        filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.2));
+        transition-delay: 0.05s;
+      }
+    }
+
+    &.connected {
+      &:hover {
+        transform: none;
+      }
+
+      .port-circle {
+        fill: map.get($colors, success) !important;
+        stroke: #059669 !important;
+        stroke-width: var(--port-connected-stroke-width) !important;
+      }
+    }
+  }
+
+  .input-port,
+  .output-port {
+    circle {
+      fill: #f8fafc;
+      stroke: map.get($colors, workflow);
+      stroke-width: 2;
+      transition: all 0.2s ease;
+    }
+
+    &:hover circle {
+      fill: #dbeafe;
+      stroke: #1d4ed8;
+      stroke-width: 3;
+      filter: drop-shadow(0 2px 6px rgba(29, 78, 216, 0.25));
+    }
+
+    &.connected circle {
+      fill: #059669;
+      stroke: #047857;
+    }
+  }
+}
+
+.canvas-container.architecture-mode {
+  @include connection-mode(map.get($colors, architecture), #6d28d9, #dc2626, '8, 6');
+
+  .port-group {
+    @include hidden-state;
+    transition: var(--port-transition);
+
+    &.connected .port-circle {
+      stroke-width: var(--port-connected-stroke-width) !important;
+    }
+
+    &.has-multiple-connections {
+      position: relative;
+
+      &::after {
+        content: "M";
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        background: #FF9800;
+        color: white;
+        border-radius: 50%;
+        width: 16px;
+        height: 16px;
+        font-size: 10px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+        z-index: 10;
+      }
+    }
+  }
+
+  .workflow-canvas.connecting .port-group {
+    @include opacity-state(visible);
+    pointer-events: all !important;
+  }
+
+  .input-port,
+  .output-port {
+    circle {
+      fill: #faf5ff;
+      stroke: map.get($colors, architecture);
+      stroke-width: 2.5;
+      stroke-dasharray: 3,2;
+      transition: all 0.2s ease;
+    }
+
+    &:hover circle {
+      fill: #f3e8ff;
+      stroke: #6d28d9;
+      stroke-width: 3.5;
+      stroke-dasharray: 8, 6;
+      filter: drop-shadow(0 2px 8px rgba(109, 40, 217, 0.3));
+      transform: scale(1.1);
+    }
+
+    &.connected circle {
+      fill: #dc2626;
+      stroke: #b91c1c;
+      stroke-dasharray: 8, 6;
+      animation: architecturePortPulse 2s infinite;
+    }
+  }
+}
+
+// ===== PORT STYLES =====
+
+.port-group,
+.input-port-group,
+.output-port-group {
+  transition: var(--port-transition);
+  cursor: crosshair;
+  @include visible-state;
+  transform-origin: center;
+  position: relative;
+  will-change: transform, opacity;
+}
+
+// ===== SPECIAL PORT STATES =====
+
+.port-group.can-dropped,
+.port-group.drop-target-port {
+  @include visible-state;
+
+  .port-circle {
+    fill: #4CAF50 !important;
+    stroke-width: var(--port-drop-target-stroke-width) !important;
+    filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6));
+  }
+}
+
+// Force visibility for all drop target ports during connection
+.canvas-container .workflow-canvas.connecting {
+  .port-group.can-dropped,
+  .port-group.drop-target-port {
+    @include visible-state;
+    pointer-events: all !important;
+    
+    .port-circle {
+      fill: #4CAF50 !important;
+      stroke-width: var(--port-drop-target-stroke-width) !important;
+      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6));
+    }
+  }
+}
+
+// ===== CONNECTION INTERACTION DISABLING =====
+
+.canvas-container .workflow-canvas.connecting {
+  .port-group:hover {
+    transform: none;
+    transition: none;
+  }
+
+  .connection {
+    pointer-events: none !important;
+    cursor: default !important;
+    @include opacity-state(dimmed);
+  }
+
+  .connection-hover .connection-path {
+    stroke: inherit !important;
+    stroke-width: inherit !important;
+    marker-end: inherit !important;
+    filter: none !important;
+    pointer-events: none !important;
+  }
+
+  .connection-hitbox {
+    pointer-events: none !important;
+  }
+
+  .connection-group:hover {
+    opacity: inherit !important;
+  }
+
+  .connection-bundle:hover {
+    filter: inherit !important;
+  }
+
+  .connection-label {
+    pointer-events: none !important;
+  }
+
+  .connection-count-badge,
+  .connection-count-text {
+    pointer-events: none !important;
+  }
+
+  // Valid ports highlighting during connection
+  .input-port-circle[fill="#4CAF50"],
+  .output-port-circle[fill="#4CAF50"],
+  .port-circle[fill="#4CAF50"] {
+    @include opacity-state(visible);
+    filter: drop-shadow(0 0 8px rgba(76, 175, 80, 0.8));
+  }
+
+  // Orange ports (multiple connections) visibility during connection
+  .input-port-circle[fill="#FF9800"],
+  .output-port-circle[fill="#FF9800"] {
+    @include opacity-state(visible);
+    filter: drop-shadow(0 0 8px rgba(255, 152, 0, 0.8));
+  }
+
+  // Port groups with multiple connections visibility during connection
+  .port-group.has-multiple-connections {
+    @include opacity-state(visible);
+  }
+
+  // Bottom ports (diamond shapes) during connection
+  .bottom-port-diamond[fill="#4CAF50"] {
+    @include opacity-state(visible);
+    filter: drop-shadow(0 0 8px rgba(76, 175, 80, 0.8));
+  }
+
+  .bottom-port-diamond[fill="#ff5722"] {
+    @include opacity-state(muted);
+  }
+
+  // Hide output port borders when canvas is in connecting mode
+  .output-port-circle {
+    stroke: none !important;
+  }
+}
+
+// Architecture mode drop target overrides - ensure drop targets are always visible
+.canvas-container.architecture-mode .workflow-canvas.connecting {
+  .port-group.can-dropped,
+  .port-group.drop-target-port {
+    @include visible-state;
+    pointer-events: all !important;
+    
+    .port-circle {
+      fill: #4CAF50 !important;
+      stroke-width: var(--port-drop-target-stroke-width) !important;
+      stroke-dasharray: none !important; // Override architecture mode dashed border
+      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6));
+    }
+  }
+}
+
+// ===== ANIMATIONS =====
+
+@keyframes workflowPulse {
+  0%, 100% {
+    @include opacity-state(visible);
+    stroke-width: 3;
+  }
+  50% {
+    @include opacity-state(dimmed);
+    stroke-width: 4;
+  }
+}
+
+@keyframes architecturePulse {
+  0%, 100% {
+    @include opacity-state(visible);
+    stroke-width: 3;
+    filter: drop-shadow(0 3px 12px rgba(220, 38, 38, 0.5));
+  }
+  50% {
+    @include opacity-state(strong);
+    stroke-width: 4;
+    filter: drop-shadow(0 4px 16px rgba(220, 38, 38, 0.7));
+  }
+}
+
+@keyframes architecturePortPulse {
+  0%, 100% {
+    transform: scale(1);
+    @include opacity-state(visible);
+  }
+  50% {
+    transform: scale(1.15);
+    @include opacity-state(strong);
+  }
+}
+
+@keyframes validDropPulse {
+  0%, 100% {
+    transform: scale(1);
+    @include opacity-state(visible);
+  }
+  50% {
+    transform: scale(1.05);
+    @include opacity-state(strong);
+  }
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+@keyframes nodeDrop {
+  0%, 100% { 
+    stroke-dashoffset: 0;
+    filter: drop-shadow(0 0 12px rgba(76, 175, 80, 0.6));
+  }
+  50% { 
+    stroke-dashoffset: -12;
+    filter: drop-shadow(0 0 20px rgba(76, 175, 80, 0.9));
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    @include opacity-state(hidden);
+  }
+  to {
+    transform: translateX(0);
+    @include opacity-state(visible);
+  }
+}
+
+@keyframes dropdownSlideIn {
+  from {
+    @include opacity-state(hidden);
+    transform: translateY(-8px) scale(0.95);
+  }
+  to {
+    @include opacity-state(visible);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fadeIn {
+  from { @include opacity-state(hidden); }
+  to { @include opacity-state(visible); }
+}
+
+@keyframes slideUp {
+  from {
+    @include opacity-state(hidden);
+    transform: translateY(20px);
+  }
+  to {
+    @include opacity-state(visible);
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { @include opacity-state(visible); }
+  50% { @include opacity-state(dimmed); }
+}
+
+// ===== ADDITIONAL COMPONENTS =====
+
+// Architecture Dropdown
+.architecture-dropdown-container {
+  position: relative;
+  display: inline-block;
+}
+
+.architecture-dropdown-button {
+  position: relative;
+  background: linear-gradient(135deg, map.get($colors, success) 0%, #059669 100%);
+  border: none;
+  color: white;
+  font-weight: 500;
+  min-width: 180px;
+  justify-content: space-between;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+
+  &:hover:not(:disabled) {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+  }
+
+  span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+  }
+
+  .rotate-180 {
+    transform: rotate(180deg);
+  }
+
+  @include media(tablet) {
+    min-width: 140px;
+    padding: 6px 12px;
+
+    span {
+      font-size: 12px;
+    }
+  }
+
+  @include media(mobile) {
+    min-width: 120px;
+  }
+}
+
+.architecture-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 
+    0 10px 25px rgba(0, 0, 0, 0.1),
+    0 4px 6px rgba(0, 0, 0, 0.05);
+  @include z-index(dropdown);
+  padding: 8px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: dropdownSlideIn 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+  @include media(tablet) {
+    left: -50px;
+    right: -50px;
+    width: auto;
+  }
+
+  @include media(mobile) {
+    left: -100px;
+    right: -100px;
+  }
+}
+
+.dropdown-section {
+  margin-bottom: 8px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.dropdown-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+  padding: 0 8px;
+}
+
+.dropdown-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+  @include media(tablet) {
+    flex-direction: column;
+    gap: 2px;
+  }
+}
+
+.dropdown-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  width: 100%;
+
+  &:hover {
+    background: #f3f4f6;
+    color: #1f2937;
+  }
+
+  &.active {
+    background: linear-gradient(135deg, map.get($colors, primary), #1d4ed8);
+    color: white;
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.25);
+
+    &:hover {
+      background: linear-gradient(135deg, #2563eb, #1e40af);
+      box-shadow: 0 3px 10px rgba(59, 130, 246, 0.3);
+    }
+  }
+
+  @include media(tablet) {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+}
+
+// ===== NOTIFICATIONS =====
+
+.notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  color: white;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  @include z-index(notification);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 300px;
+  animation: slideInRight 0.3s ease-out;
+
+  &-success {
+    background: map.get($colors, success);
+  }
+
+  &-error {
+    background: map.get($colors, error);
+  }
+
+  &-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    margin-left: 12px;
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  @include media(mobile) {
+    left: 20px;
+    right: 20px;
+    min-width: auto;
+  }
+}
+
+// ===== STATUS BAR =====
+
+.workflow-designer-status {
+  background: white;
+  border-top: 1px solid map.get($colors, border);
+  padding: 8px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: #6b7280;
+
+  @include media(tablet) {
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+    text-align: center;
+  }
+}
+
+.status-info {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+
+  span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+}
+
+.status-save-info {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  margin-right: 20px;
+
+  @include media(tablet) {
+    margin: 0;
+    order: -1;
+  }
+}
+
+.execution-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  &__indicator {
+    padding: 4px 12px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    min-width: fit-content;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 20px;
+
+    &--idle {
+      background: #f1f5f9;
+      color: #475569;
+      border: 1px solid #e2e8f0;
+      animation: pulse 3s infinite;
+    }
+
+    &--running {
+      background: #dbeafe;
+      color: #1d4ed8;
+      animation: pulse 2s infinite;
+    }
+
+    &--completed {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    &--error {
+      background: #fee2e2;
+      color: #dc2626;
+    }
+  }
+}
+
+// ===== NODE EDITOR =====
+
+.node-editor-container {
+  width: 320px;
+  background: white;
+  border-left: 1px solid map.get($colors, border);
+  overflow-y: auto;
+  flex-shrink: 0;
+  @include z-index(sidebar);
+
+  @include media(desktop) {
+    width: 280px;
+  }
+
+  @include media(tablet) {
+    width: 100%;
+    max-width: 100vw;
+    height: 200px;
+    border-left: none;
+    border-top: 1px solid map.get($colors, border);
+    order: 3;
+    box-sizing: border-box;
+  }
+}
+
+// ===== CONNECTION STYLES =====
+
+.connection {
+  .connection-path {
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .connection-hitbox {
+    stroke: transparent !important;
+    stroke-width: 10px !important;
+    fill: none !important;
+    pointer-events: all !important;
+    cursor: pointer !important;
+  }
+}
+
+.connection-label {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  fill: #4a5568;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  pointer-events: none;
+  text-shadow: 0 0 3px rgba(255, 255, 255, 0.8), 0 0 6px rgba(255, 255, 255, 0.6);
+
+  .canvas-container.architecture-mode & {
+    text-shadow: 0 0 3px rgba(255, 255, 255, 0.9), 0 0 6px rgba(255, 255, 255, 0.7);
+  }
+}
+
+// ===== NODE DROP FEEDBACK =====
+
+.node-background.can-drop {
+  stroke: #4CAF50 !important;
+  stroke-width: 2px;
+  stroke-dasharray: 5,5;
+  animation: dash 1s linear infinite;
+}
+
+.node.can-drop-node {
+  filter: drop-shadow(0 0 12px rgba(76, 175, 80, 0.6)) !important;
+  transform: scale(1.02);
+
+  .node-background {
+    stroke: #4CAF50 !important;
+    stroke-width: 3px !important;
+    stroke-dasharray: 8,4;
+    animation: nodeDrop 1.2s ease-in-out infinite;
+  }
+}
+
+// ===== PORT TYPE SPECIFIC STYLES =====
+
+$port-types: (
+  string: (#16a34a, #059669),
+  number: (#2563eb, #1d4ed8),
+  boolean: (#ea580c, #c2410c),
+  object: (#c026d3, #a21caf),
+  array: (#0891b2, #0e7490),
+  error: (#dc2626, #b91c1c),
+  any: (#6b7280, #52525b)
+);
+
+@each $type, $colors-list in $port-types {
+  .canvas-container.workflow-mode .port-type-#{$type} circle {
+    stroke: list.nth($colors-list, 1);
+  }
+
+  .canvas-container.architecture-mode .port-type-#{$type} circle {
+    stroke: list.nth($colors-list, 2);
+    stroke-dasharray: 4,2;
+  }
+}
+
+// ===== EXECUTION LOGS =====
+
+.execution-logs {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 200px;
+  background: white;
+  border-top: 1px solid map.get($colors, border);
+  overflow-y: auto;
+  @include z-index(content);
+
+  h3 {
+    margin: 0;
+    padding: 8px 16px;
+    background: #f8f9fa;
+    border-bottom: 1px solid map.get($colors, border);
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  @include media(mobile) {
+    max-height: 150px;
+  }
+}
+
+.logs-container {
+  padding: 8px 0;
+}
+
+.log-entry {
+  display: flex;
+  gap: 12px;
+  padding: 4px 16px;
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  border-bottom: 1px solid #f1f3f4;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &.error {
+    background: #fef2f2;
+    color: #dc2626;
+  }
+
+  &.warning {
+    background: #fffbeb;
+    color: #d97706;
+  }
+
+  &.info {
+    background: #eff6ff;
+    color: #2563eb;
+  }
+}
+
+.log-timestamp {
+  font-weight: 600;
+  min-width: 80px;
+}
+
+.log-node {
+  font-weight: 500;
+  min-width: 100px;
+}
+
+.log-message {
+  flex: 1;
+}
+
+// ===== DARK MODE SUPPORT =====
+
+@media (prefers-color-scheme: dark) {
+  .workflow-designer {
+    background: #111827;
+  }
+
+  .workflow-designer-header {
+    background: white;
+    border-bottom-color: map.get($colors, border);
+    color: #333;
+  }
+
+  .workflow-name-input {
+    color: #333;
+    background: white;
+
+    &:hover {
+      background: #f8f9fa;
+    }
+
+    &:focus {
+      background: #f0f0f0;
+    }
+  }
+
+  .action-button {
+    background: white;
+    border-color: #e0e0e0;
+    color: #333;
+
+    &:hover:not(:disabled) {
+      background: #f8f9fa;
+      border-color: #d0d0d0;
+    }
+  }
+
+  .workflow-designer-status {
+    background: white;
+    border-top-color: map.get($colors, border);
+    color: #6b7280;
+  }
+}

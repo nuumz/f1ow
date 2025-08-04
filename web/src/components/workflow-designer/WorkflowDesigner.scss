@@ -453,13 +453,37 @@ $button-variants: (
   }
 }
 
-.canvas-container {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
+// ===== ENHANCED DRAG & DROP FEEDBACK =====
 
+.node-background.can-drop {
+  stroke: #4CAF50 !important;
+  stroke-width: 2px;
+  stroke-dasharray: 5,5;
+  animation: dash 1s linear infinite;
+}
+
+.node.can-drop-node {
+  filter: drop-shadow(0 0 12px rgba(76, 175, 80, 0.6)) !important;
+  transform: scale(1.02);
+
+  .node-background {
+    stroke: #4CAF50 !important;
+    stroke-width: 3px !important;
+    stroke-dasharray: 8,4;
+    animation: nodeDrop 1.2s ease-in-out infinite;
+  }
+}
+
+// Enhanced grid animation during drag operations
+.canvas-container {
   &.drag-over {
     background: #e3f2fd;
+    
+    .grid-layer .grid-pattern-rect {
+      // Subtle grid highlight during drag
+      filter: brightness(1.1);
+      transition: filter 0.2s ease;
+    }
   }
 
   &.architecture-mode {
@@ -474,6 +498,12 @@ $button-variants: (
 
       &.connecting {
         background: radial-gradient(circle at center, rgba(139, 92, 246, 0.05) 0%, transparent 70%);
+        
+        // Enhanced grid visibility during connection mode
+        .grid-layer .grid-pattern-rect {
+          opacity: 0.9;
+          filter: contrast(1.2);
+        }
       }
     }
   }
@@ -483,6 +513,12 @@ $button-variants: (
 
     .workflow-canvas.connecting {
       background: radial-gradient(circle at center, rgba(33, 150, 243, 0.05) 0%, transparent 70%);
+      
+      // Enhanced grid visibility during connection mode
+      .grid-layer .grid-pattern-rect {
+        opacity: 0.8;
+        filter: contrast(1.1);
+      }
     }
   }
 
@@ -496,6 +532,8 @@ $button-variants: (
     min-width: 0;
   }
 }
+
+// ===== ENHANCED GRID SYSTEM =====
 
 .workflow-canvas {
   cursor: grab;
@@ -512,6 +550,62 @@ $button-variants: (
 
     &:active {
       cursor: crosshair !important;
+    }
+  }
+
+  // Enhanced grid layer with performance optimizations
+  .grid-layer {
+    @include z-index(grid);
+    pointer-events: none;
+    will-change: transform;
+    
+    // Grid pattern optimizations for performance
+    .grid-pattern-rect {
+      shape-rendering: optimizeSpeed;
+      image-rendering: optimizeSpeed;
+      transform-origin: center;
+      backface-visibility: hidden;
+      
+      // Smooth transitions for zoom changes
+      transition: opacity 0.15s ease-out;
+      
+      // Hide grid when zoomed out too far (performance optimization)
+      &[width="0"], &[height="0"] {
+        @include opacity-state(hidden);
+      }
+    }
+    
+    // Pattern dot styling for consistent appearance
+    .pattern-dot {
+      shape-rendering: optimizeSpeed;
+      fill: #d1d5db;
+      
+      // Responsive dot opacity based on zoom level
+      @media (max-resolution: 1dppx) {
+        opacity: 0.6; // Lower opacity for low-res displays
+      }
+      
+      @media (min-resolution: 2dppx) {
+        opacity: 0.8; // Higher opacity for high-res displays
+      }
+    }
+  }
+  
+  // Grid performance indicators (development only)
+  &.grid-debug {
+    .grid-layer::after {
+      content: attr(data-performance);
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-family: monospace;
+      @include z-index(critical);
+      pointer-events: none;
     }
   }
 }

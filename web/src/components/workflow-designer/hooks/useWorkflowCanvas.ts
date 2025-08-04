@@ -315,12 +315,21 @@ export function useWorkflowCanvas() {
   // Load saved transform on mount - only run when workflowName changes
   useEffect(() => {
     if (state.workflowName) {
-      const initialTransform = getInitialCanvasTransform()
-      if (initialTransform.x !== 0 || initialTransform.y !== 0 || initialTransform.k !== 1) {
-        dispatch({ type: 'SET_CANVAS_TRANSFORM', payload: initialTransform })
+      // Inline the localStorage loading to avoid dependency on getInitialCanvasTransform
+      const saved = localStorage.getItem(`workflow-canvas-transform-${state.workflowName}`)
+      if (saved) {
+        try {
+          const { x, y, k } = JSON.parse(saved)
+          const initialTransform = { x: x || 0, y: y || 0, k: k || 1 }
+          if (initialTransform.x !== 0 || initialTransform.y !== 0 || initialTransform.k !== 1) {
+            dispatch({ type: 'SET_CANVAS_TRANSFORM', payload: initialTransform })
+          }
+        } catch (e) {
+          console.warn('Failed to parse saved canvas transform:', e)
+        }
       }
     }
-  }, [state.workflowName, getInitialCanvasTransform, dispatch])
+  }, [state.workflowName, dispatch])
 
   return {
     // State

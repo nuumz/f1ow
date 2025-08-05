@@ -8,9 +8,27 @@
 // App Layout
 .app {
   @include flex-column;
-  height: 100%;
+  min-height: 100vh;
   background: color(bg-body) !important;
   background-image: none !important;
+}
+
+// Designer specific layout - full height
+.app--no-footer {
+  @include flex-column;
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+  background: color(bg-body) !important;
+  background-image: none !important;
+
+  .main-content {
+    flex: 1;
+    height: calc(100vh - #{$navbar-height});
+    min-height: calc(100vh - #{$navbar-height});
+    overflow: hidden;
+    background: color(bg-light);
+  }
 }
 
 // Main Layout
@@ -49,7 +67,6 @@
 
 // Page Container - Common layout for all pages
 .page-container {
-  min-height: calc(100vh - #{$navbar-height});
   padding: spacing(6) 0;
   background: color(bg-light);
   

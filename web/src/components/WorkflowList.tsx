@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Plus, Play, Edit, Trash2, Search, Calendar } from 'lucide-react'
 import { WorkflowService, Workflow } from '../services/workflow.service'
-import AppFooter from './AppFooter'
-import { FOOTER_CONFIGS } from '../hooks/useFooter'
 
 export default function WorkflowList() {
   const [workflows, setWorkflows] = useState<Workflow[]>([])
@@ -77,124 +75,125 @@ export default function WorkflowList() {
   }
 
   return (
-    <div className="workflow-list">
-      <div className="list-header">
-        <div className="header-title">
-          <h1>f1ow Workflows</h1>
-          <p>Manage and execute your automation workflows</p>
-        </div>
-        <button className="btn btn-primary" onClick={() => window.location.href = '/designer'}>
-          <Plus size={16} />
-          New Workflow
-        </button>
-      </div>
-
-      <div className="list-controls">
-        <div className="search-box">
-          <Search size={20} />
-          <input
-            type="text"
-            placeholder="Search workflows..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        
-        <div className="control-group">
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as any)}
-          >
-            <option value="name">Sort by Name</option>
-            <option value="created">Sort by Created</option>
-            <option value="modified">Sort by Modified</option>
-          </select>
-          
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as any)}
-          >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="draft">Draft</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="workflow-grid">
-        {filteredWorkflows.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-icon">📋</div>
-            <h3>No workflows found</h3>
-            <p>Create your first workflow to get started</p>
+    <div className="page-container">
+      <div className="container">
+        <div className="workflow-list">
+          <div className="list-header">
+            <div className="header-title">
+              <h1>f1ow Workflows</h1>
+              <p>Manage and execute your automation workflows</p>
+            </div>
             <button className="btn btn-primary" onClick={() => window.location.href = '/designer'}>
               <Plus size={16} />
-              Create Workflow
+              New Workflow
             </button>
           </div>
-        ) : (
-          filteredWorkflows.map((workflow) => (
-            <div key={workflow.id} className="workflow-card">
-              <div className="card-header">
-                <h3>{workflow.name}</h3>
-                <div className="card-actions">
-                  <button
-                    className="action-btn"
-                    onClick={() => handleExecuteWorkflow(workflow.id!)}
-                    title="Execute"
-                  >
-                    <Play size={16} />
-                  </button>
-                  <button
-                    className="action-btn"
-                    onClick={() => window.location.href = `/designer/${workflow.id}`}
-                    title="Edit"
-                  >
-                    <Edit size={16} />
-                  </button>
-                  <button
-                    className="action-btn danger"
-                    onClick={() => handleDeleteWorkflow(workflow.id!)}
-                    title="Delete"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
-              
-              <div className="card-content">
-                <p className="workflow-description">
-                  {workflow.description || 'No description provided'}
-                </p>
-                
-                <div className="workflow-stats">
-                  <div className="stat">
-                    <span className="stat-label">Nodes:</span>
-                    <span className="stat-value">{workflow.definition?.nodes?.length || 0}</span>
-                  </div>
-                  <div className="stat">
-                    <span className="stat-label">Connections:</span>
-                    <span className="stat-value">{workflow.definition?.edges?.length || 0}</span>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="card-footer">
-                <div className="workflow-status">
-                  <span className="status-badge active">Active</span>
-                </div>
-                <div className="workflow-date">
-                  <Calendar size={14} />
-                  <span>Created today</span>
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
 
-      {/* App Footer */}
-      <AppFooter config={FOOTER_CONFIGS.PAGE} />
+          <div className="list-controls">
+            <div className="search-box">
+              <Search size={20} />
+              <input
+                type="text"
+                placeholder="Search workflows..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            
+            <div className="control-group">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+              >
+                <option value="name">Sort by Name</option>
+                <option value="created">Sort by Created</option>
+                <option value="modified">Sort by Modified</option>
+              </select>
+              
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value as any)}
+              >
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="draft">Draft</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="workflow-grid">
+            {filteredWorkflows.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-icon">📋</div>
+                <h3>No workflows found</h3>
+                <p>Create your first workflow to get started</p>
+                <button className="btn btn-primary" onClick={() => window.location.href = '/designer'}>
+                  <Plus size={16} />
+                  Create Workflow
+                </button>
+              </div>
+            ) : (
+              filteredWorkflows.map((workflow) => (
+                <div key={workflow.id} className="workflow-card">
+                  <div className="card-header">
+                    <h3>{workflow.name}</h3>
+                    <div className="card-actions">
+                      <button
+                        className="action-btn"
+                        onClick={() => handleExecuteWorkflow(workflow.id!)}
+                        title="Execute"
+                      >
+                        <Play size={16} />
+                      </button>
+                      <button
+                        className="action-btn"
+                        onClick={() => window.location.href = `/designer/${workflow.id}`}
+                        title="Edit"
+                      >
+                        <Edit size={16} />
+                      </button>
+                      <button
+                        className="action-btn danger"
+                        onClick={() => handleDeleteWorkflow(workflow.id!)}
+                        title="Delete"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="card-content">
+                    <p className="workflow-description">
+                      {workflow.description || 'No description provided'}
+                    </p>
+                    
+                    <div className="workflow-stats">
+                      <div className="stat">
+                        <span className="stat-label">Nodes:</span>
+                        <span className="stat-value">{workflow.definition?.nodes?.length || 0}</span>
+                      </div>
+                      <div className="stat">
+                        <span className="stat-label">Connections:</span>
+                        <span className="stat-value">{workflow.definition?.edges?.length || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="card-footer">
+                    <div className="workflow-status">
+                      <span className="status-badge active">Active</span>
+                    </div>
+                    <div className="workflow-date">
+                      <Calendar size={14} />
+                      <span>Created today</span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

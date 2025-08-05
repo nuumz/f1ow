@@ -54,19 +54,12 @@
 }
 
 .dashboard {
-  padding: spacing(4);
-  max-width: 1280px;
-  margin: 0 auto;
-  width: 100%;
-  height: 100%;
-  min-height: 100%;
-  box-sizing: border-box;
-  background: color(bg-light);
-  font-family: $font-family-base;
   @include flex-column;
+  gap: spacing(6);
+  width: 100%;
 
   @include respond-to(md) {
-    padding: spacing(3);
+    gap: spacing(4);
   }
 }
 
@@ -414,10 +407,12 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
   gap: spacing(6);
+  margin-bottom: spacing(6);
 
   @include respond-to(md) {
     grid-template-columns: 1fr;
     gap: spacing(4);
+    margin-bottom: spacing(4);
   }
 }
 
@@ -607,9 +602,12 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
   gap: spacing(6);
+  margin-bottom: spacing(6);
 
   @include respond-to(md) {
     grid-template-columns: 1fr;
+    gap: spacing(4);
+    margin-bottom: spacing(4);
   }
 }
 
@@ -1295,19 +1293,6 @@
   // Full variant for regular pages
   &--full {
     border-radius: 0;
-  }
-}
-
-.footer-content {
-  display: grid;
-  grid-template-columns: 1fr 2fr 1fr;
-  gap: spacing(8);
-  padding: spacing(8) spacing(6);
-  
-  @include respond-to(lg) {
-    grid-template-columns: 1fr;
-    gap: spacing(6);
-    text-align: center;
   }
 }
 

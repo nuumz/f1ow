@@ -6,6 +6,19 @@
 @use "sass:color";
 @use "sass:list";
 
+// ===== MAIN WORKFLOW DESIGNER CONTAINER =====
+
+.workflow-designer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-height: 100%;
+  overflow: hidden;
+  background: #f8fafc;
+  position: relative;
+}
+
 // ===== SCSS VARIABLES =====
 
 // Opacity values
@@ -347,6 +360,7 @@ $breakpoints: (
   flex: 1;
   overflow: hidden;
   min-height: 0;
+  height: 100%;
 
   @include media(tablet) {
     flex-direction: column;
@@ -476,6 +490,11 @@ $button-variants: (
 
 // Enhanced grid animation during drag operations
 .canvas-container {
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  
   &.drag-over {
     background: #e3f2fd;
     

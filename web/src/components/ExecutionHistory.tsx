@@ -9,8 +9,6 @@ import {
   Timer,
   Activity
 } from 'lucide-react'
-import AppFooter from './AppFooter'
-import { FOOTER_CONFIGS } from '../hooks/useFooter'
 
 interface Execution {
   id: string
@@ -20,8 +18,8 @@ interface Execution {
   startTime: string
   endTime?: string
   duration?: number
-  input: any
-  output?: any
+  input: Record<string, unknown>
+  output?: Record<string, unknown>
   error?: string
   nodeExecutions?: NodeExecution[]
 }
@@ -33,8 +31,8 @@ interface NodeExecution {
   startTime: string
   endTime?: string
   duration?: number
-  input?: any
-  output?: any
+  input?: Record<string, unknown>
+  output?: Record<string, unknown>
   error?: string
 }
 
@@ -146,15 +144,23 @@ export default function ExecutionHistory() {
 
   if (loading) {
     return (
-      <div className="execution-history-loading">
-        <div className="loading-spinner"></div>
-        <p>Loading execution history...</p>
+      <div className="page-container">
+        <div className="container">
+          <div className="execution-history">
+            <div className="loading-container">
+              <div className="loading-spinner"></div>
+              <p>Loading execution history...</p>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="execution-history">
+    <div className="page-container">
+      <div className="container">
+        <div className="execution-history">
       <div className="history-header">
         <div className="header-title">
           <h1>Execution History</h1>
@@ -224,7 +230,7 @@ export default function ExecutionHistory() {
 
       <div className="execution-list">
         {filteredExecutions.length === 0 ? (
-          <div className="empty-state">
+          <div className="empty-executions">
             <div className="empty-icon">📊</div>
             <h3>No executions found</h3>
             <p>Execute a workflow to see its history here</p>
@@ -233,10 +239,10 @@ export default function ExecutionHistory() {
           filteredExecutions.map((execution) => (
             <div 
               key={execution.id} 
-              className={`execution-item ${execution.status}`}
+              className="execution-item"
               onClick={() => setSelectedExecution(execution)}
             >
-              <div className="execution-main">
+              <div className="execution-header">
                 <div className="execution-status">
                   {getStatusIcon(execution.status)}
                   <span className={`status-text ${execution.status}`}>
@@ -307,25 +313,26 @@ export default function ExecutionHistory() {
               
               <div className="detail-section">
                 <h4>Input Data</h4>
-                <pre className="code-block">
-                  {JSON.stringify(selectedExecution.input, null, 2)}
-                </pre>
+                <div className="json-display">
+                  <pre>{JSON.stringify(selectedExecution.input, null, 2)}</pre>
+                </div>
               </div>
               
               {selectedExecution.output && (
                 <div className="detail-section">
                   <h4>Output Data</h4>
-                  <pre className="code-block">
-                    {JSON.stringify(selectedExecution.output, null, 2)}
-                  </pre>
+                  <div className="json-display">
+                    <pre>{JSON.stringify(selectedExecution.output, null, 2)}</pre>
+                  </div>
                 </div>
               )}
               
               {selectedExecution.error && (
                 <div className="detail-section">
                   <h4>Error Details</h4>
-                  <div className="error-block">
-                    {selectedExecution.error}
+                  <div className="execution-error">
+                    <XCircle size={16} />
+                    <span>{selectedExecution.error}</span>
                   </div>
                 </div>
               )}
@@ -333,9 +340,8 @@ export default function ExecutionHistory() {
           </div>
         </div>
       )}
-      
-      {/* App Footer */}
-      <AppFooter config={FOOTER_CONFIGS.PAGE} />
+        </div>
+      </div>
     </div>
   )
 }

@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react'
 import { GitBranch, Clock, User, Tag, Download, Eye, Plus, RotateCcw, AlertCircle } from 'lucide-react'
-import AppFooter from './AppFooter'
-import { FOOTER_CONFIGS } from '../hooks/useFooter'
 
 interface WorkflowVersion {
   id: string
@@ -153,8 +151,10 @@ export function WorkflowVersions({ workflowId, onVersionSelect, onCreateVersion 
   // }
 
   return (
-    <div className="workflow-versions">
-      <div className="versions-header">
+    <div className="page-container">
+      <div className="container">
+        <div className="workflow-versions">
+          <div className="versions-header">
         <div className="header-title">
           <h2>Workflow Versions</h2>
           <p>Manage and track different versions of your workflow</p>
@@ -405,7 +405,9 @@ export function WorkflowVersions({ workflowId, onVersionSelect, onCreateVersion 
           </div>
         </div>
       )}
-    </div>
+        </div>
+      </div>
+    </div>  
   )
 }
 
@@ -428,15 +430,4 @@ function Archive({ size }: { size: number }) {
   )
 }
 
-// Main component that includes AppFooter
-const WorkflowVersionsWithFooter = (props: { workflowId: string }) => {
-  return (
-    <div>
-      <WorkflowVersions {...props} />
-      {/* App Footer */}
-      <AppFooter config={FOOTER_CONFIGS.PAGE} />
-    </div>
-  )
-}
-
-export default WorkflowVersionsWithFooter
+export default WorkflowVersions

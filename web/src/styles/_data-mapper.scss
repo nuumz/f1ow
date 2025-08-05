@@ -1,0 +1,720 @@
+// ===== DATA MAPPER STYLES =====
+
+@use 'variables' as *;
+@use 'functions' as *;
+
+.data-mapper {
+  @include flex-column;
+  height: 100%;
+  background: color(bg-light);
+
+  .mapper-header {
+    @include flex-between;
+    align-items: center;
+    padding: spacing(4) spacing(6);
+    background: white;
+    border-bottom: 1px solid color(border-light);
+    flex-shrink: 0;
+
+    .header-title {
+      h1 {
+        font-size: font-size(2xl);
+        font-weight: font-weight(bold);
+        color: color(text-dark);
+        margin: 0 0 spacing(1) 0;
+      }
+
+      p {
+        font-size: font-size(base);
+        color: color(text-secondary);
+        margin: 0;
+      }
+    }
+
+    .header-actions {
+      @include flex-center;
+      gap: spacing(3);
+
+      .btn {
+        @include flex-center;
+        gap: spacing(2);
+        padding: spacing(2) spacing(4);
+        border: 1px solid color(border-color);
+        background: white;
+        color: color(text-secondary);
+        border-radius: border-radius(base);
+        font-size: font-size(sm);
+        font-weight: font-weight(medium);
+        cursor: pointer;
+        transition: transition(base);
+
+        &:hover {
+          border-color: color(primary);
+          color: color(primary);
+        }
+
+        &.btn-primary {
+          background: color(primary);
+          border-color: color(primary);
+          color: white;
+
+          &:hover {
+            background: color(primary-dark);
+          }
+        }
+      }
+    }
+  }
+
+  .mapper-content {
+    @include flex-row;
+    flex: 1;
+    overflow: hidden;
+
+    .mapper-panel {
+      flex: 1;
+      @include flex-column;
+      background: white;
+      border-right: 1px solid color(border-light);
+
+      &:last-child {
+        border-right: none;
+      }
+
+      .panel-header {
+        @include flex-between;
+        align-items: center;
+        padding: spacing(4) spacing(5);
+        border-bottom: 1px solid color(border-light);
+        background: color(bg-light);
+
+        h3 {
+          font-size: font-size(lg);
+          font-weight: font-weight(semibold);
+          color: color(text-dark);
+          margin: 0;
+        }
+
+        .panel-actions {
+          @include flex-center;
+          gap: spacing(2);
+
+          .action-btn {
+            @include flex-center;
+            width: 32px;
+            height: 32px;
+            border: 1px solid color(border-color);
+            background: white;
+            color: color(text-secondary);
+            border-radius: border-radius(base);
+            cursor: pointer;
+            transition: transition(base);
+
+            &:hover {
+              border-color: color(primary);
+              color: color(primary);
+            }
+          }
+        }
+      }
+
+      .panel-content {
+        flex: 1;
+        padding: spacing(4);
+        overflow-y: auto;
+
+        .schema-tree {
+          .tree-node {
+            margin-bottom: spacing(2);
+
+            .node-item {
+              @include flex-between;
+              align-items: center;
+              padding: spacing(2) spacing(3);
+              border: 1px solid color(border-light);
+              border-radius: border-radius(base);
+              background: white;
+              cursor: pointer;
+              transition: transition(base);
+
+              &:hover {
+                border-color: color(primary);
+                background: rgba(color(primary), 0.05);
+              }
+
+              &.mappable {
+                cursor: crosshair;
+
+                &:hover {
+                  border-color: color(success);
+                  background: rgba(color(success), 0.05);
+                }
+              }
+
+              &.mapped {
+                border-color: color(success);
+                background: rgba(color(success), 0.1);
+              }
+
+              .node-info {
+                @include flex-center;
+                gap: spacing(2);
+
+                .node-icon {
+                  color: color(text-light);
+                  flex-shrink: 0;
+                }
+
+                .node-label {
+                  font-size: font-size(sm);
+                  font-weight: font-weight(medium);
+                  color: color(text-dark);
+                }
+
+                .node-type {
+                  font-size: font-size(xs);
+                  color: color(text-light);
+                  background: color(bg-light);
+                  padding: spacing(1) spacing(2);
+                  border-radius: border-radius(sm);
+                }
+              }
+
+              .node-actions {
+                @include flex-center;
+                gap: spacing(1);
+
+                .action-btn {
+                  @include flex-center;
+                  width: 24px;
+                  height: 24px;
+                  border: none;
+                  background: none;
+                  color: color(text-light);
+                  cursor: pointer;
+                  border-radius: border-radius(sm);
+                  transition: transition(base);
+
+                  &:hover {
+                    background: color(bg-light);
+                    color: color(text-dark);
+                  }
+
+                  &.danger:hover {
+                    background: rgba(color(danger), 0.1);
+                    color: color(danger);
+                  }
+                }
+              }
+            }
+
+            .child-nodes {
+              margin-left: spacing(4);
+              margin-top: spacing(2);
+              border-left: 2px solid color(border-light);
+              padding-left: spacing(3);
+            }
+          }
+        }
+
+        .data-preview {
+          .preview-header {
+            @include flex-between;
+            align-items: center;
+            margin-bottom: spacing(3);
+
+            h4 {
+              font-size: font-size(base);
+              font-weight: font-weight(semibold);
+              color: color(text-dark);
+              margin: 0;
+            }
+
+            .format-toggle {
+              @include flex-center;
+              border: 1px solid color(border-color);
+              border-radius: border-radius(base);
+              overflow: hidden;
+
+              .toggle-btn {
+                padding: spacing(1) spacing(3);
+                border: none;
+                background: white;
+                color: color(text-secondary);
+                font-size: font-size(xs);
+                cursor: pointer;
+                transition: transition(base);
+
+                &:hover {
+                  background: color(bg-light);
+                }
+
+                &.active {
+                  background: color(primary);
+                  color: white;
+                }
+              }
+            }
+          }
+
+          .preview-content {
+            background: color(bg-light);
+            border: 1px solid color(border-light);
+            border-radius: border-radius(base);
+            padding: spacing(4);
+            font-family: 'Courier New', monospace;
+            font-size: font-size(sm);
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+
+            &.json-format {
+              .json-key {
+                color: color(primary);
+              }
+
+              .json-string {
+                color: color(success);
+              }
+
+              .json-number {
+                color: color(warning);
+              }
+
+              .json-boolean {
+                color: color(info);
+              }
+
+              .json-null {
+                color: color(text-light);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    .mapping-canvas {
+      position: relative;
+      width: 300px;
+      flex-shrink: 0;
+      background: color(surface);
+      border-left: 1px solid color(border-light);
+      border-right: 1px solid color(border-light);
+
+      .canvas-header {
+        padding: spacing(4);
+        border-bottom: 1px solid color(border-light);
+        background: color(bg-light);
+        text-align: center;
+
+        h3 {
+          font-size: font-size(base);
+          font-weight: font-weight(semibold);
+          color: color(text-dark);
+          margin: 0 0 spacing(2) 0;
+        }
+
+        .mapping-stats {
+          font-size: font-size(sm);
+          color: color(text-secondary);
+
+          .stat {
+            @include flex-center;
+            justify-content: center;
+            gap: spacing(1);
+          }
+        }
+      }
+
+      .canvas-content {
+        position: relative;
+        height: calc(100% - 80px);
+        overflow: hidden;
+
+        svg {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          pointer-events: none;
+
+          .mapping-line {
+            stroke: color(primary);
+            stroke-width: 2;
+            fill: none;
+            marker-end: url(#arrowhead);
+            transition: transition(base);
+
+            &:hover {
+              stroke: color(primary-dark);
+              stroke-width: 3;
+            }
+
+            &.invalid {
+              stroke: color(danger);
+              stroke-dasharray: 5,5;
+            }
+          }
+
+          .mapping-dot {
+            fill: color(primary);
+            r: 4;
+            transition: transition(base);
+
+            &:hover {
+              fill: color(primary-dark);
+              r: 6;
+            }
+          }
+
+          // SVG marker definitions are handled in component JavaScript
+          // Marker properties like markerWidth, markerHeight, refX, refY, orient
+          // are applied as HTML attributes, not CSS properties
+        }
+
+        .mapping-controls {
+          position: absolute;
+          bottom: spacing(4);
+          right: spacing(4);
+          @include flex-column;
+          gap: spacing(2);
+
+          .control-btn {
+            @include flex-center;
+            width: 40px;
+            height: 40px;
+            background: white;
+            border: 1px solid color(border-color);
+            border-radius: border-radius(full);
+            color: color(text-secondary);
+            cursor: pointer;
+            box-shadow: shadow(sm);
+            transition: transition(base);
+
+            &:hover {
+              border-color: color(primary);
+              color: color(primary);
+              box-shadow: shadow(md);
+            }
+
+            &.active {
+              background: color(primary);
+              border-color: color(primary);
+              color: white;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  .mapping-rules {
+    padding: spacing(6);
+    border-top: 1px solid color(border-light);
+    background: white;
+
+    .rules-header {
+      @include flex-between;
+      align-items: center;
+      margin-bottom: spacing(4);
+
+      h3 {
+        font-size: font-size(lg);
+        font-weight: font-weight(semibold);
+        color: color(text-dark);
+        margin: 0;
+      }
+
+      .add-rule-btn {
+        @include flex-center;
+        gap: spacing(2);
+        padding: spacing(2) spacing(3);
+        background: color(primary);
+        color: white;
+        border: none;
+        border-radius: border-radius(base);
+        font-size: font-size(sm);
+        cursor: pointer;
+        transition: transition(base);
+
+        &:hover {
+          background: color(primary-dark);
+        }
+      }
+    }
+
+    .rules-list {
+      @include flex-column;
+      gap: spacing(3);
+
+      .rule-item {
+        @include flex-between;
+        align-items: center;
+        padding: spacing(4);
+        border: 1px solid color(border-light);
+        border-radius: border-radius(base);
+        background: color(bg-light);
+
+        .rule-info {
+          flex: 1;
+
+          .rule-path {
+            @include flex-center;
+            gap: spacing(2);
+            margin-bottom: spacing(1);
+
+            .path-segment {
+              font-family: 'Courier New', monospace;
+              font-size: font-size(sm);
+              background: white;
+              padding: spacing(1) spacing(2);
+              border-radius: border-radius(sm);
+              border: 1px solid color(border-color);
+            }
+
+            .arrow {
+              color: color(primary);
+            }
+          }
+
+          .rule-transformation {
+            font-size: font-size(sm);
+            color: color(text-secondary);
+
+            .transform-type {
+              font-weight: font-weight(medium);
+              color: color(primary);
+            }
+          }
+        }
+
+        .rule-actions {
+          @include flex-center;
+          gap: spacing(2);
+
+          .action-btn {
+            @include flex-center;
+            width: 32px;
+            height: 32px;
+            border: 1px solid color(border-color);
+            background: white;
+            color: color(text-secondary);
+            border-radius: border-radius(base);
+            cursor: pointer;
+            transition: transition(base);
+
+            &:hover {
+              border-color: color(primary);
+              color: color(primary);
+            }
+
+            &.danger:hover {
+              border-color: color(danger);
+              color: color(danger);
+            }
+          }
+        }
+      }
+    }
+
+    .empty-rules {
+      text-align: center;
+      padding: spacing(8);
+      color: color(text-secondary);
+
+      .empty-icon {
+        font-size: 3rem;
+        margin-bottom: spacing(3);
+        opacity: 0.5;
+      }
+
+      h4 {
+        font-size: font-size(base);
+        font-weight: font-weight(semibold);
+        color: color(text-dark);
+        margin: 0 0 spacing(2) 0;
+      }
+
+      p {
+        font-size: font-size(sm);
+        margin: 0;
+      }
+    }
+  }
+
+  // Testing Panel
+  .testing-panel {
+    border-top: 1px solid color(border-light);
+    background: white;
+
+    .panel-toggle {
+      @include flex-between;
+      align-items: center;
+      padding: spacing(3) spacing(6);
+      cursor: pointer;
+      border-bottom: 1px solid color(border-light);
+      transition: transition(base);
+
+      &:hover {
+        background: color(bg-light);
+      }
+
+      h4 {
+        font-size: font-size(base);
+        font-weight: font-weight(semibold);
+        color: color(text-dark);
+        margin: 0;
+      }
+
+      .toggle-icon {
+        color: color(text-light);
+        transition: transform transition(base);
+
+        &.expanded {
+          transform: rotate(180deg);
+        }
+      }
+    }
+
+    .panel-content {
+      padding: spacing(6);
+
+      .test-input {
+        margin-bottom: spacing(4);
+
+        label {
+          display: block;
+          font-size: font-size(sm);
+          font-weight: font-weight(medium);
+          color: color(text-dark);
+          margin-bottom: spacing(2);
+        }
+
+        textarea {
+          width: 100%;
+          min-height: 120px;
+          padding: spacing(3);
+          border: 1px solid color(border-color);
+          border-radius: border-radius(base);
+          font-family: 'Courier New', monospace;
+          font-size: font-size(sm);
+          resize: vertical;
+
+          &:focus {
+            outline: none;
+            border-color: color(primary);
+          }
+        }
+      }
+
+      .test-actions {
+        @include flex-center;
+        gap: spacing(3);
+        margin-bottom: spacing(4);
+
+        .btn {
+          @include flex-center;
+          gap: spacing(2);
+          padding: spacing(3) spacing(4);
+          border: 1px solid color(border-color);
+          background: white;
+          color: color(text-secondary);
+          border-radius: border-radius(base);
+          font-size: font-size(sm);
+          cursor: pointer;
+          transition: transition(base);
+
+          &:hover {
+            border-color: color(primary);
+            color: color(primary);
+          }
+
+          &.btn-primary {
+            background: color(primary);
+            border-color: color(primary);
+            color: white;
+
+            &:hover {
+              background: color(primary-dark);
+            }
+          }
+        }
+      }
+
+      .test-result {
+        .result-header {
+          @include flex-between;
+          align-items: center;
+          margin-bottom: spacing(3);
+
+          h5 {
+            font-size: font-size(base);
+            font-weight: font-weight(semibold);
+            color: color(text-dark);
+            margin: 0;
+          }
+
+          .result-status {
+            @include flex-center;
+            gap: spacing(1);
+            font-size: font-size(sm);
+            font-weight: font-weight(medium);
+
+            &.success {
+              color: color(success);
+            }
+
+            &.error {
+              color: color(danger);
+            }
+          }
+        }
+
+        .result-content {
+          background: color(bg-light);
+          border: 1px solid color(border-light);
+          border-radius: border-radius(base);
+          padding: spacing(4);
+          font-family: 'Courier New', monospace;
+          font-size: font-size(sm);
+          white-space: pre-wrap;
+          word-break: break-all;
+          max-height: 300px;
+          overflow-y: auto;
+
+          &.error {
+            border-color: rgba(color(danger), 0.3);
+            background: rgba(color(danger), 0.05);
+            color: color(danger-dark);
+          }
+        }
+      }
+    }
+  }
+}
+
+// Responsive Design
+@include respond-to(md) {
+  .data-mapper {
+    .mapper-content {
+      flex-direction: column;
+
+      .mapper-panel {
+        border-right: none;
+        border-bottom: 1px solid color(border-light);
+      }
+
+      .mapping-canvas {
+        width: 100%;
+        height: 300px;
+        border-left: none;
+        border-right: none;
+        border-top: 1px solid color(border-light);
+        border-bottom: 1px solid color(border-light);
+      }
+    }
+  }
+}

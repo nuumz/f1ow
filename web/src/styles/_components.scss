@@ -11,6 +11,8 @@
   @include flex-between;
   box-shadow: shadow(md);
   min-height: $navbar-height;
+  max-height: $navbar-height;
+  height: $navbar-height;
 
   @include respond-to(md) {
     padding: spacing(3) spacing(4);
@@ -440,3 +442,221 @@
     color: color(danger-dark);
   }
 }
+
+// App Footer
+.app-footer {
+  background: white;
+  border-top: 1px solid color(border-color);
+  color: color(text-primary);
+  margin-top: auto;
+
+  .footer-content {
+    @include flex-between;
+    align-items: flex-start;
+    padding: spacing(8) spacing(8);
+    gap: spacing(8);
+    max-width: $container-xl;
+    margin: 0 auto;
+
+    @include respond-to(lg) {
+      flex-direction: column;
+      gap: spacing(6);
+    }
+  }
+
+  .footer-left {
+    flex: 1;
+    max-width: 300px;
+
+    @include respond-to(lg) {
+      max-width: none;
+      text-align: center;
+    }
+  }
+
+  .footer-center {
+    flex: 2;
+
+    @include respond-to(lg) {
+      order: 3;
+    }
+  }
+
+  .footer-right {
+    flex: 1;
+    @include flex-center;
+    justify-content: flex-end;
+
+    @include respond-to(lg) {
+      order: 2;
+      justify-content: center;
+    }
+  }
+
+  .footer-brand {
+    @include flex-center;
+    gap: spacing(2);
+    margin-bottom: spacing(3);
+    font-size: font-size(lg);
+    font-weight: font-weight(semibold);
+    color: color(primary);
+
+    @include respond-to(lg) {
+      justify-content: center;
+    }
+  }
+
+  .footer-description {
+    font-size: font-size(sm);
+    color: color(text-secondary);
+    line-height: line-height(relaxed);
+    margin: 0;
+  }
+
+  .footer-links {
+    display: flex;
+    gap: spacing(8);
+
+    @include respond-to(md) {
+      flex-direction: column;
+      gap: spacing(4);
+      text-align: center;
+    }
+  }
+
+  .footer-section {
+    h4 {
+      font-size: font-size(sm);
+      font-weight: font-weight(semibold);
+      color: color(text-primary);
+      margin: 0 0 spacing(3) 0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    li {
+      margin-bottom: spacing(2);
+    }
+
+    a {
+      color: color(text-secondary);
+      text-decoration: none;
+      font-size: font-size(sm);
+      transition: transition(base);
+
+      &:hover {
+        color: color(primary);
+      }
+    }
+  }
+
+  .footer-stats {
+    display: flex;
+    gap: spacing(6);
+
+    @include respond-to(md) {
+      justify-content: center;
+    }
+  }
+
+  .stat-item {
+    text-align: center;
+
+    .stat-value {
+      font-size: font-size(2xl);
+      font-weight: font-weight(bold);
+      color: color(primary);
+      margin-bottom: spacing(1);
+    }
+
+    .stat-label {
+      font-size: font-size(xs);
+      color: color(text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+  }
+
+  .footer-bottom {
+    background: color(bg-light);
+    border-top: 1px solid color(border-color);
+    padding: spacing(4) spacing(8);
+
+    .footer-bottom-content {
+      @include flex-between;
+      align-items: center;
+      max-width: $container-xl;
+      margin: 0 auto;
+
+      @include respond-to(md) {
+        flex-direction: column;
+        gap: spacing(2);
+        text-align: center;
+      }
+
+      p {
+        margin: 0;
+        font-size: font-size(sm);
+        color: color(text-secondary);
+      }
+    }
+
+    .footer-meta {
+      display: flex;
+      align-items: center;
+      gap: spacing(2);
+      font-size: font-size(xs);
+      color: color(text-muted);
+
+      @include respond-to(md) {
+        justify-content: center;
+      }
+
+      span {
+        &:not(:last-child) {
+          margin-right: spacing(2);
+        }
+      }
+    }
+  }
+
+  // Footer variants
+  &.app-footer--minimal {
+    padding: spacing(4) spacing(8);
+
+    .footer-minimal-content {
+      @include flex-between;
+      align-items: center;
+      max-width: $container-xl;
+      margin: 0 auto;
+
+      @include respond-to(md) {
+        flex-direction: column;
+        gap: spacing(2);
+        text-align: center;
+      }
+
+      p {
+        margin: 0;
+        font-size: font-size(sm);
+        color: color(text-secondary);
+      }
+    }
+
+    .footer-minimal-meta {
+      font-size: font-size(xs);
+      color: color(text-muted);
+    }
+  }
+
+}
+
+// Workflow Templates - Moved to _workflow-templates.scss
+
+// Execution History - Moved to _execution-history.scss

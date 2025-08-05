@@ -96,6 +96,12 @@
   flex-direction: column;
 }
 
+// Mixin for flex row
+@mixin flex-row {
+  display: flex;
+  flex-direction: row;
+}
+
 // Mixin for absolute positioning
 @mixin absolute($top: null, $right: null, $bottom: null, $left: null) {
   position: absolute;

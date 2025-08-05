@@ -1,0 +1,504 @@
+// ===== DASHBOARD CHARTS STYLES =====
+
+@use 'variables' as *;
+@use 'functions' as *;
+
+// Chart Animation Keyframes
+@keyframes barGrow {
+  0% {
+    height: 0;
+    opacity: 0.8;
+  }
+  100% {
+    height: var(--bar-height);
+    opacity: 1;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+// Charts Section
+.charts-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: spacing(6);
+  margin-bottom: spacing(6);
+
+  @include respond-to(md) {
+    grid-template-columns: 1fr;
+    gap: spacing(4);
+    margin-bottom: spacing(4);
+  }
+}
+
+.chart-card {
+  @include card(spacing(6));
+  transition: all transition(base);
+  box-shadow: 
+    0 4px 20px rgba(0, 0, 0, 0.08),
+    0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.95) 0%, 
+    rgba(248, 250, 252, 0.98) 100%);
+  position: relative;
+  overflow: hidden;
+  padding: spacing(4);
+  min-height: 400px;
+  display: flex;
+  flex-direction: column;
+
+  // Subtle animated background
+  &::before {
+    content: '';
+    @include absolute(0, 0, 0, 0);
+    background: linear-gradient(135deg, 
+      rgba(color(primary), 0.02) 0%, 
+      transparent 50%);
+    opacity: 0;
+    transition: opacity transition(base);
+  }
+
+  &:hover {
+    border-color: rgba(color(primary), 0.2);
+    
+    &::before {
+      opacity: 1;
+    }
+  }
+
+  // For modern chart cards
+  &.modern-chart {
+    padding: spacing(4);
+    min-height: 400px;
+
+    .chart-header {
+      margin-bottom: spacing(4);
+      padding-bottom: spacing(3);
+      border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+      
+      h3 {
+        font-size: font-size(2xl);
+        font-weight: font-weight(bold);
+        color: color(text-dark);
+        margin: 0 0 spacing(2) 0;
+        line-height: line-height(tight);
+        white-space: nowrap;
+      }
+
+      .chart-subtitle {
+        font-size: font-size(base);
+        color: color(text-light);
+        margin: 0 0 0 1rem;
+        line-height: line-height(relaxed);
+        letter-spacing: 0.2px;
+      }
+    }
+  }
+}
+
+.chart-header {
+  @include flex-between;
+  align-items: flex-start;
+  margin-bottom: spacing(4);
+  padding-bottom: spacing(3);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+
+  h3 {
+    margin: 0 0 spacing(1) 0;
+    font-size: font-size(2xl);
+    font-weight: font-weight(bold);
+    color: color(text-dark);
+    line-height: line-height(tight);
+    white-space: nowrap;
+  }
+}
+
+.chart-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 320px;
+}
+
+.chart-legend {
+  @include flex-center;
+  gap: spacing(6);
+  padding: spacing(2) spacing(4);
+  background: rgba(248, 250, 252, 0.8);
+  border-radius: border-radius(full);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+}
+
+.legend-item {
+  @include flex-center;
+  gap: spacing(2);
+  font-size: font-size(sm);
+  font-weight: font-weight(medium);
+  padding: spacing(1) spacing(2);
+  border-radius: border-radius(sm);
+  transition: all transition(base);
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.8);
+    transform: translateY(-1px);
+  }
+
+  .legend-color {
+    width: 14px;
+    height: 14px;
+    border-radius: border-radius(full);
+    flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+    box-shadow: shadow(sm);
+
+    // Same glossy effect as workflow-status__indicator
+    &::before {
+      content: '';
+      @include absolute(0, null, null, 0);
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, rgba(255,255,255,0.3), rgba(255,255,255,0));
+      pointer-events: none;
+    }
+
+    &.success {
+      background: linear-gradient(135deg, color(success-light), color(success-lighter));
+    }
+
+    &.failed {
+      background: linear-gradient(135deg, color(danger-light), color(danger-lighter));
+    }
+  }
+}
+
+.chart-filter {
+  padding: spacing(2);
+  border: 1px solid color(border-color);
+  border-radius: border-radius(sm);
+  background: white;
+  font-size: font-size(sm);
+}
+
+// Modern Chart Container - Dynatrace Style
+.modern-chart-container {
+  position: relative;
+  height: 320px;
+  padding: spacing(4);
+  background: linear-gradient(180deg, 
+    rgba(248, 250, 252, 0.95) 0%, 
+    rgba(255, 255, 255, 0.98) 100%);
+  border-radius: border-radius(lg);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  overflow: hidden;
+
+  // Chart canvas
+  canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  // Chart overlay for gradients
+  &::before {
+    content: '';
+    @include absolute(0, 0, 0, 0);
+    background: linear-gradient(180deg, 
+      rgba(color(primary), 0.02) 0%, 
+      transparent 30%);
+    pointer-events: none;
+    z-index: 1;
+  }
+}
+
+// Chart Legend - Dynatrace Style
+.modern-chart-legend {
+  @include flex-center;
+  gap: spacing(4);
+  padding: spacing(1);
+  backdrop-filter: blur(8px);
+
+  .legend-item {
+    @include flex-center;
+    gap: spacing(2);
+    font-size: font-size(sm);
+    font-weight: font-weight(medium);
+    padding: spacing(1) spacing(3);
+    border-radius: border-radius(full);
+    transition: all transition(base);
+    cursor: pointer;
+    position: relative;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.9);
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .legend-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: border-radius(full);
+      position: relative;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+
+      &::before {
+        content: '';
+        @include absolute(1px, 1px, 1px, 1px);
+        background: rgba(255, 255, 255, 0.4);
+        border-radius: border-radius(full);
+      }
+
+      &.success {
+        background: linear-gradient(135deg, rgba(208, 215, 229, 0.8), rgba(208, 215, 229, 1));
+      }
+
+      &.failed {
+        background: linear-gradient(135deg, rgba(220, 38, 38, 1), rgba(185, 28, 28, 1));
+      }
+
+      &.rate {
+        background: linear-gradient(135deg, rgba(59, 130, 246, 1), rgba(37, 99, 235, 1));
+      }
+
+      &.requests {
+        background: linear-gradient(135deg, rgba(226, 232, 240, 1), rgba(203, 213, 225, 1));
+      }
+    }
+  }
+}
+
+// Chart Filters - Dynatrace Style
+.chart-filters {
+  @include flex-between;
+  align-items: center;
+  margin-bottom: spacing(4);
+  padding: spacing(1) spacing(2);
+  background: rgba(248, 250, 252, 0.8);
+  border-radius: border-radius(md);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+
+  .filter-group {
+    @include flex-center;
+    gap: spacing(2);
+
+    .filter-btn {
+      padding: spacing(2) spacing(4);
+      border: 1px solid rgba(226, 232, 240, 0.8);
+      border-radius: border-radius(sm);
+      background: rgba(255, 255, 255, 0.9);
+      color: color(text-secondary);
+      font-size: font-size(sm);
+      font-weight: font-weight(medium);
+      cursor: pointer;
+      transition: all transition(base);
+
+      &:hover {
+        background: rgba(color(primary), 0.1);
+        border-color: rgba(color(primary), 0.3);
+        color: color(primary);
+      }
+
+      &.active {
+        background: color(primary);
+        border-color: color(primary);
+        color: white;
+        box-shadow: 0 2px 4px rgba(color(primary), 0.3);
+      }
+    }
+  }
+
+  .time-range {
+    font-size: font-size(base);
+    color: color(text-primary);
+    font-weight: font-weight(semibold);
+    padding: spacing(1) spacing(3);
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: border-radius(sm);
+    border: 1px solid rgba(226, 232, 240, 0.6);
+  }
+}
+
+// Fallback Simple Chart (for when Chart.js is not available)
+.simple-chart {
+  @include flex-center;
+  justify-content: space-between;
+  height: 240px;
+  gap: spacing(2);
+  padding: spacing(4) spacing(2);
+  background: linear-gradient(180deg, 
+    rgba(248, 250, 252, 0.8) 0%, 
+    rgba(255, 255, 255, 0.9) 100%);
+  border-radius: border-radius(md);
+  position: relative;
+
+  // Grid lines for better readability
+  &::before {
+    content: '';
+    @include absolute(spacing(4), spacing(2), spacing(6), spacing(2));
+    background-image: 
+      linear-gradient(to right, rgba(226, 232, 240, 0.6) 1px, transparent 1px),
+      linear-gradient(to top, rgba(226, 232, 240, 0.6) 1px, transparent 1px);
+    background-size: 20px 20px;
+    pointer-events: none;
+    opacity: 0.7;
+  }
+}
+
+// Chart.js Custom Styling
+.chart-container {
+  position: relative;
+
+  // Custom tooltip styling
+  .chartjs-tooltip {
+    background: rgba(0, 0, 0, 0.9);
+    backdrop-filter: blur(8px);
+    border-radius: border-radius(md);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    font-size: font-size(sm);
+    font-weight: font-weight(medium);
+    padding: spacing(3);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    pointer-events: none;
+    position: absolute;
+    transition: all transition(base);
+    z-index: 1000;
+
+    &.active {
+      opacity: 1;
+    }
+
+    .tooltip-title {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+      margin-bottom: spacing(2);
+      padding-bottom: spacing(1);
+      font-weight: font-weight(semibold);
+    }
+
+    .tooltip-body {
+      .tooltip-item {
+        @include flex-between;
+        margin-bottom: spacing(1);
+
+        .label {
+          @include flex-center;
+          gap: spacing(1);
+
+          .color-box {
+            width: 8px;
+            height: 8px;
+            border-radius: border-radius(xs);
+          }
+        }
+
+        .value {
+          font-weight: font-weight(bold);
+        }
+      }
+    }
+  }
+}
+
+// Chart Performance Enhancements
+.chart-performance-overlay {
+  @include absolute(0, 0, 0, 0);
+  pointer-events: none;
+  z-index: 10;
+
+  // Loading state
+  &.loading {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(4px);
+
+    &::after {
+      content: '';
+      @include absolute(50%, 50%, null, null);
+      transform: translate(-50%, -50%);
+      width: 32px;
+      height: 32px;
+      border: 3px solid rgba(color(primary), 0.3);
+      border-top-color: color(primary);
+      border-radius: border-radius(full);
+      animation: spin 1s linear infinite;
+    }
+  }
+}
+
+.bar {
+  width: 32px;
+  border-radius: border-radius(sm) border-radius(sm) 0 0;
+  transition: all transition(smooth);
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+  // Glossy effect
+  &::before {
+    content: '';
+    @include absolute(0, 0, null, 0);
+    height: 40%;
+    background: linear-gradient(180deg, 
+      rgba(255, 255, 255, 0.3) 0%, 
+      rgba(255, 255, 255, 0.1) 70%,
+      transparent 100%);
+    pointer-events: none;
+  }
+
+  // Pulse animation for active state
+  &:hover {
+    box-shadow: 
+      0 4px 16px rgba(0, 0, 0, 0.15),
+      0 0 0 2px rgba(255, 255, 255, 0.8);
+  }
+
+  &.success {
+    background: linear-gradient(to top, 
+      #{color(success-dark)} 0%,
+      #{color(success)} 70%,
+      #{color(success-light)} 100%);
+    
+    &:hover {
+      box-shadow: 
+        0 4px 16px rgba(color(success), 0.3),
+        0 0 0 2px rgba(255, 255, 255, 0.8);
+    }
+  }
+
+  &.failed {
+    background: linear-gradient(to top,
+      #{color(danger-dark)} 0%,
+      #{color(danger)} 70%, 
+      #{color(danger-light)} 100%);
+    
+    &:hover {
+      box-shadow: 
+        0 4px 16px rgba(color(danger), 0.3),
+        0 0 0 2px rgba(255, 255, 255, 0.8);
+    }
+  }
+}
+
+.bar-label {
+  font-size: font-size(xs);
+  color: color(text-secondary);
+  text-align: center;
+  font-weight: font-weight(medium);
+  transition: all transition(base);
+  padding: spacing(1);
+  border-radius: border-radius(sm);
+  min-width: 40px;
+  
+  &:hover {
+    background: rgba(color(primary), 0.1);
+    color: color(primary);
+  }
+}

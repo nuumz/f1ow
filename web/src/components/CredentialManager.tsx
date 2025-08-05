@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, Edit, Trash2, Eye, EyeOff, Lock, Key, Shield, AlertTriangle } from 'lucide-react'
-import AppFooter from './AppFooter'
-import { FOOTER_CONFIGS } from '../hooks/useFooter'
 
 interface Credential {
   id: string
@@ -216,29 +214,33 @@ export default function CredentialManager() {
   }
 
   return (
-    <div className="credential-manager">
-      <div className="manager-header">
-        <div className="header-title">
-          <h2>Credential Manager</h2>
-          <p>Securely manage authentication credentials for your workflows</p>
-        </div>
-        
-        <div className="header-actions">
-          <div className="search-container">
-            <input
-              type="text"
-              placeholder="Search credentials..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="search-input"
-            />
+    <div className="page-container">
+      <div className="container">
+        <div className="credential-manager">
+          <div className="credential-header">
+            <div className="header-title">
+              <h1>Credential Manager</h1>
+              <p>Securely manage authentication credentials for your workflows</p>
+            </div>
+            
+            <div className="header-actions">
+              <button className="add-credential-btn" onClick={handleCreateCredential}>
+                <Plus size={16} />
+                Add Credential
+              </button>
+            </div>
           </div>
-          <button className="btn btn-primary" onClick={handleCreateCredential}>
-            <Plus size={16} />
-            Add Credential
-          </button>
-        </div>
-      </div>
+
+          <div className="credential-controls">
+            <div className="search-box">
+              <input
+                type="text"
+                placeholder="Search credentials..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
 
       <div className="credentials-grid">
         {filteredCredentials.map(credential => {
@@ -247,15 +249,15 @@ export default function CredentialManager() {
           
           return (
             <div key={credential.id} className="credential-card">
-              <div className="credential-header">
-                <div className="credential-icon">
-                  <Icon size={24} />
-                </div>
+              <div className="card-header">
                 <div className="credential-info">
-                  <h3>{credential.name}</h3>
-                  <div className="credential-type">{credType?.name || credential.type}</div>
+                  <h3 className="credential-name">{credential.name}</h3>
+                  <div className="credential-type">
+                    <Icon className="type-icon" size={16} />
+                    {credType?.name || credential.type}
+                  </div>
                 </div>
-                <div className="credential-actions">
+                <div className="card-actions">
                   <button
                     className="action-btn"
                     onClick={() => handleEditCredential(credential)}
@@ -273,31 +275,33 @@ export default function CredentialManager() {
                 </div>
               </div>
               
-              {credential.description && (
-                <p className="credential-description">{credential.description}</p>
-              )}
-              
-              <div className="credential-meta">
-                <div className="meta-item">
-                  <Lock size={14} />
-                  <span>Encrypted</span>
+              <div className="card-content">
+                {credential.description && (
+                  <p className="credential-description">{credential.description}</p>
+                )}
+                
+                <div className="credential-stats">
+                  <div className="stat">
+                    <Lock size={14} />
+                    <span>Encrypted</span>
+                  </div>
+                  <div className="stat">
+                    <span>Used by {credential.usedBy.length} workflow{credential.usedBy.length !== 1 ? 's' : ''}</span>
+                  </div>
                 </div>
-                <div className="meta-item">
-                  <span>Used by {credential.usedBy.length} workflow{credential.usedBy.length !== 1 ? 's' : ''}</span>
+                
+                <div className="credential-dates">
+                  <div>Created: {formatDate(credential.createdAt)}</div>
+                  <div>Updated: {formatDate(credential.updatedAt)}</div>
                 </div>
+                
+                {credential.usedBy.length > 0 && (
+                  <div className="usage-warning">
+                    <AlertTriangle size={14} />
+                    <span>Used by active workflows</span>
+                  </div>
+                )}
               </div>
-              
-              <div className="credential-dates">
-                <div>Created: {formatDate(credential.createdAt)}</div>
-                <div>Updated: {formatDate(credential.updatedAt)}</div>
-              </div>
-              
-              {credential.usedBy.length > 0 && (
-                <div className="usage-warning">
-                  <AlertTriangle size={14} />
-                  <span>Used by active workflows</span>
-                </div>
-              )}
             </div>
           )
         })}
@@ -305,10 +309,12 @@ export default function CredentialManager() {
 
       {filteredCredentials.length === 0 && (
         <div className="empty-credentials">
-          <Shield size={48} />
+          <div className="empty-icon">
+            <Shield size={48} />
+          </div>
           <h3>No credentials found</h3>
           <p>Create your first credential to securely store authentication information</p>
-          <button className="btn btn-primary" onClick={handleCreateCredential}>
+          <button className="add-credential-btn" onClick={handleCreateCredential}>
             <Plus size={16} />
             Add Your First Credential
           </button>
@@ -317,13 +323,21 @@ export default function CredentialManager() {
 
       {showCreateModal && (
         <div className="credential-modal">
-          <div className="modal-backdrop" onClick={() => setShowCreateModal(false)} />
+          <div 
+            className="modal-backdrop" 
+            onClick={() => setShowCreateModal(false)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Escape' && setShowCreateModal(false)}
+            aria-label="Close modal"
+          />
           <div className="modal-content">
             <div className="modal-header">
-              <h3>{isEditing ? 'Edit Credential' : 'Create New Credential'}</h3>
+              <h2>{isEditing ? 'Edit Credential' : 'Create New Credential'}</h2>
               <button
-                className="modal-close"
+                className="close-btn"
                 onClick={() => setShowCreateModal(false)}
+                aria-label="Close"
               >
                 ×
               </button>
@@ -331,22 +345,25 @@ export default function CredentialManager() {
             
             <div className="modal-body">
               {!selectedType ? (
-                <div className="credential-types">
-                  <h4>Select Credential Type</h4>
-                  <div className="types-grid">
+                <div className="credential-type-selector">
+                  <h4 className="section-title">Select Credential Type</h4>
+                  <div className="type-grid">
                     {credentialTypes.map(type => {
                       const Icon = type.icon
                       return (
                         <div
                           key={type.id}
-                          className="type-card"
+                          className="type-option"
                           onClick={() => setSelectedType(type)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => e.key === 'Enter' && setSelectedType(type)}
                         >
                           <div className="type-icon">
                             <Icon size={32} />
                           </div>
-                          <h5>{type.name}</h5>
-                          <p>{type.description}</p>
+                          <h5 className="type-name">{type.name}</h5>
+                          <p className="type-description">{type.description}</p>
                         </div>
                       )
                     })}
@@ -368,9 +385,10 @@ export default function CredentialManager() {
                   </div>
                   
                   <div className="form-fields">
-                    <div className="field-group">
-                      <label>Credential Name *</label>
+                    <div className="form-group">
+                      <label htmlFor="credential-name">Credential Name *</label>
                       <input
+                        id="credential-name"
                         type="text"
                         value={formData.name || ''}
                         onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
@@ -379,9 +397,10 @@ export default function CredentialManager() {
                       />
                     </div>
                     
-                    <div className="field-group">
-                      <label>Description</label>
+                    <div className="form-group">
+                      <label htmlFor="credential-description">Description</label>
                       <textarea
+                        id="credential-description"
                         value={formData.description || ''}
                         onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                         placeholder="Optional description"
@@ -390,8 +409,8 @@ export default function CredentialManager() {
                     </div>
                     
                     {selectedType.fields.map(field => (
-                      <div key={field.name} className="field-group">
-                        <label>
+                      <div key={field.name} className="form-group">
+                        <label htmlFor={`field-${field.name}`}>
                           {field.label}
                           {field.required && <span className="required">*</span>}
                           {field.sensitive && (
@@ -405,6 +424,7 @@ export default function CredentialManager() {
                           )}
                         </label>
                         <input
+                          id={`field-${field.name}`}
                           type={field.sensitive && !showSensitiveFields[field.name] ? 'password' : field.type}
                           value={formData[field.name] || ''}
                           onChange={(e) => setFormData(prev => ({ ...prev, [field.name]: e.target.value }))}
@@ -438,9 +458,8 @@ export default function CredentialManager() {
           </div>
         </div>
       )}
-      
-      {/* App Footer */}
-      <AppFooter config={FOOTER_CONFIGS.PAGE} />
+        </div>
+      </div>
     </div>
   )
 }

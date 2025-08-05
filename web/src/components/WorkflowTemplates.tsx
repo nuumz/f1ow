@@ -1,8 +1,17 @@
 import { useState } from 'react'
 import { Download, Search, Star, Clock, Tag, Eye } from 'lucide-react'
 // import { WorkflowService } from '../services/workflow.service'
-import AppFooter from './AppFooter'
-import { FOOTER_CONFIGS } from '../hooks/useFooter'
+
+interface WorkflowNode {
+  id: string
+  type: string
+  position: [number, number]
+}
+
+interface WorkflowDefinition {
+  nodes: WorkflowNode[]
+  connections: unknown[]
+}
 
 interface WorkflowTemplate {
   id: string
@@ -14,7 +23,7 @@ interface WorkflowTemplate {
   downloads: number
   rating: number
   previewImage?: string
-  definition: any
+  definition: WorkflowDefinition
   createdAt: string
   updatedAt: string
 }
@@ -167,8 +176,10 @@ export default function WorkflowTemplates({ onUseTemplate }: WorkflowTemplatesPr
   }
 
   return (
-    <div className="workflow-templates">
-      <div className="templates-header">
+    <div className="page-container">
+      <div className="container">
+        <div className="workflow-templates">
+          <div className="templates-header">
         <div className="header-title">
           <h2>Workflow Templates</h2>
           <p>Get started quickly with pre-built workflow templates</p>
@@ -188,7 +199,7 @@ export default function WorkflowTemplates({ onUseTemplate }: WorkflowTemplatesPr
           
           <select
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as any)}
+            onChange={(e) => setSortBy(e.target.value as 'downloads' | 'rating' | 'recent')}
             className="sort-select"
           >
             <option value="downloads">Most Downloaded</option>
@@ -286,18 +297,19 @@ export default function WorkflowTemplates({ onUseTemplate }: WorkflowTemplatesPr
       )}
 
       {previewTemplate && (
-        <div className="template-preview-modal">
+        <>
           <div className="modal-backdrop" onClick={() => setPreviewTemplate(null)} />
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3>{previewTemplate.name}</h3>
-              <button
-                className="modal-close"
-                onClick={() => setPreviewTemplate(null)}
-              >
-                ×
-              </button>
-            </div>
+          <div className="modal template-preview-modal">
+            <div className="modal-dialog">
+              <div className="modal-header">
+                <h3>{previewTemplate.name}</h3>
+                <button
+                  className="modal-close"
+                  onClick={() => setPreviewTemplate(null)}
+                >
+                  ×
+                </button>
+              </div>
             
             <div className="modal-body">
               <div className="preview-info">
@@ -328,7 +340,7 @@ export default function WorkflowTemplates({ onUseTemplate }: WorkflowTemplatesPr
               <div className="preview-workflow">
                 <h4>Workflow Structure</h4>
                 <div className="workflow-nodes">
-                  {previewTemplate.definition.nodes.map((node: any) => (
+                  {previewTemplate.definition.nodes.map((node: WorkflowNode) => (
                     <div key={node.id} className="preview-node">
                       <div className="node-type">{node.type}</div>
                       <div className="node-id">{node.id}</div>
@@ -356,12 +368,12 @@ export default function WorkflowTemplates({ onUseTemplate }: WorkflowTemplatesPr
                 Use This Template
               </button>
             </div>
+            </div>
           </div>
-        </div>
+        </>
       )}
-      
-      {/* App Footer */}
-      <AppFooter config={FOOTER_CONFIGS.PAGE} />
+        </div>
+      </div>
     </div>
   )
 }

@@ -16,10 +16,16 @@
 @use 'components';
 
 // 5. Page-specific styles (after layout to access .page-container)
-@use 'dashboard';
+@use 'dashboard-core';
+@use 'dashboard-metrics';
+@use 'dashboard-charts';
 @use 'workflow-pages';
+@use 'workflow-templates';
+@use 'workflow-versions';
 @use 'execution-history';
 @use 'credential-manager';
+@use 'data-mapper';
+@use 'expression-editor';
 
 // 6. Legacy styles (will be refactored gradually)
 // Note: Some of these styles will be moved to appropriate files later

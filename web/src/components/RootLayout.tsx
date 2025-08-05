@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
 import { Home, Workflow, Play, BarChart3, Shield, GitBranch, Code, ChevronDown, Settings } from 'lucide-react'
+import AppFooter from './AppFooter'
+import { useFooter } from '../hooks/useFooter'
 
 export default function RootLayout() {
   const router = useRouterState()
   const [showToolsDropdown, setShowToolsDropdown] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const { getFooterConfig } = useFooter()
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -38,6 +41,42 @@ export default function RootLayout() {
 
   const currentPath = router.location.pathname
 
+  // Get appropriate footer configuration based on current page
+  const getPageFooterConfig = () => {
+    // Dashboard page - show full footer with stats
+    if (currentPath === '/') return getFooterConfig('dashboard')
+    
+    // Designer page - no footer, full height layout
+    if (currentPath.startsWith('/designer')) return getFooterConfig('designer')
+    
+    // Tools pages - minimal footer
+    if (currentPath.startsWith('/mapper') || 
+        currentPath.startsWith('/expression-editor') || 
+        currentPath.startsWith('/versions')) {
+      return getFooterConfig('designerMinimal')
+    }
+    
+    // Documentation pages
+    if (currentPath.startsWith('/docs')) return getFooterConfig('docs')
+    
+    // Regular pages (templates, executions, credentials, workflows) - show footer
+    return getFooterConfig('page')
+  }
+  
+  const footerConfig = getPageFooterConfig()
+  const footerStats = {
+    totalExecutions: 0,
+    successRate: 0,
+    customStats: []
+  }
+
+  // Determine layout type - use app--no-footer for designer and tools pages
+  const shouldUseFullHeightLayout = !footerConfig.enabled || 
+    currentPath.startsWith('/designer') || 
+    currentPath.startsWith('/mapper') || 
+    currentPath.startsWith('/expression-editor') || 
+    currentPath.startsWith('/versions')
+
   const isActive = (itemPath: string) => {
     return currentPath === itemPath || 
            (itemPath === '/workflows' && currentPath === '/') ||
@@ -47,7 +86,7 @@ export default function RootLayout() {
   }
 
   return (
-    <div className="app">
+    <div className={`app ${shouldUseFullHeightLayout ? 'app--no-footer' : ''}`}>
       <nav className="navbar">
         <div className="nav-brand">
           <h1>f1ow</h1>
@@ -110,6 +149,8 @@ export default function RootLayout() {
       <main className="main-content">
         <Outlet />
       </main>
+      
+      {!shouldUseFullHeightLayout && <AppFooter config={footerConfig} stats={footerStats} />}
     </div>
   )
 }

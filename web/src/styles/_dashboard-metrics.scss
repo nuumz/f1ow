@@ -1,0 +1,279 @@
+// ===== DASHBOARD METRICS STYLES =====
+
+@use 'variables' as *;
+@use 'functions' as *;
+
+// Metrics Animation Keyframes
+@keyframes metricPulse {
+  0% { 
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    transform: scale(1);
+  }
+  50% { 
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+    transform: scale(1.01);
+  }
+  100% { 
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    transform: scale(1);
+  }
+}
+
+@keyframes slideUpFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInTooltip {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+// Metrics Grid - Enhanced with better spacing and responsive design
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: spacing(5);
+  margin-bottom: spacing(8);
+
+  @include respond-to(xl) {
+    grid-template-columns: repeat(4, 1fr);
+    gap: spacing(4);
+  }
+
+  @include respond-to(lg) {
+    grid-template-columns: repeat(2, 1fr);
+    gap: spacing(4);
+  }
+
+  @include respond-to(md) {
+    grid-template-columns: repeat(2, 1fr);
+    gap: spacing(3);
+    margin-bottom: spacing(6);
+  }
+
+  @include respond-to(sm) {
+    grid-template-columns: 1fr;
+    gap: spacing(3);
+  }
+
+  // Ensure equal height cards
+  .metric-card {
+    height: 100%;
+    min-height: 120px;
+  }
+
+  // Staggered animation for cards
+  .metric-card {
+    animation: slideUpFadeIn 0.6s ease-out forwards;
+    opacity: 0;
+
+    &:nth-child(1) { animation-delay: 0.1s; }
+    &:nth-child(2) { animation-delay: 0.2s; }
+    &:nth-child(3) { animation-delay: 0.3s; }
+    &:nth-child(4) { animation-delay: 0.4s; }
+  }
+}
+
+// Metric Cards - Enhanced glass morphism design
+.metric-card {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.95) 0%, 
+    rgba(248, 250, 252, 0.98) 100%);
+  backdrop-filter: blur(10px);
+  padding: spacing(4) spacing(5);
+  border-radius: border-radius(xl);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  @include flex-start;
+  align-items: center;
+  gap: spacing(4);
+  transition: all transition(base);
+  box-shadow: 
+    0 4px 20px rgba(0, 0, 0, 0.08),
+    0 1px 3px rgba(0, 0, 0, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  position: relative;
+  overflow: hidden;
+  height: 100%;
+  min-height: 120px;
+
+  // Subtle gradient overlay
+  &::before {
+    content: '';
+    @include absolute(0, 0, 0, 0);
+    background: linear-gradient(135deg, 
+      color-mix(in srgb, var(--metric-color, #{color(slate-500)}) 5%, transparent) 0%,
+      transparent 50%);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity transition(base);
+  }
+
+  &:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 
+      0 12px 40px rgba(0, 0, 0, 0.12),
+      0 4px 16px rgba(0, 0, 0, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.95);
+    border-color: color-mix(in srgb, var(--metric-color, #{color(slate-300)}) 30%, transparent);
+    
+    &::before {
+      opacity: 1;
+    }
+
+    .metric-icon {
+      transform: scale(1.1) rotate(5deg);
+      box-shadow: 
+        0 8px 25px color-mix(in srgb, var(--metric-color, #{color(slate-500)}) 20%, transparent),
+        0 3px 10px color-mix(in srgb, var(--metric-color, #{color(slate-500)}) 10%, transparent);
+    }
+
+    .metric-value {
+      color: var(--metric-color, #{color(text-dark)});
+    }
+  }
+
+  @include respond-to(md) {
+    padding: spacing(3) spacing(4);
+    gap: spacing(3);
+    min-height: 100px;
+  }
+
+  @include respond-to(sm) {
+    flex-direction: row;
+    align-items: center;
+    min-height: 80px;
+    padding: spacing(3);
+  }
+
+  // Enhanced color variants with better contrast
+  &.primary {
+    --metric-color: #{color(primary)};
+    border-color: color-mix(in srgb, #{color(primary)} 20%, transparent);
+  }
+
+  &.success {
+    --metric-color: #{color(success)};
+    border-color: color-mix(in srgb, #{color(success)} 20%, transparent);
+  }
+
+  &.info {
+    --metric-color: #{color(info)};
+    border-color: color-mix(in srgb, #{color(info)} 20%, transparent);
+  }
+
+  &.warning {
+    --metric-color: #{color(warning)};
+    border-color: color-mix(in srgb, #{color(warning)} 20%, transparent);
+  }
+}
+
+// Metric Icons - Styled like BaseNodePalette node icons
+.metric-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: border-radius(lg);
+  @include flex-center;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--metric-color, #{color(slate-500)}) 10%, transparent);
+  color: var(--metric-color, #{color(slate-500)});
+  transition: transition(base);
+  box-shadow: 
+    0 2px 8px color-mix(in srgb, var(--metric-color, #{color(slate-500)}) 8%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+
+  .metric-card:hover & {
+    background: color-mix(in srgb, var(--metric-color, #{color(slate-500)}) 15%, transparent);
+    transform: scale(1.05);
+  }
+
+  svg {
+    width: 28px;
+    height: 28px;
+  }
+
+  @include respond-to(md) {
+    width: 48px;
+    height: 48px;
+    
+    svg {
+      width: 24px;
+      height: 24px;
+    }
+  }
+
+  @include respond-to(sm) {
+    width: 44px;
+    height: 44px;
+    
+    svg {
+      width: 22px;
+      height: 22px;
+    }
+  }
+}
+
+// Metric Content
+.metric-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.metric-value {
+  font-size: font-size(2xl);
+  font-weight: font-weight(bold);
+  color: color(text-dark);
+  margin-bottom: spacing(1);
+  line-height: line-height(tight);
+  transition: color transition(base);
+
+  @include respond-to(md) {
+    font-size: font-size(xl);
+  }
+}
+
+.metric-label {
+  font-size: font-size(sm);
+  color: color(text-light);
+  margin-bottom: spacing(2);
+  font-weight: font-weight(medium);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.metric-change {
+  @include flex-center;
+  gap: spacing(1);
+  font-size: font-size(xs);
+  font-weight: font-weight(medium);
+  padding: spacing(1) spacing(2);
+  border-radius: border-radius(full);
+  width: fit-content;
+
+  &.positive {
+    color: color(success-dark);
+    background: color-mix(in srgb, #{color(success)} 10%, transparent);
+  }
+
+  &.negative {
+    color: color(danger-dark);
+    background: color-mix(in srgb, #{color(danger)} 10%, transparent);
+  }
+
+  svg {
+    width: 12px;
+    height: 12px;
+  }
+}

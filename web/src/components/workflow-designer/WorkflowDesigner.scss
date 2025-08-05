@@ -29,7 +29,7 @@ $opacity: (
   muted: 0.3,
   semi: 0.5,
   strong: 0.85,
-  faded: 0.6
+  faded: 0.6,
 );
 
 // Z-Index Layer System
@@ -55,7 +55,7 @@ $z-layers: (
   modal-backdrop: 9900,
   modal: 9910,
   modal-header: 9920,
-  critical: 99999
+  critical: 99999,
 );
 
 // Color variables
@@ -69,23 +69,23 @@ $colors: (
   workflow: #2563eb,
   border: #e9ecef,
   background: #fcfcfc,
-  architecture-bg: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)
+  architecture-bg: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%),
 );
 
 // Port variables
 $port: (
-  transition: "opacity 0.2s ease, transform 0.15s ease",
-  hover-scale: 1.05,
+  transition: "all 0.2s ease",
+  hover-scale: 1,
   connected-stroke-width: 2.5px,
   multiple-stroke-width: 3px,
-  drop-target-stroke-width: 3px
+  drop-target-stroke-width: 3px,
 );
 
 // Breakpoints
 $breakpoints: (
   mobile: 480px,
   tablet: 768px,
-  desktop: 1024px
+  desktop: 1024px,
 );
 
 // ===== MIXINS =====
@@ -153,7 +153,12 @@ $breakpoints: (
   }
 }
 
-@mixin connection-mode($stroke-color, $hover-color, $selected-color, $dash-pattern: none) {
+@mixin connection-mode(
+  $stroke-color,
+  $hover-color,
+  $selected-color,
+  $dash-pattern: none
+) {
   .connection .connection-path {
     stroke: $stroke-color;
     stroke-width: 2;
@@ -413,11 +418,26 @@ $breakpoints: (
 
 // Button variants
 $button-variants: (
-  save: (map.get($colors, primary), #2563eb),
-  draft: (map.get($colors, purple), #7C3AED),
-  execute: (map.get($colors, success), #059669),
-  export: (map.get($colors, purple), #7c3aed),
-  import: (map.get($colors, warning), #d97706)
+  save: (
+    map.get($colors, primary),
+    #2563eb,
+  ),
+  draft: (
+    map.get($colors, purple),
+    #7c3aed,
+  ),
+  execute: (
+    map.get($colors, success),
+    #059669,
+  ),
+  export: (
+    map.get($colors, purple),
+    #7c3aed,
+  ),
+  import: (
+    map.get($colors, warning),
+    #d97706,
+  ),
 );
 
 @each $variant, $colors-list in $button-variants {
@@ -470,9 +490,9 @@ $button-variants: (
 // ===== ENHANCED DRAG & DROP FEEDBACK =====
 
 .node-background.can-drop {
-  stroke: #4CAF50 !important;
+  stroke: #4caf50 !important;
   stroke-width: 2px;
-  stroke-dasharray: 5,5;
+  stroke-dasharray: 5, 5;
   animation: dash 1s linear infinite;
 }
 
@@ -481,9 +501,9 @@ $button-variants: (
   transform: scale(1.02);
 
   .node-background {
-    stroke: #4CAF50 !important;
+    stroke: #4caf50 !important;
     stroke-width: 3px !important;
-    stroke-dasharray: 8,4;
+    stroke-dasharray: 8, 4;
     animation: nodeDrop 1.2s ease-in-out infinite;
   }
 }
@@ -494,10 +514,10 @@ $button-variants: (
   height: 100%;
   overflow: hidden;
   position: relative;
-  
+
   &.drag-over {
     background: #e3f2fd;
-    
+
     .grid-layer .grid-pattern-rect {
       // Subtle grid highlight during drag
       filter: brightness(1.1);
@@ -516,8 +536,12 @@ $button-variants: (
       }
 
       &.connecting {
-        background: radial-gradient(circle at center, rgba(139, 92, 246, 0.05) 0%, transparent 70%);
-        
+        background: radial-gradient(
+          circle at center,
+          rgba(139, 92, 246, 0.05) 0%,
+          transparent 70%
+        );
+
         // Enhanced grid visibility during connection mode
         .grid-layer .grid-pattern-rect {
           opacity: 0.9;
@@ -531,8 +555,12 @@ $button-variants: (
     background: map.get($colors, background);
 
     .workflow-canvas.connecting {
-      background: radial-gradient(circle at center, rgba(33, 150, 243, 0.05) 0%, transparent 70%);
-      
+      background: radial-gradient(
+        circle at center,
+        rgba(33, 150, 243, 0.05) 0%,
+        transparent 70%
+      );
+
       // Enhanced grid visibility during connection mode
       .grid-layer .grid-pattern-rect {
         opacity: 0.8;
@@ -577,39 +605,40 @@ $button-variants: (
     @include z-index(grid);
     pointer-events: none;
     will-change: transform;
-    
+
     // Grid pattern optimizations for performance
     .grid-pattern-rect {
       shape-rendering: optimizeSpeed;
       image-rendering: optimizeSpeed;
       transform-origin: center;
       backface-visibility: hidden;
-      
+
       // Smooth transitions for zoom changes
       transition: opacity 0.15s ease-out;
-      
+
       // Hide grid when zoomed out too far (performance optimization)
-      &[width="0"], &[height="0"] {
+      &[width="0"],
+      &[height="0"] {
         @include opacity-state(hidden);
       }
     }
-    
+
     // Pattern dot styling for consistent appearance
     .pattern-dot {
       shape-rendering: optimizeSpeed;
       fill: #d1d5db;
-      
+
       // Responsive dot opacity based on zoom level
       @media (max-resolution: 1dppx) {
         opacity: 0.6; // Lower opacity for low-res displays
       }
-      
+
       @media (min-resolution: 2dppx) {
         opacity: 0.8; // Higher opacity for high-res displays
       }
     }
   }
-  
+
   // Grid performance indicators (development only)
   &.grid-debug {
     .grid-layer::after {
@@ -632,28 +661,23 @@ $button-variants: (
 // ===== MODE-SPECIFIC STYLES =====
 
 .canvas-container.workflow-mode {
-  @include connection-mode(map.get($colors, workflow), #1d4ed8, map.get($colors, success));
+  @include connection-mode(
+    map.get($colors, workflow),
+    #1d4ed8,
+    map.get($colors, success)
+  );
 
   .port-group {
     &:hover {
-      transform: scale(var(--port-hover-scale));
-      transform-origin: center;
-      transition-delay: 0.03s;
-
       .port-circle {
         filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.2));
-        transition-delay: 0.05s;
+        stroke-width: 3px;
       }
     }
 
     &.connected {
-      &:hover {
-        transform: none;
-      }
-
       .port-circle {
-        fill: map.get($colors, success) !important;
-        stroke: #059669 !important;
+        stroke: #969696 !important;
         stroke-width: var(--port-connected-stroke-width) !important;
       }
     }
@@ -663,7 +687,7 @@ $button-variants: (
   .workflow-canvas.connecting .input-port-group {
     @include visible-state;
     pointer-events: all !important;
-    
+
     &,
     &:hover,
     &:not(:hover),
@@ -672,12 +696,23 @@ $button-variants: (
       @include visible-state;
       pointer-events: all !important;
     }
-    
+
+    // Default style for input ports (invalid drop targets) - RED, only when connecting
     .port-circle {
-      fill: #4CAF50 !important;
-      stroke: #388E3C !important;
+      fill: #ff5722 !important;
+      stroke: #d32f2f !important;
+      stroke-width: var(--port-drop-target-stroke-width) !important;
+      filter: drop-shadow(0 2px 8px rgba(255, 87, 34, 0.4)) !important;
+      opacity: 0.6 !important;
+    }
+
+    // Override for valid drop targets - GREEN, only when connecting
+    &.can-dropped .port-circle {
+      fill: #4caf50 !important;
+      stroke: #388e3c !important;
       stroke-width: var(--port-drop-target-stroke-width) !important;
       filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+      opacity: 1 !important;
     }
   }
 
@@ -690,14 +725,14 @@ $button-variants: (
       transition: all 0.2s ease;
     }
 
-    &:hover circle {
+    &:hover .port-circle {
       fill: #dbeafe;
       stroke: #1d4ed8;
       stroke-width: 3;
       filter: drop-shadow(0 2px 6px rgba(29, 78, 216, 0.25));
     }
 
-    &.connected circle {
+    &.connected .port-circle {
       fill: #059669;
       stroke: #047857;
     }
@@ -705,25 +740,32 @@ $button-variants: (
 }
 
 .canvas-container.architecture-mode {
-  @include connection-mode(map.get($colors, architecture), #6d28d9, #dc2626, '8, 6');
+  @include connection-mode(
+    map.get($colors, architecture),
+    #6d28d9,
+    #dc2626,
+    "8, 6"
+  );
 
   .node:hover .port-group {
-    @include visible-state;
+    opacity: 1 !important;
+    pointer-events: all !important;
+    transition: var(--port-transition) !important;
   }
 
   .port-group {
     @include hidden-state;
     transition: var(--port-transition);
-    
+
     // Override for drop targets in architecture mode - highest priority
     &.can-dropped,
     &.drop-target-port {
       @include visible-state;
       pointer-events: all !important;
-      
+
       .port-circle {
-        fill: #4CAF50 !important;
-        stroke: #388E3C !important;
+        fill: #4caf50 !important;
+        stroke: #388e3c !important;
         stroke-width: 0 !important;
         stroke-dasharray: none !important; // Remove architecture dashed style for drop targets
         filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
@@ -742,7 +784,7 @@ $button-variants: (
         position: absolute;
         top: -8px;
         right: -8px;
-        background: #FF9800;
+        background: #ff9800;
         color: white;
         border-radius: 50%;
         width: 16px;
@@ -758,24 +800,47 @@ $button-variants: (
     }
   }
 
-  // Show ports on node hover in architecture mode (when not connecting)
-  .node:hover .port-group {
-    @include visible-state;
+  // CRITICAL: Force input ports to be hidden in architecture mode (like other ports)
+  // Higher specificity to override node hover states
+  .input-port-group,
+  .output-port-group,
+  .node .input-port-group,
+  .node .output-port-group,
+  .node.drag-hover .input-port-group:not(.can-dropped):not(.drop-target-port),
+  .node:not(.drag-hover) .input-port-group:not(.can-dropped):not(.drop-target-port) {
+    @include hidden-state;
+    transition: var(--port-transition);
+  }
+
+  // Show input/output ports on node hover in architecture mode (when not connecting)
+  // CRITICAL: Highest specificity with !important to override all hiding rules
+  .node:hover .input-port-group,
+  .node:hover .output-port-group {
+    opacity: 1 !important;
+    pointer-events: all !important;
+    transition: var(--port-transition) !important;
+  }
+
+  // Ensure hover works even during connection mode (but not when canvas is connecting)
+  .canvas-container:not(.connecting) .node:hover .input-port-group,
+  .canvas-container:not(.connecting) .node:hover .output-port-group {
+    opacity: 1 !important;
+    pointer-events: all !important;
   }
 
   .workflow-canvas.connecting .port-group {
     @include opacity-state(visible);
     pointer-events: all !important;
-    
+
     // Force drop targets to stay visible in architecture mode
     &.can-dropped,
     &.drop-target-port {
       @include visible-state;
       pointer-events: all !important;
-      
+
       .port-circle {
-        fill: #4CAF50 !important;
-        stroke: #388E3C !important;
+        fill: #4caf50 !important;
+        stroke: #388e3c !important;
         stroke-width: 0 !important;
         stroke-dasharray: none !important;
         filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
@@ -787,7 +852,7 @@ $button-variants: (
   .workflow-canvas.connecting .input-port-group {
     @include visible-state;
     pointer-events: all !important;
-    
+
     &,
     &:hover,
     &:not(:hover),
@@ -796,41 +861,62 @@ $button-variants: (
       @include visible-state;
       pointer-events: all !important;
     }
-    
+
+    // Default style for input ports (invalid drop targets) - RED, only when connecting
     .port-circle {
-      fill: #4CAF50 !important;
-      stroke: #388E3C !important;
+      fill: #ff5722 !important;
+      stroke: #d32f2f !important;
+      stroke-width: 0 !important;
+      stroke-dasharray: none !important;
+      filter: drop-shadow(0 2px 8px rgba(255, 87, 34, 0.4)) !important;
+      opacity: 0.6 !important;
+    }
+
+    // Override for valid drop targets - GREEN, only when connecting
+    &.can-dropped .port-circle {
+      fill: #4caf50 !important;
+      stroke: #388e3c !important;
       stroke-width: 0 !important;
       stroke-dasharray: none !important;
       filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+      opacity: 1 !important;
     }
   }
 
   .input-port,
   .output-port {
+    // CRITICAL: Hide input/output ports by default in architecture mode
+    @include hidden-state;
+    transition: var(--port-transition);
+
     circle {
       fill: #faf5ff;
       stroke: map.get($colors, architecture);
       stroke-width: 2.5;
-      stroke-dasharray: 3,2;
+      stroke-dasharray: 3, 2;
       transition: all 0.2s ease;
     }
 
-    &:hover circle {
+    &:hover .port-circle {
       fill: #f3e8ff;
       stroke: #6d28d9;
       stroke-width: 3.5;
       stroke-dasharray: 8, 6;
       filter: drop-shadow(0 2px 8px rgba(109, 40, 217, 0.3));
-      transform: scale(1.1);
     }
 
-    &.connected circle {
+    &.connected .port-circle {
       fill: #dc2626;
       stroke: #b91c1c;
       stroke-dasharray: 8, 6;
       animation: architecturePortPulse 2s infinite;
     }
+  }
+
+  // Show individual input/output ports on node hover in architecture mode
+  .node:hover .input-port,
+  .node:hover .output-port {
+    @include visible-state;
   }
 }
 
@@ -842,9 +928,8 @@ $button-variants: (
   transition: var(--port-transition);
   cursor: crosshair;
   @include visible-state;
-  transform-origin: center;
   position: relative;
-  will-change: transform, opacity;
+  will-change: opacity;
 }
 
 // ===== SPECIAL PORT STATES =====
@@ -854,22 +939,24 @@ $button-variants: (
   @include visible-state;
 
   .port-circle {
-    fill: #4CAF50 !important;
+    fill: #4caf50 !important;
     stroke-width: var(--port-drop-target-stroke-width) !important;
     filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6));
   }
 }
 
-// Force visibility for all drop target ports during connection
+// ===== COMPREHENSIVE CONNECTION MODE STYLING =====
+
 .canvas-container .workflow-canvas.connecting {
+  // ===== Drop Target Ports (Valid Connection Targets) =====
   .port-group.can-dropped,
   .port-group.drop-target-port {
     @include visible-state;
     pointer-events: all !important;
-    
+
     .port-circle {
-      fill: #4CAF50 !important;
-      stroke-width: 0 !important;
+      fill: #4caf50 !important;
+      stroke-width: var(--port-drop-target-stroke-width) !important;
       filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6));
     }
   }
@@ -881,21 +968,104 @@ $button-variants: (
   .node .port-group.drop-target-port:not(:hover) {
     @include visible-state;
     pointer-events: all !important;
-    
+
     .port-circle {
-      fill: #4CAF50 !important;
-      stroke-width: 0 !important;
+      fill: #4caf50 !important;
+      stroke-width: var(--port-drop-target-stroke-width) !important;
       filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6));
     }
   }
-}
 
-// ===== CONNECTION INTERACTION DISABLING =====
+  // ===== Non-Droppable Ports (Invalid Connection Targets) =====
+  .port-group:not(.can-dropped):not(.drop-target-port) {
+    @include visible-state;
+    pointer-events: none !important;
 
-.canvas-container .workflow-canvas.connecting {
+    .port-circle {
+      fill: #ff5722 !important;
+      stroke: #d32f2f !important;
+      stroke-width: 2px !important;
+      filter: drop-shadow(0 2px 8px rgba(255, 87, 34, 0.4)) !important;
+      opacity: 0.6 !important;
+    }
+  }
+
+  // Special handling for input ports that are NOT droppable
+  .input-port-group:not(.can-dropped) {
+    @include visible-state;
+    pointer-events: all !important;
+
+    .port-circle {
+      fill: #ff5722 !important;
+      stroke: #d32f2f !important;
+      stroke-width: 2px !important;
+      filter: drop-shadow(0 2px 8px rgba(255, 87, 34, 0.4)) !important;
+      opacity: 0.6 !important;
+    }
+  }
+
+  // ===== ULTIMATE FALLBACK for ALL input ports =====
+  .input-port-group {
+    @include visible-state;
+    pointer-events: all !important;
+
+    // Force visibility for ALL input ports during connection
+    &,
+    &:hover,
+    &:not(:hover) {
+      @include visible-state;
+      pointer-events: all !important;
+    }
+
+    // Default style for input ports (invalid drop targets) - RED
+    .port-circle {
+      fill: #ff5722 !important;
+      stroke: #d32f2f !important;
+      stroke-width: var(--port-drop-target-stroke-width) !important;
+      filter: drop-shadow(0 2px 8px rgba(255, 87, 34, 0.4)) !important;
+      opacity: 0.6 !important;
+    }
+
+    // Override for valid drop targets - GREEN
+    &.can-dropped .port-circle {
+      fill: #4caf50 !important;
+      stroke: #388e3c !important;
+      stroke-width: var(--port-drop-target-stroke-width) !important;
+      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+      opacity: 1 !important;
+    }
+  }
+
+  // ULTIMATE FALLBACK: Force ANY input port to be visible during connection
+  .node .input-port-group,
+  .node:hover .input-port-group,
+  .node:not(:hover) .input-port-group {
+    @include visible-state;
+    pointer-events: all !important;
+
+    // Default style for input ports (invalid drop targets) - RED
+    .port-circle {
+      fill: #ff5722 !important;
+      stroke: #d32f2f !important;
+      stroke-width: var(--port-drop-target-stroke-width) !important;
+      filter: drop-shadow(0 2px 8px rgba(255, 87, 34, 0.4)) !important;
+      opacity: 0.6 !important;
+    }
+
+    // Override for valid drop targets - GREEN
+    &.can-dropped .port-circle {
+      fill: #4caf50 !important;
+      stroke: #388e3c !important;
+      stroke-width: var(--port-drop-target-stroke-width) !important;
+      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+      opacity: 1 !important;
+    }
+  }
+
+  // ===== CONNECTION INTERACTION DISABLING =====
   .port-group:hover {
-    transform: none;
-    transition: none;
+    transform: none !important;
+    transition: opacity 0.2s ease !important;
   }
 
   .connection {
@@ -967,133 +1137,6 @@ $button-variants: (
   .output-port-circle {
     stroke: none !important;
   }
-}
-
-// Architecture mode drop target overrides - ensure drop targets are always visible
-.canvas-container.architecture-mode .workflow-canvas.connecting {
-  .port-group.can-dropped,
-  .port-group.drop-target-port {
-    @include visible-state;
-    pointer-events: all !important;
-    
-    .port-circle {
-      fill: #4CAF50 !important;
-      stroke-width: 0 !important;
-      stroke-dasharray: none !important; // Override architecture mode dashed border
-      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6));
-    }
-  }
-
-  // Override any node hover states that might hide drop targets
-  .node:hover .port-group.can-dropped,
-  .node:hover .port-group.drop-target-port,
-  .node .port-group.can-dropped,
-  .node .port-group.drop-target-port {
-    @include visible-state;
-    pointer-events: all !important;
-    
-    .port-circle {
-      fill: #4CAF50 !important;
-      stroke-width: 0 !important;
-      stroke-dasharray: none !important;
-      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6));
-    }
-  }
-}
-
-// Global override: Highest priority for drop targets visibility during connection
-.canvas-container .workflow-canvas.connecting {
-  // Force drop targets to always be visible, regardless of other states
-  .port-group.can-dropped,
-  .port-group.drop-target-port {
-    @include visible-state;
-    pointer-events: all !important;
-    
-    &,
-    &:hover,
-    &:not(:hover) {
-      @include visible-state;
-      pointer-events: all !important;
-    }
-    
-    .port-circle {
-      fill: #4CAF50 !important;
-      stroke-width: var(--port-drop-target-stroke-width) !important;
-      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
-    }
-  }
-
-  // CRITICAL: Force ALL input ports to be visible during connection regardless of classes
-  .input-port-group {
-    @include visible-state;
-    pointer-events: all !important;
-    
-    // Force visibility for ALL input ports during connection - ULTIMATE FALLBACK
-    &,
-    &:hover,
-    &:not(:hover),
-    &.can-dropped,
-    &:not(.can-dropped) {
-      @include visible-state;
-      pointer-events: all !important;
-    }
-    
-    .port-circle {
-      fill: #4CAF50 !important;
-      stroke: #388E3C !important;
-      stroke-width: var(--port-drop-target-stroke-width) !important;
-      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
-    }
-  }
-
-  // ULTIMATE FALLBACK: Force ANY input port to be visible during connection
-  .node .input-port-group,
-  .node:hover .input-port-group,
-  .node:not(:hover) .input-port-group {
-    @include visible-state;
-    pointer-events: all !important;
-    
-    .port-circle {
-      fill: #4CAF50 !important;
-      stroke: #388E3C !important;
-      stroke-width: var(--port-drop-target-stroke-width) !important;
-      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
-    }
-  }
-
-  // Override node hover states - drop targets should never be hidden
-  .node:hover .port-group.can-dropped,
-  .node:hover .port-group.drop-target-port,
-  .node .port-group.can-dropped:hover,
-  .node .port-group.drop-target-port:hover,
-  .node .port-group.can-dropped:not(:hover),
-  .node .port-group.drop-target-port:not(:hover) {
-    @include visible-state;
-    pointer-events: all !important;
-    transform: none !important; // Prevent any transform changes
-    
-    .port-circle {
-      fill: #4CAF50 !important;
-      stroke: #388E3C !important;
-      stroke-width: 0 !important;
-      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
-    }
-  }
-
-  // CRITICAL: Override for drag leave scenarios - keep input ports visible
-  .node:not(:hover) .input-port-group,
-  .node .input-port-group:not(.can-dropped),
-  .node .input-port-group {
-    @include visible-state;
-    pointer-events: all !important;
-    
-    .port-circle {
-      fill: #4CAF50 !important;
-      stroke: #388E3C !important;
-      stroke-width: var(--port-drop-target-stroke-width) !important;
-      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
-    }
-  }
 
   // Architecture mode specific overrides with highest specificity
   &.architecture-mode {
@@ -1101,107 +1144,55 @@ $button-variants: (
     .port-group.drop-target-port {
       @include visible-state;
       pointer-events: all !important;
-      
-      &,
-      &:hover,
-      &:not(:hover) {
-        @include visible-state;
-        pointer-events: all !important;
-      }
-      
+
       .port-circle {
-        fill: #4CAF50 !important;
-        stroke: #388E3C !important;
+        fill: #4caf50 !important;
         stroke-width: 0 !important;
-        stroke-dasharray: none !important; // Override architecture dashed style
-        filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+        stroke-dasharray: none !important; // Override architecture mode dashed border
+        filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6));
       }
     }
 
-    // CRITICAL: Force ALL input ports visible in architecture mode during connection
-    .input-port-group {
-      @include visible-state;
-      pointer-events: all !important;
-      
-      &,
-      &:hover,
-      &:not(:hover),
-      &.can-dropped,
-      &:not(.can-dropped) {
-        @include visible-state;
-        pointer-events: all !important;
-      }
-      
-      .port-circle {
-        fill: #4CAF50 !important;
-        stroke: #388E3C !important;
-        stroke-width: 0 !important;
-        stroke-dasharray: none !important;
-        filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
-      }
-    }
-
-    // ULTIMATE FALLBACK for architecture mode: Force ANY input port visible
-    .node .input-port-group,
-    .node:hover .input-port-group,
-    .node:not(:hover) .input-port-group {
-      @include visible-state;
-      pointer-events: all !important;
-      
-      .port-circle {
-        fill: #4CAF50 !important;
-        stroke: #388E3C !important;
-        stroke-width: 0 !important;
-        stroke-dasharray: none !important;
-        filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
-      }
-    }
-
-    // Override node hover states in architecture mode with maximum specificity
+    // Override any node hover states that might hide drop targets
     .node:hover .port-group.can-dropped,
     .node:hover .port-group.drop-target-port,
-    .node .port-group.can-dropped:hover,
-    .node .port-group.drop-target-port:hover,
-    .node .port-group.can-dropped:not(:hover),
-    .node .port-group.drop-target-port:not(:hover) {
+    .node .port-group.can-dropped,
+    .node .port-group.drop-target-port {
       @include visible-state;
       pointer-events: all !important;
-      transform: none !important;
-      
+
       .port-circle {
-        fill: #4CAF50 !important;
+        fill: #4caf50 !important;
         stroke-width: 0 !important;
         stroke-dasharray: none !important;
-        filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
-      }
-    }
-    
-    // Additional ultra-high specificity override for stubborn cases
-    .node.drag-hover .port-group.can-dropped,
-    .node.drag-hover .port-group.drop-target-port,
-    .node:not(.drag-hover) .port-group.can-dropped,
-    .node:not(.drag-hover) .port-group.drop-target-port,
-    .node.drag-hover .input-port-group,
-    .node:not(.drag-hover) .input-port-group {
-      @include visible-state;
-      pointer-events: all !important;
-      transform: none !important;
-      
-      .port-circle {
-        fill: #4CAF50 !important;
-        stroke: #388E3C !important;
-        stroke-width: 0 !important;
-        stroke-dasharray: none !important;
-        filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+        filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6));
       }
     }
   }
 }
 
+// ===== ARCHITECTURE MODE OVERRIDES =====
+
+// Additional architecture mode specific connection state handling can be added here if needed
+
+// ===== NODE HOVER STATES =====
+
+// Additional ultra-high specificity override for stubborn cases
+.node.drag-hover .port-group.can-dropped,
+.node.drag-hover .port-group.drop-target-port,
+.node:not(.drag-hover) .port-group.can-dropped,
+.node:not(.drag-hover) .port-group.drop-target-port {
+  @include visible-state;
+  pointer-events: all !important;
+  transform: none !important;
+  transition: opacity 0.2s ease !important; // Smooth opacity only
+}
+
 // ===== ANIMATIONS =====
 
 @keyframes workflowPulse {
-  0%, 100% {
+  0%,
+  100% {
     @include opacity-state(visible);
     stroke-width: 3;
   }
@@ -1212,7 +1203,8 @@ $button-variants: (
 }
 
 @keyframes architecturePulse {
-  0%, 100% {
+  0%,
+  100% {
     @include opacity-state(visible);
     stroke-width: 3;
     filter: drop-shadow(0 3px 12px rgba(220, 38, 38, 0.5));
@@ -1225,7 +1217,8 @@ $button-variants: (
 }
 
 @keyframes architecturePortPulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     @include opacity-state(visible);
   }
@@ -1236,7 +1229,8 @@ $button-variants: (
 }
 
 @keyframes validDropPulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     @include opacity-state(visible);
   }
@@ -1253,11 +1247,12 @@ $button-variants: (
 }
 
 @keyframes nodeDrop {
-  0%, 100% { 
+  0%,
+  100% {
     stroke-dashoffset: 0;
     filter: drop-shadow(0 0 12px rgba(76, 175, 80, 0.6));
   }
-  50% { 
+  50% {
     stroke-dashoffset: -12;
     filter: drop-shadow(0 0 20px rgba(76, 175, 80, 0.9));
   }
@@ -1286,8 +1281,12 @@ $button-variants: (
 }
 
 @keyframes fadeIn {
-  from { @include opacity-state(hidden); }
-  to { @include opacity-state(visible); }
+  from {
+    @include opacity-state(hidden);
+  }
+  to {
+    @include opacity-state(visible);
+  }
 }
 
 @keyframes slideUp {
@@ -1302,13 +1301,22 @@ $button-variants: (
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes pulse {
-  0%, 100% { @include opacity-state(visible); }
-  50% { @include opacity-state(dimmed); }
+  0%,
+  100% {
+    @include opacity-state(visible);
+  }
+  50% {
+    @include opacity-state(dimmed);
+  }
 }
 
 // ===== ADDITIONAL COMPONENTS =====
@@ -1321,7 +1329,11 @@ $button-variants: (
 
 .architecture-dropdown-button {
   position: relative;
-  background: linear-gradient(135deg, map.get($colors, success) 0%, #059669 100%);
+  background: linear-gradient(
+    135deg,
+    map.get($colors, success) 0%,
+    #059669 100%
+  );
   border: none;
   color: white;
   font-weight: 500;
@@ -1368,9 +1380,7 @@ $button-variants: (
   background: white;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
-  box-shadow: 
-    0 10px 25px rgba(0, 0, 0, 0.1),
-    0 4px 6px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1), 0 4px 6px rgba(0, 0, 0, 0.05);
   @include z-index(dropdown);
   padding: 8px;
   backdrop-filter: blur(12px);
@@ -1635,26 +1645,28 @@ $button-variants: (
 }
 
 .connection-label {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 10px;
   font-weight: 500;
   fill: #4a5568;
   text-anchor: middle;
   dominant-baseline: middle;
   pointer-events: none;
-  text-shadow: 0 0 3px rgba(255, 255, 255, 0.8), 0 0 6px rgba(255, 255, 255, 0.6);
+  text-shadow: 0 0 3px rgba(255, 255, 255, 0.8),
+    0 0 6px rgba(255, 255, 255, 0.6);
 
   .canvas-container.architecture-mode & {
-    text-shadow: 0 0 3px rgba(255, 255, 255, 0.9), 0 0 6px rgba(255, 255, 255, 0.7);
+    text-shadow: 0 0 3px rgba(255, 255, 255, 0.9),
+      0 0 6px rgba(255, 255, 255, 0.7);
   }
 }
 
 // ===== NODE DROP FEEDBACK =====
 
 .node-background.can-drop {
-  stroke: #4CAF50 !important;
+  stroke: #4caf50 !important;
   stroke-width: 2px;
-  stroke-dasharray: 5,5;
+  stroke-dasharray: 5, 5;
   animation: dash 1s linear infinite;
 }
 
@@ -1663,9 +1675,9 @@ $button-variants: (
   transform: scale(1.02);
 
   .node-background {
-    stroke: #4CAF50 !important;
+    stroke: #4caf50 !important;
     stroke-width: 3px !important;
-    stroke-dasharray: 8,4;
+    stroke-dasharray: 8, 4;
     animation: nodeDrop 1.2s ease-in-out infinite;
   }
 }
@@ -1673,13 +1685,34 @@ $button-variants: (
 // ===== PORT TYPE SPECIFIC STYLES =====
 
 $port-types: (
-  string: (#16a34a, #059669),
-  number: (#2563eb, #1d4ed8),
-  boolean: (#ea580c, #c2410c),
-  object: (#c026d3, #a21caf),
-  array: (#0891b2, #0e7490),
-  error: (#dc2626, #b91c1c),
-  any: (#6b7280, #52525b)
+  string: (
+    #16a34a,
+    #059669,
+  ),
+  number: (
+    #2563eb,
+    #1d4ed8,
+  ),
+  boolean: (
+    #ea580c,
+    #c2410c,
+  ),
+  object: (
+    #c026d3,
+    #a21caf,
+  ),
+  array: (
+    #0891b2,
+    #0e7490,
+  ),
+  error: (
+    #dc2626,
+    #b91c1c,
+  ),
+  any: (
+    #6b7280,
+    #52525b,
+  ),
 );
 
 @each $type, $colors-list in $port-types {
@@ -1689,7 +1722,7 @@ $port-types: (
 
   .canvas-container.architecture-mode .port-type-#{$type} circle {
     stroke: list.nth($colors-list, 2);
-    stroke-dasharray: 4,2;
+    stroke-dasharray: 4, 2;
   }
 }
 
@@ -1729,7 +1762,7 @@ $port-types: (
   gap: 12px;
   padding: 4px 16px;
   font-size: 13px;
-  font-family: 'Courier New', monospace;
+  font-family: "Courier New", monospace;
   border-bottom: 1px solid #f1f3f4;
 
   &:last-child {

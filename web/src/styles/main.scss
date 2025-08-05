@@ -219,28 +219,6 @@
   transition: transition(base);
 }
 
-/* Port elements styling */
-.input-port, .output-port {
-  cursor: crosshair;
-  transition: transition(base);
-  z-index: z-index(ports);
-
-  circle {
-    transition: transition(base);
-  }
-
-  &:hover circle {
-    r: $port-hover-size;
-    stroke-width: 3;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
-  }
-
-  &.connected circle {
-    stroke-width: 3;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
-  }
-}
-
 /* Bottom port styles - properly organized within groups */
 .bottom-port-group {
   z-index: z-index(connections);

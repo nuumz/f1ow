@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react'
-import { Plus, Edit, Trash2, Eye, EyeOff, Lock, Key, Shield, AlertTriangle } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Plus, Edit, Trash2, Eye, EyeOff, Lock, Key, Shield, AlertTriangle, LucideIcon } from 'lucide-react'
 
 interface Credential {
   id: string
   name: string
   type: string
   description?: string
-  fields: Record<string, any>
+  fields: Record<string, string | number | boolean>
   encrypted: boolean
   createdAt: string
   updatedAt: string
@@ -16,7 +16,7 @@ interface Credential {
 interface CredentialType {
   id: string
   name: string
-  icon: React.ComponentType<any>
+  icon: LucideIcon
   fields: CredentialField[]
   description: string
 }
@@ -85,9 +85,23 @@ export default function CredentialManager() {
   const [isEditing, setIsEditing] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [selectedType, setSelectedType] = useState<CredentialType | null>(null)
-  const [formData, setFormData] = useState<Record<string, any>>({})
+  const [formData, setFormData] = useState<Record<string, string | number | boolean>>({})
   const [showSensitiveFields, setShowSensitiveFields] = useState<Record<string, boolean>>({})
   const [searchTerm, setSearchTerm] = useState('')
+
+  // Handle keyboard events for modal
+  useEffect(() => {
+    if (!showCreateModal) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowCreateModal(false)
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [showCreateModal])
 
   // Mock data for demonstration
   useEffect(() => {
@@ -132,7 +146,7 @@ export default function CredentialManager() {
   const filteredCredentials = credentials.filter(cred =>
     cred.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     cred.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (cred.description && cred.description.toLowerCase().includes(searchTerm.toLowerCase()))
+    cred.description?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const getCredentialType = (typeId: string) => {
@@ -171,9 +185,9 @@ export default function CredentialManager() {
     
     const newCredential: Credential = {
       id: isEditing ? selectedCredential!.id : `cred-${Date.now()}`,
-      name: formData.name || 'Unnamed Credential',
+      name: String(formData.name || 'Unnamed Credential'),
       type: selectedType.id,
-      description: formData.description,
+      description: formData.description ? String(formData.description) : undefined,
       fields: { ...formData },
       encrypted: true,
       createdAt: isEditing ? selectedCredential!.createdAt : new Date().toISOString(),
@@ -323,14 +337,6 @@ export default function CredentialManager() {
 
       {showCreateModal && (
         <div className="credential-modal">
-          <div 
-            className="modal-backdrop" 
-            onClick={() => setShowCreateModal(false)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => e.key === 'Escape' && setShowCreateModal(false)}
-            aria-label="Close modal"
-          />
           <div className="modal-content">
             <div className="modal-header">
               <h2>{isEditing ? 'Edit Credential' : 'Create New Credential'}</h2>
@@ -351,20 +357,18 @@ export default function CredentialManager() {
                     {credentialTypes.map(type => {
                       const Icon = type.icon
                       return (
-                        <div
+                        <button
                           key={type.id}
                           className="type-option"
                           onClick={() => setSelectedType(type)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => e.key === 'Enter' && setSelectedType(type)}
+                          type="button"
                         >
                           <div className="type-icon">
                             <Icon size={32} />
                           </div>
                           <h5 className="type-name">{type.name}</h5>
                           <p className="type-description">{type.description}</p>
-                        </div>
+                        </button>
                       )
                     })}
                   </div>
@@ -390,7 +394,7 @@ export default function CredentialManager() {
                       <input
                         id="credential-name"
                         type="text"
-                        value={formData.name || ''}
+                        value={String(formData.name || '')}
                         onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                         placeholder="Enter a descriptive name"
                         required
@@ -401,7 +405,7 @@ export default function CredentialManager() {
                       <label htmlFor="credential-description">Description</label>
                       <textarea
                         id="credential-description"
-                        value={formData.description || ''}
+                        value={String(formData.description || '')}
                         onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                         placeholder="Optional description"
                         rows={2}
@@ -426,7 +430,7 @@ export default function CredentialManager() {
                         <input
                           id={`field-${field.name}`}
                           type={field.sensitive && !showSensitiveFields[field.name] ? 'password' : field.type}
-                          value={formData[field.name] || ''}
+                          value={String(formData[field.name] || '')}
                           onChange={(e) => setFormData(prev => ({ ...prev, [field.name]: e.target.value }))}
                           placeholder={field.placeholder}
                           required={field.required}

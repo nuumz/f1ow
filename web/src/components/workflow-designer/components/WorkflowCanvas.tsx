@@ -2120,7 +2120,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     // Legacy badge update removed - badge has been completely removed
 
     // Render simple ports for both variants
-    // Input ports
+    // Input ports - DISABLED drag/click interactions for connection creation
     const inputPortGroups = nodeGroups.selectAll('.input-port-group')
       .data((d: any) => d.inputs.map((input: any) => ({ ...input, nodeId: d.id, nodeData: d })))
       .join('g')
@@ -2136,81 +2136,10 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         
         return `${baseClass} ${highlightClass}`.trim()
       })
-      .style('cursor', 'crosshair')
-      .style('pointer-events', 'all')
-      .on('click', (event: any, d: any) => {
-        event.stopPropagation()
-        onPortClick(d.nodeId, d.id, 'input')
-      })
-      .call(d3.drag<any, any>()
-        .on('start', (event: any, d: any) => {
-          event.sourceEvent.stopPropagation()
-          event.sourceEvent.preventDefault()
-          onPortDragStart(d.nodeId, d.id, 'input')
-          
-          const [x, y] = d3.pointer(event.sourceEvent, event.sourceEvent.target.ownerSVGElement)
-          const transform = d3.zoomTransform(event.sourceEvent.target.ownerSVGElement)
-          const [canvasX, canvasY] = transform.invert([x, y])
-          onPortDrag(canvasX, canvasY)
-        })
-        .on('drag', (event: any) => {
-          const [x, y] = d3.pointer(event.sourceEvent, event.sourceEvent.target.ownerSVGElement)
-          const transform = d3.zoomTransform(event.sourceEvent.target.ownerSVGElement)
-          const [canvasX, canvasY] = transform.invert([x, y])
-          onPortDrag(canvasX, canvasY)
-        })
-        .on('end', (event: any) => {
-          console.log('Input port drag end', event.sourceEvent.clientX, event.sourceEvent.clientY)
-          
-          // Alternative method: use D3 pointer and hit testing
-          const svgElement = event.sourceEvent.target.ownerSVGElement
-          const [mouseX, mouseY] = d3.pointer(event.sourceEvent, svgElement)
-          console.log('Mouse position in SVG (input):', mouseX, mouseY)
-          
-          let targetNodeId: string | undefined
-          let targetPortId: string | undefined
-          
-          // Find all output port circles and check if mouse is over them
-          const allOutputPorts = d3.select(svgElement).selectAll('.output-port-circle')
-          
-          allOutputPorts.each(function(d: any) {
-            const circle = d3.select(this)
-            const cx = parseFloat(circle.attr('cx'))
-            const cy = parseFloat(circle.attr('cy'))
-            const r = parseFloat(circle.attr('r'))
-            
-            // Get the port's parent group transform
-            const element = this as SVGElement
-            const portGroup = d3.select(element.parentNode as SVGElement)
-            const nodeGroup = d3.select(portGroup.node()?.closest('g[data-node-id]') as SVGElement)
-            const transform = nodeGroup.attr('transform')
-            
-            let nodeX = 0, nodeY = 0
-            if (transform) {
-              const regex = /translate\(([^,]+),([^)]+)\)/
-              const match = regex.exec(transform)
-              if (match) {
-                nodeX = parseFloat(match[1])
-                nodeY = parseFloat(match[2])
-              }
-            }
-            
-            const actualX = nodeX + cx
-            const actualY = nodeY + cy
-            
-            // Check if mouse is within port radius
-            const distance = Math.sqrt((mouseX - actualX) ** 2 + (mouseY - actualY) ** 2)
-            if (distance <= r + 5) { // Add 5px tolerance
-              targetNodeId = nodeGroup.attr('data-node-id')
-              targetPortId = d.id
-              console.log('Found output port via hit test:', targetNodeId, targetPortId, 'distance:', distance)
-            }
-          })
-          
-          console.log('Final target (input drag):', targetNodeId, targetPortId)
-          onPortDragEnd(targetNodeId, targetPortId)
-        })
-      )
+      .style('cursor', 'default') // Changed from 'crosshair' to 'default' to indicate no interaction
+      .style('pointer-events', 'none') // DISABLED: Input ports cannot be clicked or dragged for connections
+      // REMOVED: Click and drag event handlers for input ports
+      // Input ports should only be drop targets, not drag sources
 
     inputPortGroups.selectAll('circle').remove()
     inputPortGroups.append('circle')
@@ -2227,6 +2156,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr('fill', getPortColor('any'))
       .attr('stroke', '#333')
       .attr('stroke-width', 2)
+      .style('pointer-events', 'none') // DISABLED: Input port circles cannot be interacted with
 
     //console.log('🔵 Created', inputPortGroups.selectAll('circle').size(), 'input port circles')
 
@@ -2346,7 +2276,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
             
             // Calculate distance directly in canvas coordinates
             const distance = Math.sqrt((canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2)
-            const tolerance = r + 15 // Increased tolerance for easier dropping
+            const tolerance = r + 5 // FIXED: Port circle radius + 5px only
             
             console.log('🎯 Checking port:', {
               nodeId,
@@ -2411,7 +2341,9 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
             
             // Calculate distance directly in canvas coordinates
             const distance = Math.sqrt((canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2)
-            const tolerance = 15 // Tolerance for diamond shape
+            // FIXED: Use diamond size (port radius) + 5px for consistent behavior with input ports
+            const diamondSize = getConfigurableDimensions(portData.nodeData).portRadius || 6
+            const tolerance = diamondSize + 5
             
             console.log('🎯 Checking bottom port (diamond):', {
               nodeId,
@@ -2501,22 +2433,44 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
                 canDropOnNode: canDropOnNode?.(nodeId)
               })
               
-              // Simplified circular detection for all nodes - more user-friendly
-              const tolerance = 120 // Generous tolerance for easier node background dropping
-              const distance = Math.sqrt((canvasX - nodeSvgX) ** 2 + (canvasY - nodeSvgY) ** 2)
+              // FIXED: Check actual node-background boundaries instead of circular tolerance
+              const relativeX = canvasX - nodeSvgX
+              const relativeY = canvasY - nodeSvgY
               
-              console.log('🎯 Distance check:', {
+              // Check if mouse position is within actual node background boundaries
+              let isWithinNodeBounds = false
+              
+              if (nodeShape === 'circle') {
+                // For circular nodes, check if within radius
+                const radius = Math.min(nodeDimensions.width, nodeDimensions.height) / 2
+                const distance = Math.sqrt(relativeX ** 2 + relativeY ** 2)
+                isWithinNodeBounds = distance <= radius
+              } else {
+                // For rectangular/square nodes, check if within bounds
+                const halfWidth = nodeDimensions.width / 2
+                const halfHeight = nodeDimensions.height / 2
+                isWithinNodeBounds = 
+                  relativeX >= -halfWidth && relativeX <= halfWidth &&
+                  relativeY >= -halfHeight && relativeY <= halfHeight
+              }
+              
+              console.log('🎯 Node bounds check:', {
                 nodeId,
-                distance,
-                tolerance,
-                isWithinTolerance: distance <= tolerance
+                relativePosition: { x: relativeX, y: relativeY },
+                nodeDimensions,
+                nodeShape,
+                isWithinNodeBounds
               })
               
-              // Check if within tolerance distance
-              if (distance <= tolerance && distance < minNodeDistance) {
-                minNodeDistance = distance
-                targetNodeId = nodeId
-                console.log('🎯✅ Found node background target:', nodeId, 'distance:', distance)
+              // Only consider this node if mouse is actually within its background
+              if (isWithinNodeBounds) {
+                // Use distance from center for prioritization among valid targets
+                const distanceFromCenter = Math.sqrt(relativeX ** 2 + relativeY ** 2)
+                if (distanceFromCenter < minNodeDistance) {
+                  minNodeDistance = distanceFromCenter
+                  targetNodeId = nodeId
+                  console.log('🎯✅ Found node background target:', nodeId, 'distance from center:', distanceFromCenter)
+                }
               }
             })
             
@@ -2698,7 +2652,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
             
             // Calculate distance directly in canvas coordinates
             const distance = Math.sqrt((canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2)
-            const tolerance = r + 15 // Increased tolerance for easier dropping
+            const tolerance = r + 5 // FIXED: Port circle radius + 5px only
             
             // Use closest valid input port with tolerance
             if (distance <= tolerance && distance < minDistance) {
@@ -2749,7 +2703,9 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
             
             // Calculate distance directly in canvas coordinates
             const distance = Math.sqrt((canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2)
-            const tolerance = 15 // Tolerance for diamond shape
+            // FIXED: Use diamond size (port radius) + 5px for consistent behavior
+            const diamondSize = getConfigurableDimensions(portData.nodeData).portRadius || 6
+            const tolerance = diamondSize + 5
             
             // Use closest valid bottom port with tolerance
             if (distance <= tolerance && distance < minDistance) {

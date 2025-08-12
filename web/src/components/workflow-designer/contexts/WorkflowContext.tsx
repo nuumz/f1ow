@@ -51,7 +51,9 @@ interface WorkflowState {
     isDragging: boolean
     draggedNodeId: string | null
     dragStartPosition: { x: number; y: number } | null
-    currentPosition: { x: number; y: number } | null
+  currentPosition: { x: number; y: number } | null
+  initialNodePosition: { x: number; y: number } | null
+  wasDirtyBeforeDrag: boolean
   }
   
   // Mode state
@@ -124,6 +126,7 @@ type WorkflowAction =
   | { type: 'START_DRAGGING'; payload: { nodeId: string; startPosition: { x: number; y: number } } }
   | { type: 'UPDATE_DRAG_POSITION'; payload: { x: number; y: number } }
   | { type: 'END_DRAGGING' }
+  | { type: 'CANCEL_DRAGGING' }
   
   // Workflow state actions
   | { type: 'MARK_DIRTY' }
@@ -173,7 +176,9 @@ const initialState: WorkflowState = {
     isDragging: false,
     draggedNodeId: null,
     dragStartPosition: null,
-    currentPosition: null
+  currentPosition: null,
+  initialNodePosition: null,
+  wasDirtyBeforeDrag: false
   },
   designerMode: 'workflow',
   architectureMode: 'context',
@@ -553,7 +558,12 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
           isDragging: true,
           draggedNodeId: action.payload.nodeId,
           dragStartPosition: action.payload.startPosition,
-          currentPosition: action.payload.startPosition
+          currentPosition: action.payload.startPosition,
+          initialNodePosition: (() => {
+            const node = state.nodes.find(n => n.id === action.payload.nodeId)
+            return node ? { x: node.x, y: node.y } : null
+          })(),
+          wasDirtyBeforeDrag: state.isDirty
         }
       }
     
@@ -573,9 +583,47 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
           isDragging: false,
           draggedNodeId: null,
           dragStartPosition: null,
-          currentPosition: null
+          currentPosition: null,
+          initialNodePosition: null,
+          wasDirtyBeforeDrag: false
         }
       }
+
+    case 'CANCEL_DRAGGING': {
+      // Revert node position to initialNodePosition without marking dirty
+      const { draggedNodeId, initialNodePosition, wasDirtyBeforeDrag } = state.draggingState
+      if (!draggedNodeId || !initialNodePosition) {
+        return {
+          ...state,
+          draggingState: {
+            isDragging: false,
+            draggedNodeId: null,
+            dragStartPosition: null,
+            currentPosition: null,
+            initialNodePosition: null,
+            wasDirtyBeforeDrag: false
+          }
+        }
+      }
+
+      const revertedNodes = state.nodes.map(node =>
+        node.id === draggedNodeId ? { ...node, x: initialNodePosition.x, y: initialNodePosition.y } : node
+      )
+
+      return {
+        ...state,
+        nodes: revertedNodes,
+        isDirty: wasDirtyBeforeDrag,
+        draggingState: {
+          isDragging: false,
+          draggedNodeId: null,
+          dragStartPosition: null,
+          currentPosition: null,
+          initialNodePosition: null,
+          wasDirtyBeforeDrag: false
+        }
+      }
+    }
     
     case 'MARK_DIRTY':
       return {
@@ -921,6 +969,12 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     dispatch({ type: 'END_DRAGGING' })
   }, [dispatch])
   
+  const cancelDragging = useCallback(() => {
+    const currentState = currentStateRef.current
+    if (!currentState.draggingState.isDragging) return
+    dispatch({ type: 'CANCEL_DRAGGING' })
+  }, [dispatch])
+  
   const isDragging = useCallback(() => {
     return currentStateRef.current.draggingState.isDragging
   }, [])
@@ -1051,9 +1105,11 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     startDragging,
     updateDragPosition,
     endDragging,
+    cancelDragging,
     isDragging,
     getDraggedNodeId
-  }), [state, svgRef, containerRef, dispatch, isNodeSelected, getSelectedNodesList, canDropOnPort, canDropOnNode, validateConnections, saveConnectionsToStorage, loadConnectionsFromStorageHandler, toggleAutoSave, saveDraft, loadDraft, autoSaveDraft, deleteDraft, listDrafts, getStorageStats, getAutoSaveStatus, startDragging, updateDragPosition, endDragging, isDragging, getDraggedNodeId])
+  }), [state, svgRef, containerRef, dispatch, isNodeSelected, getSelectedNodesList, canDropOnPort, canDropOnNode, validateConnections, saveConnectionsToStorage, loadConnectionsFromStorageHandler, toggleAutoSave, saveDraft, loadDraft, autoSaveDraft, deleteDraft, listDrafts, getStorageStats, getAutoSaveStatus, startDragging, updateDragPosition, endDragging, cancelDragging, isDragging, getDraggedNodeId])
+  
   
   return (
     <WorkflowContext.Provider value={contextValue}>

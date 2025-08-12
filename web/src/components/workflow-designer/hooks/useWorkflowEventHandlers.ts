@@ -338,14 +338,19 @@ export function useWorkflowEventHandlers() {
       event.preventDefault()
     }
     
-    // Escape - Clear selection and connection state
+    // Escape - Cancel drag if dragging; otherwise clear selection/connection
     if (event.key === 'Escape') {
-      dispatch({ type: 'CLEAR_SELECTION' })
-      dispatch({ type: 'CLEAR_CONNECTION_STATE' })
-      dispatch({ type: 'SET_SHOW_NODE_EDITOR', payload: false })
+      if (state.draggingState.isDragging) {
+        // Cancel current drag and revert to initial position
+        dispatch({ type: 'CANCEL_DRAGGING' })
+      } else {
+        dispatch({ type: 'CLEAR_SELECTION' })
+        dispatch({ type: 'CLEAR_CONNECTION_STATE' })
+        dispatch({ type: 'SET_SHOW_NODE_EDITOR', payload: false })
+      }
       event.preventDefault()
     }
-  }, [state.selectedNodes, state.connectionState, state.nodes, state.connections, dispatch])
+  }, [state.selectedNodes, state.connectionState, state.nodes, state.connections, state.draggingState.isDragging, dispatch])
 
   return {
     // Canvas handlers

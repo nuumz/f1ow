@@ -16,6 +16,9 @@ export interface DraftWorkflow {
     y: number
     k: number
   }
+  // Designer mode states
+  designerMode: 'workflow' | 'architecture'
+  architectureMode: 'context' | 'api-flow' | 'service-mesh' | 'domain-driven'
   metadata: {
     createdAt: number
     updatedAt: number
@@ -224,15 +227,22 @@ export function loadDraftWorkflow(draftId: string): DraftWorkflow | null {
       dataToProcess = decompressData(saved)  
     }
     
-    const draft = JSON.parse(dataToProcess) as DraftWorkflow
+    const draft = JSON.parse(dataToProcess)
+    
+    // Backward compatibility: Add missing mode fields for old drafts
+    const loadedDraft: DraftWorkflow = {
+      ...draft,
+      designerMode: draft.designerMode || 'workflow',
+      architectureMode: draft.architectureMode || 'context'
+    }
     
     // Cache loaded data for change detection
-    lastSavedData = JSON.stringify(draft)
+    lastSavedData = JSON.stringify(loadedDraft)
     
     const loadTime = performance.now() - startTime
-    console.log(`✅ Draft loaded: ${draft.name} (${loadTime.toFixed(1)}ms)`)
+    console.log(`✅ Draft loaded: ${loadedDraft.name} (${loadTime.toFixed(1)}ms) - Mode: ${loadedDraft.designerMode}`)
     
-    return draft
+    return loadedDraft
   } catch (error) {
     console.error('❌ Failed to load draft:', error)
     return null
@@ -276,6 +286,9 @@ function performAutoSave(draft: Omit<DraftWorkflow, 'metadata'>): void {
   
   isAutoSaving = true
   autoSaveCallback?.('started')
+  try {
+    window.dispatchEvent(new CustomEvent('workflow:autosave', { detail: { status: 'started' } }))
+  } catch {}
   
   try {
     // Performance warning for large workflows
@@ -287,16 +300,26 @@ function performAutoSave(draft: Omit<DraftWorkflow, 'metadata'>): void {
     
     if (success) {
       autoSaveCallback?.('completed')
+      try {
+        window.dispatchEvent(new CustomEvent('workflow:autosave', { detail: { status: 'completed', timestamp: Date.now() } }))
+      } catch {}
       
       // Reset change history after successful save
       changeHistory = []
     } else {
       console.error('❌ Auto-save failed')
       autoSaveCallback?.('failed', 'Save operation failed')
+      try {
+        window.dispatchEvent(new CustomEvent('workflow:autosave', { detail: { status: 'failed', error: 'Save operation failed', timestamp: Date.now() } }))
+      } catch {}
     }
   } catch (error) {
     console.error('❌ Auto-save error:', error)
-    autoSaveCallback?.('failed', error instanceof Error ? error.message : 'Unknown error')
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    autoSaveCallback?.('failed', message)
+    try {
+      window.dispatchEvent(new CustomEvent('workflow:autosave', { detail: { status: 'failed', error: message, timestamp: Date.now() } }))
+    } catch {}
   } finally {
     isAutoSaving = false
   }
@@ -348,6 +371,7 @@ export function deleteDraftWorkflow(draftId: string): boolean {
 /**
  * Get enhanced storage statistics with performance metrics
  */
+// eslint-disable-next-line
 export function getWorkflowStorageStats() {
   let totalSize = 0
   let draftCount = 0

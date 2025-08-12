@@ -20,17 +20,10 @@ import {
   calculateConnectionOffset,
   getConnectionFlow,
   validatePathInputs,
-  type PathConfig,
-  type ConnectionFlow
-} from './path-generation'
+  type PathConfig} from './path-generation'
 import {
   getConnectionGroupInfo as getConnectionGroupInfoCore,
-  analyzeConnectionGroups as analyzeConnectionGroupsCore,
-  type AnalyzableConnection,
-  type GroupedConnection,
-  type ConnectionGroupInfo
-} from './connection-analysis'
-import { validatePositions } from './geometry-utils'
+  analyzeConnectionGroups as analyzeConnectionGroupsCore} from './connection-analysis'
 
 // Re-export types for backward compatibility
 export type { PortPosition } from '../types'

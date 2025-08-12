@@ -617,12 +617,15 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
         name: name || state.workflowName,
         nodes: state.nodes,
         connections: state.connections,
-        canvasTransform: state.canvasTransform
+        canvasTransform: state.canvasTransform,
+        // Include current designer modes
+        designerMode: state.designerMode,
+        architectureMode: state.architectureMode
       }
       
       const success = saveDraftWorkflow(draftData)
       if (success) {
-        console.log('✅ Draft saved successfully:', draftId)
+        console.log('✅ Draft saved successfully:', draftId, 'with mode:', state.designerMode)
         return {
           ...state,
           lastSaved: Date.now(),
@@ -634,13 +637,16 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
     
     case 'LOAD_DRAFT': {
       const { draft } = action.payload
-      console.log('✅ Loading draft:', draft.name)
+      console.log('✅ Loading draft:', draft.name, 'with mode:', draft.designerMode)
       return {
         ...state,
         workflowName: draft.name,
         nodes: draft.nodes,
         connections: draft.connections,
         canvasTransform: draft.canvasTransform,
+        // Restore designer modes from draft
+        designerMode: draft.designerMode || 'workflow',
+        architectureMode: draft.architectureMode || 'context',
         selectedNodes: new Set(),
         selectedNode: null,
         connectionState: {
@@ -653,28 +659,8 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
     }
     
     case 'AUTO_SAVE_DRAFT': {
-      const draftId = `auto-save-${state.workflowName}`
-      const draftData = {
-        id: draftId,
-        name: state.workflowName,
-        nodes: state.nodes,
-        connections: state.connections,
-        canvasTransform: state.canvasTransform
-      }
-      
-      // Perform auto-save without triggering re-render
-      autoSaveDraftWorkflow(draftData)
-      console.log('💾 Auto-save completed silently (no re-render)')
-      
-      // Return state unchanged to prevent re-render
-      return {
-        ...state,  
-        // Only update timestamp without causing visual changes
-        autoSaveState: {
-          ...state.autoSaveState,
-          lastAutoSaveAttempt: Date.now()
-        }
-      }
+      // No-op reducer to avoid any render from auto-save actions
+      return state
     }
     
     case 'AUTO_SAVE_STARTED': {
@@ -943,31 +929,20 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     return currentStateRef.current.draggingState.draggedNodeId
   }, [])
   
-  // Set up auto-save state callback
+  // Set up auto-save state callback (fully disabled to avoid re-renders from autosave)
   useEffect(() => {
-    const callback = (status: 'started' | 'completed' | 'failed', error?: string) => {
-      switch (status) {
-        case 'started':
-          dispatch({ type: 'AUTO_SAVE_STARTED' })
-          break
-        case 'completed':
-          dispatch({ type: 'AUTO_SAVE_COMPLETED' })
-          break
-        case 'failed':
-          dispatch({ 
-            type: 'AUTO_SAVE_FAILED', 
-            payload: { error: error || 'Unknown error' }
-          })
-          break
-      }
+    /* eslint-disable @typescript-eslint/no-unused-vars */
+    const callback = (_status: 'started' | 'completed' | 'failed', _error?: string) => {
+      // Intentionally no-op to keep auto-save fully silent (no state updates)
     }
-    
+    /* eslint-enable @typescript-eslint/no-unused-vars */
+
     setAutoSaveCallback(callback)
-    
+
     return () => {
       setAutoSaveCallback(() => {})
     }
-  }, [dispatch])
+  }, [])
 
   // Auto-load connections when workflow name changes
   useEffect(() => {
@@ -984,29 +959,50 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     if (state.nodes.length > 0 && state.connections.length > 0) {
       validateConnections()
     }
-  }, [state.nodes, validateConnections])
+  }, [state.nodes.length, state.connections.length, validateConnections])
 
-  // Auto-save draft when workflow changes (debounced to prevent flickering during drag)
+  // Auto-save draft when workflow changes (debounced, direct call; skip during drag/connection to prevent flicker)
   useEffect(() => {
     if (state.isDirty && state.nodes.length > 0) {
-      // Skip auto-save during drag operations to prevent port flickering
-      if (state.connectionState.isConnecting) {
+      // Skip auto-save during drag/connection to prevent port flickering
+      if (state.connectionState.isConnecting || state.draggingState.isDragging) {
         console.log('🚫 Skipping auto-save during drag operation to prevent flickering')
         return
       }
       
       // Debounce auto-save to prevent excessive saves during rapid changes
       const autoSaveTimer = setTimeout(() => {
-        dispatch({ type: 'AUTO_SAVE_DRAFT' })
+        const draftId = `auto-save-${state.workflowName}`
+        const draftData = {
+          id: draftId,
+          name: state.workflowName,
+          nodes: state.nodes,
+          connections: state.connections,
+          canvasTransform: state.canvasTransform,
+          designerMode: state.designerMode,
+          architectureMode: state.architectureMode
+        }
+        // Direct auto-save (no dispatch, no re-render)
+        autoSaveDraftWorkflow(draftData)
       }, 1000) // 1 second debounce
       
       return () => clearTimeout(autoSaveTimer)
     }
-  }, [state.isDirty, state.nodes, state.connections, state.workflowName, state.connectionState.isConnecting, dispatch])
+  }, [
+    state.isDirty,
+    state.nodes,
+    state.connections,
+    state.workflowName,
+    state.connectionState.isConnecting,
+    state.draggingState.isDragging,
+    state.canvasTransform,
+    state.designerMode,
+    state.architectureMode
+  ])
   
-  // Auto-save after drag operations complete (without triggering re-render)
+  // Auto-save after drag/connection operations complete (without triggering re-render)
   useEffect(() => {
-    if (!state.connectionState.isConnecting && state.isDirty && state.nodes.length > 0) {
+    if (!state.connectionState.isConnecting && !state.draggingState.isDragging && state.isDirty && state.nodes.length > 0) {
       // If we just finished a drag operation and need to save
       const dragEndAutoSaveTimer = setTimeout(() => {
         console.log('💾 Silent auto-save triggered after drag completion (no re-render)')
@@ -1018,7 +1014,10 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
           name: state.workflowName,
           nodes: state.nodes,
           connections: state.connections,
-          canvasTransform: state.canvasTransform
+          canvasTransform: state.canvasTransform,
+          // Include modes in direct auto-save
+          designerMode: state.designerMode,
+          architectureMode: state.architectureMode
         }
         
         // Direct auto-save without Redux action
@@ -1027,7 +1026,7 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
       
       return () => clearTimeout(dragEndAutoSaveTimer)
     }
-  }, [state.connectionState.isConnecting, state.isDirty, state.nodes, state.connections, state.workflowName, state.canvasTransform])
+  }, [state.connectionState.isConnecting, state.draggingState.isDragging, state.isDirty, state.nodes, state.connections, state.workflowName, state.canvasTransform, state.designerMode, state.architectureMode])
   
   const contextValue: WorkflowContextType = useMemo(() => ({
     state,
@@ -1064,6 +1063,7 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
 }
 
 // Hook to use workflow context
+// eslint-disable-next-line react-refresh/only-export-components
 export function useWorkflowContext() {
   const context = useContext(WorkflowContext)
   if (!context) {

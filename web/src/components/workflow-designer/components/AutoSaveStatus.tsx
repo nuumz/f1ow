@@ -2,6 +2,7 @@
  * Performance-enhanced auto-save status indicator component
  */
 
+import { useEffect, useState } from 'react'
 import { useWorkflowContext } from '../contexts/WorkflowContext'
 import { getAutoSaveMetrics } from '../utils/workflow-storage'
 
@@ -91,10 +92,32 @@ const ErrorIcon = ({ size = 16, className = '' }: { size?: number; className?: s
   </svg>
 )
 
-export function AutoSaveStatus({ className = '', showFullStatus = false }: AutoSaveStatusProps) {
+export function AutoSaveStatus({ className = '', showFullStatus = false }: Readonly<AutoSaveStatusProps>) {
   const { state } = useWorkflowContext()
-  const { autoSaveState } = state
+  const [isAutoSaving, setIsAutoSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [lastSavedTs, setLastSavedTs] = useState<number>(state.lastSaved || 0)
   const metrics = getAutoSaveMetrics()
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ev = e as CustomEvent<{ status: 'started' | 'completed' | 'failed'; error?: string; timestamp?: number }>
+      if (ev.detail?.status === 'started') {
+        setIsAutoSaving(true)
+        setError(null)
+      } else if (ev.detail?.status === 'completed') {
+        setIsAutoSaving(false)
+        setError(null)
+        if (ev.detail.timestamp) setLastSavedTs(ev.detail.timestamp)
+      } else if (ev.detail?.status === 'failed') {
+        setIsAutoSaving(false)
+        setError(ev.detail.error || 'Save failed')
+        if (ev.detail.timestamp) setLastSavedTs(ev.detail.timestamp)
+      }
+    }
+    window.addEventListener('workflow:autosave', handler as EventListener)
+    return () => window.removeEventListener('workflow:autosave', handler as EventListener)
+  }, [])
   
   // Format time display
   const formatTime = (timestamp: number) => {
@@ -120,7 +143,7 @@ export function AutoSaveStatus({ className = '', showFullStatus = false }: AutoS
   
   // Determine status display with custom SVG icons
   const getStatusDisplay = () => {
-    if (autoSaveState.isAutoSaving) {
+  if (isAutoSaving) {
       return {
         text: 'Auto-saving...',
         icon: <SavingIcon size={16} />,
@@ -131,7 +154,7 @@ export function AutoSaveStatus({ className = '', showFullStatus = false }: AutoS
       }
     }
     
-    if (autoSaveState.autoSaveError) {
+  if (error) {
       return {
         text: 'Save failed',
         icon: <ErrorIcon size={16} />,
@@ -142,6 +165,17 @@ export function AutoSaveStatus({ className = '', showFullStatus = false }: AutoS
       }
     }
     
+    // If context says dirty but no pending changes (per metrics), consider it saved
+    if (state.isDirty && metrics.pendingChanges === 0 && !isAutoSaving) {
+      return {
+        text: 'All changes saved',
+        icon: <SavedIcon size={16} />,
+        color: 'text-green-600',
+        bgColor: 'bg-green-50',
+        borderColor: 'border-green-200',
+        pulse: false
+      }
+    }
     if (state.isDirty) {
       return {
         text: 'Unsaved changes',
@@ -164,7 +198,7 @@ export function AutoSaveStatus({ className = '', showFullStatus = false }: AutoS
   }
   
   const status = getStatusDisplay()
-  const lastSavedTime = getTimeAgo(state.lastSaved)
+  const lastSavedTime = getTimeAgo(lastSavedTs || state.lastSaved)
   
   if (showFullStatus) {
     return (
@@ -176,14 +210,14 @@ export function AutoSaveStatus({ className = '', showFullStatus = false }: AutoS
           <span className={`text-sm font-medium ${status.color}`} style={{ verticalAlign: 'middle' }}>
             {status.text}
           </span>
-          {state.lastSaved > 0 && !autoSaveState.isAutoSaving && (
+      {lastSavedTs > 0 && !isAutoSaving && (
             <span className="text-xs text-gray-500">
-              Last saved: {formatTime(state.lastSaved)} ({lastSavedTime})
+        Last saved: {formatTime(lastSavedTs || state.lastSaved)} ({lastSavedTime})
             </span>
           )}
-          {autoSaveState.autoSaveError && (
+      {error && (
             <span className="text-xs text-red-500 mt-1 max-w-xs truncate">
-              {autoSaveState.autoSaveError}
+        {error}
             </span>
           )}
         </div>
@@ -193,7 +227,7 @@ export function AutoSaveStatus({ className = '', showFullStatus = false }: AutoS
   
   const tooltipParts = [status.text]
   if (lastSavedTime) tooltipParts.push(`Last saved: ${lastSavedTime}`)
-  if (autoSaveState.autoSaveError) tooltipParts.push(`Error: ${autoSaveState.autoSaveError}`)
+  if (error) tooltipParts.push(`Error: ${error}`)
   if (metrics.pendingChanges > 0) tooltipParts.push(`Pending changes: ${metrics.pendingChanges}`)
   if (metrics.currentDelay !== 500) tooltipParts.push(`Smart delay: ${metrics.currentDelay}ms`)
   const tooltipText = tooltipParts.join(' • ')
@@ -214,10 +248,28 @@ export function AutoSaveStatus({ className = '', showFullStatus = false }: AutoS
  * Compact auto-save indicator with beautiful custom SVG icons
  */
 export function AutoSaveIndicator({ className = '', iconOnly = false }: Readonly<{ className?: string; iconOnly?: boolean }>) {
-  const { state } = useWorkflowContext()
-  const { autoSaveState } = state
+  const [isAutoSaving, setIsAutoSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ev = e as CustomEvent<{ status: 'started' | 'completed' | 'failed'; error?: string }>
+      if (ev.detail?.status === 'started') {
+        setIsAutoSaving(true)
+        setError(null)
+      } else if (ev.detail?.status === 'completed') {
+        setIsAutoSaving(false)
+        setError(null)
+      } else if (ev.detail?.status === 'failed') {
+        setIsAutoSaving(false)
+        setError(ev.detail.error || 'Save failed')
+      }
+    }
+    window.addEventListener('workflow:autosave', handler as EventListener)
+    return () => window.removeEventListener('workflow:autosave', handler as EventListener)
+  }, [])
   
-  if (autoSaveState.isAutoSaving) {
+  if (isAutoSaving) {
     return (
       <div 
         className={`inline-flex items-center justify-center ${iconOnly ? 'w-6 h-6' : 'gap-1.5 px-2 py-1'} rounded-full shadow-sm transition-all duration-200 ${className}`}
@@ -229,11 +281,11 @@ export function AutoSaveIndicator({ className = '', iconOnly = false }: Readonly
     )
   }
   
-  if (autoSaveState.autoSaveError) {
+  if (error) {
     return (
       <div 
         className={`inline-flex items-center justify-center ${iconOnly ? 'w-6 h-6' : 'gap-1.5 px-2 py-1'} rounded-full shadow-sm transition-all duration-200 ${className}`}
-        title={`Auto-save failed: ${autoSaveState.autoSaveError}`}
+  title={`Auto-save failed: ${error}`}
       >
         <ErrorIcon size={iconOnly ? 18 : 14} />
         {!iconOnly && <span className="text-xs font-medium text-red-600">Failed</span>}

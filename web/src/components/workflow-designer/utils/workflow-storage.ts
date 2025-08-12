@@ -77,7 +77,7 @@ function decompressData(data: string): string {
 }
 
 // Generate checksum for change detection
-function generateChecksum(data: any): string {
+function generateChecksum(data: Omit<DraftWorkflow, 'metadata'>): string {
   const normalized = normalizeDataForChecksum(data)
   const str = JSON.stringify(normalized)
   let hash = 0
@@ -90,7 +90,7 @@ function generateChecksum(data: any): string {
 }
 
 // Normalize data for consistent checksum generation
-function normalizeDataForChecksum(data: Omit<DraftWorkflow, 'metadata'>): any {
+function normalizeDataForChecksum(data: Omit<DraftWorkflow, 'metadata'>): Record<string, unknown> {
   return {
     name: data.name,
     nodes: data.nodes.map(node => ({
@@ -99,7 +99,7 @@ function normalizeDataForChecksum(data: Omit<DraftWorkflow, 'metadata'>): any {
       x: Math.round(node.x), // Round to nearest pixel
       y: Math.round(node.y)  // Round to nearest pixel
     })),
-    connections: data.connections.sort((a, b) => a.id.localeCompare(b.id)),
+  connections: [...data.connections].sort((a: Connection, b: Connection) => a.id.localeCompare(b.id)),
     canvasTransform: {
       x: Math.round(data.canvasTransform.x),
       y: Math.round(data.canvasTransform.y),  

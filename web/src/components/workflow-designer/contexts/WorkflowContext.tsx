@@ -238,10 +238,10 @@ const validateConnections = (connections: Connection[], nodes: WorkflowNode[]): 
     
     if (!sourceNode || !targetNode) return false
     
-    const sourcePortExists = sourceNode.outputs.some(p => p.id === conn.sourcePortId) ||
-                             (sourceNode.bottomPorts && sourceNode.bottomPorts.some(p => p.id === conn.sourcePortId))
-    const targetPortExists = targetNode.inputs.some(p => p.id === conn.targetPortId) ||
-                             (targetNode.bottomPorts && targetNode.bottomPorts.some(p => p.id === conn.targetPortId))
+  const sourcePortExists = sourceNode.outputs.some(p => p.id === conn.sourcePortId) ||
+               sourceNode.bottomPorts?.some(p => p.id === conn.sourcePortId)
+  const targetPortExists = targetNode.inputs.some(p => p.id === conn.targetPortId) ||
+               targetNode.bottomPorts?.some(p => p.id === conn.targetPortId)
     
     if (!sourcePortExists || !targetPortExists) {
       console.warn('Invalid connection - missing port:', conn)
@@ -481,7 +481,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
         }
       }
     
-    case 'CLEAR_CONNECTION_STATE':
+    case 'CLEAR_CONNECTION_STATE': {
       console.log('CLEAR_CONNECTION_STATE reducer called')
       const newState = {
         ...state,
@@ -494,8 +494,8 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
       }
       
       // Auto-save will be triggered by useEffect after isConnecting becomes false
-      
       return newState
+    }
     
     case 'SET_EXECUTION_STATE':
       return {
@@ -1020,7 +1020,6 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     if (state.isDirty && state.nodes.length > 0) {
       // Skip auto-save during drag/connection to prevent port flickering
       if (state.connectionState.isConnecting || state.draggingState.isDragging) {
-        console.log('🚫 Skipping auto-save during drag operation to prevent flickering')
         return
       }
       

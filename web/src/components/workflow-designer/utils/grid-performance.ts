@@ -98,33 +98,40 @@ export class GridPerformanceMonitor {
     recommendations: string[];
   } {
     const { avgRenderTime, cacheHitRate, renderCount } = this.metrics;
+    
+    // Tuned thresholds for practical dev usage
+  const EXCELLENT_TIME = 2; // ms
+  const GOOD_TIME = 8; // ms
+  const WARNING_TIME = this.PERFORMANCE_THRESHOLD; // ms (default 15)
+    const MIN_WARNING_HIT = 35; // %
 
     let status: 'excellent' | 'good' | 'warning' | 'poor';
-    let recommendations: string[] = [];
+    const recommendations: string[] = [];
 
-    // Determine performance status
-    if (avgRenderTime < 5 && cacheHitRate > 90) {
+    // Determine performance status with more sensible conditions
+  if (avgRenderTime <= EXCELLENT_TIME && cacheHitRate >= 85) {
       status = 'excellent';
-    } else if (avgRenderTime < 10 && cacheHitRate > this.GOOD_CACHE_HIT_RATE) {
+  } else if (avgRenderTime <= GOOD_TIME && cacheHitRate >= this.GOOD_CACHE_HIT_RATE) {
       status = 'good';
-    } else if (avgRenderTime < this.PERFORMANCE_THRESHOLD || cacheHitRate > 50) {
+    } else if (avgRenderTime > WARNING_TIME || cacheHitRate < MIN_WARNING_HIT) {
       status = 'warning';
     } else {
-      status = 'poor';
+      // Borderline but acceptable
+      status = 'good';
     }
 
-    // Generate recommendations
-    if (avgRenderTime > this.PERFORMANCE_THRESHOLD) {
+    // Generate recommendations only when needed
+    if (avgRenderTime > WARNING_TIME) {
       recommendations.push('Consider reducing grid density or viewport size');
       recommendations.push('Check for excessive DOM manipulations during grid updates');
     }
 
-    if (cacheHitRate < this.GOOD_CACHE_HIT_RATE && renderCount > 10) {
+  if (cacheHitRate < this.GOOD_CACHE_HIT_RATE && renderCount > 10) {
       recommendations.push('Adjust cache tolerance or transform rounding for better cache efficiency');
       recommendations.push('Consider increasing cache duration for stable transforms');
     }
 
-    if (renderCount > 100 && avgRenderTime > 8) {
+    if (renderCount > 200 && avgRenderTime > GOOD_TIME) {
       recommendations.push('Implement grid virtualization for large canvases');
       recommendations.push('Consider using WebGL for high-performance grid rendering');
     }

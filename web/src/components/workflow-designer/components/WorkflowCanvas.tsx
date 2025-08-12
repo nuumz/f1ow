@@ -19,9 +19,10 @@ import {
   generateVariantAwareConnectionPath, 
   generateMultipleConnectionPath,
   calculateConnectionPreviewPath, 
-  calculatePortPosition, // Still needed for bottom ports
   getConnectionGroupInfo
 } from '../utils/connection-utils'
+// Use non-deprecated port positioning utilities
+import { calculatePortPosition } from '../utils/port-positioning'
 // Grid performance utilities
 import { 
   GridPerformanceMonitor, 
@@ -33,7 +34,9 @@ import {
 
 // Type aliases for better maintainability
 type CallbackPriority = 'high' | 'normal' | 'low'
+type LayerSelection = 'svg' | 'nodeLayer' | 'connectionLayer' | 'gridLayer'
 type NodeZIndexState = 'normal' | 'selected' | 'dragging'
+type MarkerState = 'default' | 'selected' | 'hover'
 
 export interface WorkflowCanvasProps {
   // SVG ref
@@ -190,7 +193,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   }, [])
 
   // PERFORMANCE: Cached D3 selection getter
-  const getCachedSelection = useCallback((type: 'svg' | 'nodeLayer' | 'connectionLayer' | 'gridLayer') => {
+  const getCachedSelection = useCallback((type: LayerSelection) => {
     if (!svgRef.current) return null
     
     const now = performance.now()
@@ -198,7 +201,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     const cacheAge = now - (cache.lastUpdate || 0)
     
     // Invalidate cache after 1 second or if selections are empty
-    if (cacheAge > 1000 || !cache[type] || cache[type]!.empty()) {
+  if (cacheAge > 1000 || !cache[type] || cache[type]?.empty()) {
       const svg = d3.select(svgRef.current)
       cache.svg = svg
       cache.nodeLayer = svg.select('.node-layer')
@@ -207,7 +210,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       cache.lastUpdate = now
     }
     
-    return cache[type] || null
+  return cache[type] || null
   }, [svgRef])
   
   // Cleanup timeouts and RAF callbacks on unmount
@@ -243,23 +246,23 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   const currentTransformRef = useRef(canvasTransform)
   
   // Helper functions to reduce cognitive complexity
-  const getArrowMarkerForMode = useCallback((isWorkflowMode: boolean, state: 'default' | 'selected' | 'hover') => {
-    if (isWorkflowMode) {
-      switch (state) {
-        case 'selected': return 'url(#arrowhead-workflow-selected)'
-        case 'hover': return 'url(#arrowhead-workflow-hover)'
-        default: return 'url(#arrowhead-workflow)'
-      }
-    } else {
-      switch (state) {
-        case 'selected': return 'url(#arrowhead-architecture-selected)'
-        case 'hover': return 'url(#arrowhead-architecture-hover)'
-        default: return 'url(#arrowhead-architecture)'
-      }
+  const getWorkflowArrowMarker = useCallback((state: MarkerState) => {
+    switch (state) {
+      case 'selected': return 'url(#arrowhead-workflow-selected)'
+      case 'hover': return 'url(#arrowhead-workflow-hover)'
+      default: return 'url(#arrowhead-workflow)'
     }
   }, [])
 
-  const getLeftArrowMarker = useCallback((state: 'default' | 'selected' | 'hover') => {
+  const getArchitectureArrowMarker = useCallback((state: MarkerState) => {
+    switch (state) {
+      case 'selected': return 'url(#arrowhead-architecture-selected)'
+      case 'hover': return 'url(#arrowhead-architecture-hover)'
+      default: return 'url(#arrowhead-architecture)'
+    }
+  }, [])
+
+  const getLeftArrowMarker = useCallback((state: MarkerState) => {
     switch (state) {
       case 'selected': return 'url(#arrowhead-left-selected)'
       case 'hover': return 'url(#arrowhead-left-hover)'
@@ -271,7 +274,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
    * Helper function to determine connection direction and appropriate arrow marker
    * Now includes mode-specific styling for workflow vs architecture modes
    */
-  const getConnectionMarker = useCallback((connection: Connection, state: 'default' | 'selected' | 'hover' = 'default') => {
+  const getConnectionMarker = useCallback((connection: Connection, state: MarkerState = 'default') => {
     const sourceNode = nodes.find(n => n.id === connection.sourceNodeId)
     const targetNode = nodes.find(n => n.id === connection.targetNodeId)
     
@@ -282,13 +285,15 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     
     if (isSourceBottomPort) {
       const isLeftToRight = targetNode.x > sourceNode.x
-      return isLeftToRight 
-        ? getArrowMarkerForMode(isWorkflowMode, state)
-        : getLeftArrowMarker(state)
+      if (isLeftToRight) {
+        const markerFn = isWorkflowMode ? getWorkflowArrowMarker : getArchitectureArrowMarker
+        return markerFn(state)
+      }
+      return getLeftArrowMarker(state)
     }
-    
-    return getArrowMarkerForMode(isWorkflowMode, state)
-  }, [nodes, workflowContextState.designerMode, getArrowMarkerForMode, getLeftArrowMarker])
+
+    return (isWorkflowMode ? getWorkflowArrowMarker : getArchitectureArrowMarker)(state)
+  }, [nodes, workflowContextState.designerMode, getWorkflowArrowMarker, getArchitectureArrowMarker, getLeftArrowMarker])
   useEffect(() => {
     currentTransformRef.current = canvasTransform
   }, [canvasTransform])
@@ -328,6 +333,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   
   // Grid performance monitoring using centralized utilities
   const gridPerformanceRef = useRef<GridPerformanceMonitor | null>(null)
+  const lastWarnStatusRef = useRef<'none' | 'warning' | 'poor'>('none')
   
   // Initialize grid performance monitor
   useEffect(() => {
@@ -482,7 +488,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     gridLayer.selectAll('.grid-pattern-rect').remove()
     
     // Clean up unused patterns to prevent memory leaks
-    if (cached && cached.pattern && cached.pattern !== patternId) {
+  if (cached?.pattern && cached.pattern !== patternId) {
       const oldPattern = svgSelection.select(`#${cached.pattern}`)
       if (!oldPattern.empty()) {
         oldPattern.remove()
@@ -540,9 +546,20 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
       // Only show performance warnings every 50 poor performances
       const report = gridPerformanceRef.current.getPerformanceReport()
-      if ((report.status === 'warning' || report.status === 'poor') && metrics.renderCount % 50 === 0) {
+      // Only warn for truly problematic frames: 'poor', or 'warning' with non-trivial avg time
+      let currentWarnStatus: 'none' | 'warning' | 'poor' = 'none'
+      if (report.status === 'poor') {
+        currentWarnStatus = 'poor'
+      } else if (report.status === 'warning' && metrics.avgRenderTime > 8) {
+        currentWarnStatus = 'warning'
+      }
+
+      const changedToWarn = currentWarnStatus !== 'none' && currentWarnStatus !== lastWarnStatusRef.current
+      if (changedToWarn && metrics.renderCount % 50 === 0) {
         console.warn(`🚨 Grid Performance ${report.status.toUpperCase()} (every 50th):`, report.summary)
       }
+      // Update last status for next iteration
+      lastWarnStatusRef.current = currentWarnStatus
     }
   }, [showGrid])
 
@@ -757,27 +774,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     
     // In architecture mode, be more permissive for legacy system support
     if (designerMode === 'architecture') {
-      // Allow multiple connections to most ports in architecture mode
-      // This supports legacy systems with multiple endpoints
-      switch (portId) {
-        case 'ai-model':
-          // Even AI Model ports can have multiple connections in architecture mode
-          // (e.g., different model versions or fallback models)
-          return true
-          
-        case 'memory':
-          // Memory ports can connect to multiple stores in architecture mode
-          return true
-          
-        case 'tool':
-          // Tool port: Always allows multiple connections
-          return true
-          
-        default:
-          // In architecture mode, allow multiple connections for all ports
-          // This supports legacy systems with multiple endpoints
-          return true
-      }
+      // In architecture mode, allow multiple connections for all bottom ports
+      return true
     }
     
     // Original workflow mode logic (stricter validation)
@@ -1050,7 +1048,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           const typedPortData = portData as (NodePort & { nodeId: string })
           const nodeId = nodeElement.datum()?.id
           
-          if (!nodeId || !connectionStart) return false
+          if (!nodeId) return false
           
           // Use canDropOnPort for validation
           return canDropOnPort(nodeId, typedPortData.id)
@@ -1571,8 +1569,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         event.stopPropagation()
         onConnectionClick(d)
       })
-      .on('mouseenter', function(this: any, _event: any, d: Connection) {
-        const connectionGroup = d3.select(this.parentNode)
+      .on('mouseenter', (event: any, d: Connection) => {
+        const connectionGroup = d3.select((event.currentTarget as SVGPathElement).parentNode as SVGGElement)
         const connectionPath = connectionGroup.select('.connection-path')
         const isSelected = selectedConnection?.id === d.id
         
@@ -1594,8 +1592,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
             .attr('marker-end', getConnectionMarker(d, 'hover'))
         }
       })
-      .on('mouseleave', function(this: any, _event: any, d: Connection) {
-        const connectionGroup = d3.select(this.parentNode)
+      .on('mouseleave', (event: any, d: Connection) => {
+        const connectionGroup = d3.select((event.currentTarget as SVGPathElement).parentNode as SVGGElement)
         const connectionPath = connectionGroup.select('.connection-path')
         const isSelected = selectedConnection?.id === d.id
         
@@ -2005,13 +2003,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         if (!currentDraggedElement || currentDraggedElement.node() !== this) {
           draggedElementRef.current = nodeElement
         }
-      } else if (isCurrentlyDragging && currentDraggedNodeId && currentDraggedNodeId !== d.id) {
-        // For other nodes during drag, ensure dragging class is removed
-        if (hasExistingDraggingClass) {
-          nodeElement.classed('dragging', false)
-        }
-      } else if (!isCurrentlyDragging) {
-        // Only clean up when not dragging at all
+      } else if (!isCurrentlyDragging || (isCurrentlyDragging && currentDraggedNodeId && currentDraggedNodeId !== d.id)) {
+        // Ensure dragging class is removed for non-dragged or when not dragging
         if (hasExistingDraggingClass) {
           nodeElement.classed('dragging', false)
         }
@@ -2374,7 +2367,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
             
             console.log('🎯 Found nodes for background check:', allNodes.size())
             
-            allNodes.each(function(d: any) {
+            allNodes.each(function() {
               const nodeGroup = d3.select(this)
               const nodeId = nodeGroup.attr('data-node-id')
               
@@ -3342,10 +3335,22 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const safeCanDrop = Boolean(canDrop)
         const baseDimensions = getConfigurableDimensions(d.nodeData)
         
-        const targetFill = isConnectionActive ? (safeCanDrop ? '#4CAF50' : '#ccc') : getPortColor('any')
-        const targetStroke = isConnectionActive ? (safeCanDrop ? '#4CAF50' : '#ff5722') : '#8d8d8d'
-        const targetStrokeWidth = isConnectionActive ? (safeCanDrop ? 3 : 2) : 2
-        const targetRadius = isConnectionActive ? (safeCanDrop ? baseDimensions.portRadius * 1.5 : baseDimensions.portRadius) : baseDimensions.portRadius
+        let targetFill: string
+        let targetStroke: string
+        let targetStrokeWidth: number
+        let targetRadius: number
+        
+        if (isConnectionActive) {
+          targetFill = safeCanDrop ? '#4CAF50' : '#ccc'
+          targetStroke = safeCanDrop ? '#4CAF50' : '#ff5722'
+          targetStrokeWidth = safeCanDrop ? 3 : 2
+          targetRadius = safeCanDrop ? baseDimensions.portRadius * 1.5 : baseDimensions.portRadius
+        } else {
+          targetFill = getPortColor('any')
+          targetStroke = '#8d8d8d'
+          targetStrokeWidth = 2
+          targetRadius = baseDimensions.portRadius
+        }
         
         // Only update if values changed to prevent flickering
         const currentFill = portElement.attr('fill')
@@ -3367,7 +3372,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         }
       })
       
-  }, [isConnecting, connectionStart?.nodeId, connectionStart?.portId, connectionPreview?.x, connectionPreview?.y, nodeVariant, isInitialized, workflowContextState.designerMode, canDropOnPort, connectionPreview, connectionStart, getConfigurableDimensions, nodeMap, svgRef])
+  }, [isConnecting, connectionStart?.nodeId, connectionStart?.portId, connectionPreview?.x, connectionPreview?.y, nodeVariant, isInitialized, workflowContextState.designerMode, canDropOnPort, connectionPreview, connectionStart, getConfigurableDimensions, nodeMap, svgRef, updatePortHighlighting])
   
   // REMOVED: Architecture mode port visibility JavaScript management
   // CSS now handles all port visibility states automatically:

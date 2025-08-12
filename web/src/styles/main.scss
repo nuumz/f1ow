@@ -26,6 +26,7 @@
 @use 'credential-manager';
 @use 'data-mapper';
 @use 'expression-editor';
+@use 'draft-manager';
 
 // 6. Legacy styles (will be refactored gradually)
 // Note: Some of these styles will be moved to appropriate files later

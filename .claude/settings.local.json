@@ -21,7 +21,8 @@
       "Bash(find:*)",
       "Bash(rm:*)",
       "Bash(npx vite build:*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(npx sass:*)"
     ],
     "deny": []
   }

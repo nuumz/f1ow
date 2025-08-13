@@ -20,7 +20,8 @@ import {
   generateMultipleConnectionPath,
   calculateConnectionPreviewPath, 
   calculatePortPosition, // Still needed for bottom ports
-  getConnectionGroupInfo
+  getConnectionGroupInfo,
+  generateAdaptiveOrthogonalRoundedPath
 } from '../utils/connection-utils'
 // Grid performance utilities
 import { GridPerformanceMonitor, GridOptimizer } from '../utils/grid-performance'
@@ -921,14 +922,40 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         currentMode
       )
     } else {
-      // Use standard variant-aware connection path for single connections
-      path = generateVariantAwareConnectionPath(
-        sourceNode, 
-        connection.sourcePortId, 
-        targetNode, 
-        connection.targetPortId,
-        nodeVariant
-      )
+      // Single connection
+      if (workflowContextState.designerMode === 'architecture') {
+        // Use node box based automatic side selection instead of port anchors
+        const srcDims = getShapeAwareDimensions(sourceNode)
+        const tgtDims = getShapeAwareDimensions(targetNode)
+        const sourceCenter = { x: sourceNode.x, y: sourceNode.y }
+        const targetCenter = { x: targetNode.x, y: targetNode.y }
+        const sourceBox = {
+          x: sourceNode.x - srcDims.width / 2,
+          y: sourceNode.y - srcDims.height / 2,
+          width: srcDims.width,
+          height: srcDims.height
+        }
+        const targetBox = {
+          x: targetNode.x - tgtDims.width / 2,
+          y: targetNode.y - tgtDims.height / 2,
+          width: tgtDims.width,
+          height: tgtDims.height
+        }
+        path = generateAdaptiveOrthogonalRoundedPath(
+          sourceCenter,
+          targetCenter,
+          16,
+          { sourceBox, targetBox, strategy: 'auto', allowDoubleBend: false, maxBends: 5 }
+        )
+      } else {
+        path = generateVariantAwareConnectionPath(
+          sourceNode, 
+          connection.sourcePortId, 
+          targetNode, 
+          connection.targetPortId,
+          nodeVariant
+        )
+      }
     }
     
     if (!useDragPositions) {
@@ -1776,7 +1803,9 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           sourceNode,
           connectionStart.portId,
           connectionPreview,
-          nodeVariant
+          nodeVariant,
+          undefined,
+          workflowContextState.designerMode || 'workflow'
         )
         
         // Determine preview marker based on source port type and direction
@@ -3241,7 +3270,9 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           sourceNode,
           connectionStart.portId,
           connectionPreview,
-          nodeVariant
+          nodeVariant,
+          undefined,
+          workflowContextState.designerMode || 'workflow'
         )
         
         // Determine preview marker based on source port type and direction

@@ -8,20 +8,10 @@
 
 import React, { useEffect, useRef, useCallback, useMemo } from 'react'
 import * as d3 from 'd3'
-import type { WorkflowNode, Connection, NodeVariant } from '../types'
 import { useModeSystem, useModeBehavior } from '../hooks/useModeSystem'
 import type { WorkflowCanvasProps } from './WorkflowCanvas'
-import { 
-  getNodeColor, 
-  getPortColor, 
-  getNodeIcon,
-  getNodeShape,
-  getShapeAwareDimensions,
-  getNodeShapePath,
-  getPortPositions,
-  NodeTypes
-} from '../utils/node-utils'
-import { generateVariantAwareConnectionPath, calculateConnectionPreviewPath, calculatePortPosition } from '../utils/connection-utils'
+import { getPortPositions } from '../utils/node-utils'
+import { generateModeAwareConnectionPath } from '../utils/connection-utils'
 
 /**
  * Mode-aware canvas props extending the original canvas props
@@ -44,45 +34,27 @@ export interface ModeAwareWorkflowCanvasProps extends WorkflowCanvasProps {
 /**
  * Enhanced Workflow Canvas with integrated mode system
  */
-const ModeAwareWorkflowCanvas = React.memo<ModeAwareWorkflowCanvasProps>(({
-  // Original props
-  svgRef,
-  nodes,
-  connections,
-  showGrid,
-  canvasTransform,
-  nodeVariant = 'standard',
-  selectedNodes,
-  selectedConnection,
-  isNodeSelected,
-  isConnecting,
-  connectionStart,
-  connectionPreview,
-  onNodeClick,
-  onNodeDoubleClick,
-  onNodeDrag,
-  onConnectionClick,
-  onPortClick,
-  onCanvasClick,
-  onCanvasMouseMove,
-  onPortDragStart,
-  onPortDrag,
-  onPortDragEnd,
-  canDropOnPort,
-  onPlusButtonClick,
-  onTransformChange,
-  onZoomLevelChange,
-  onRegisterZoomBehavior,
-  
-  // Mode system props
-  enableModeSystem = true,
-  onModeChange,
-  enableModeTransitions = true,
-  showModeIndicator = false,
-  enablePerformanceMode = false,
-  showDebugInfo = false,
-  enableModeDebugOverlay = false
-}) => {
+const ModeAwareWorkflowCanvas = React.memo<ModeAwareWorkflowCanvasProps>((props) => {
+  const {
+    svgRef,
+    nodes,
+    connections,
+    showGrid,
+    canvasTransform,
+    selectedNodes,
+    selectedConnection,
+    isConnecting,
+    onCanvasClick,
+    onCanvasMouseMove,
+    // Mode system props
+    enableModeSystem = true,
+    onModeChange,
+    enableModeTransitions = true,
+    showModeIndicator = false,
+    enablePerformanceMode = false,
+    showDebugInfo = false,
+    enableModeDebugOverlay = false
+  } = props
   // Mode system integration
   const {
     currentMode,
@@ -107,22 +79,27 @@ const ModeAwareWorkflowCanvas = React.memo<ModeAwareWorkflowCanvasProps>(({
 
   // Memoized mode-aware connection data
   const modeAwareConnections = useMemo(() => {
-    if (!enableModeSystem || !renderingStrategy) {
-      return connections.map(conn => ({
+    const modeId = currentMode?.id || 'workflow'
+    return connections.map(conn => {
+      const path = generateModeAwareConnectionPath(
+        {
+          sourceNodeId: conn.sourceNodeId,
+          sourcePortId: conn.sourcePortId,
+          targetNodeId: conn.targetNodeId,
+          targetPortId: conn.targetPortId
+        },
+        nodes,
+        undefined,
+        modeId
+      ) || ''
+      return {
         id: conn.id,
-        path: generateVariantAwareConnectionPath(conn, nodes, nodeVariant),
+        path,
         isSelected: selectedConnection?.id === conn.id,
-        isHovered: false // Would need hover state tracking
-      }))
-    }
-
-    return connections.map(conn => ({
-      id: conn.id,
-      path: generateVariantAwareConnectionPath(conn, nodes, nodeVariant),
-      isSelected: selectedConnection?.id === conn.id,
-      isHovered: false // Would need hover state tracking
-    }))
-  }, [connections, nodes, nodeVariant, selectedConnection, enableModeSystem, renderingStrategy])
+        isHovered: false
+      }
+    })
+  }, [connections, nodes, selectedConnection, currentMode])
 
   // Memoized mode-aware port data
   const modeAwarePorts = useMemo(() => {
@@ -139,48 +116,40 @@ const ModeAwareWorkflowCanvas = React.memo<ModeAwareWorkflowCanvasProps>(({
     }> = []
 
     nodes.forEach(node => {
-      const { width, height } = getShapeAwareDimensions(node.type as NodeTypes, nodeVariant)
-      const portPositions = getPortPositions(node, { width, height })
+      const inputPositions = getPortPositions(node, 'input')
+      const outputPositions = getPortPositions(node, 'output')
 
-      // Input ports
       node.inputs?.forEach((input, index) => {
-        const position = portPositions.inputs[index]
-        if (position) {
-          ports.push({
-            id: `${node.id}-input-${input.id}`,
-            x: node.x + position.x,
-            y: node.y + position.y,
-            type: input.type,
-            isConnected: connections.some(conn => 
-              conn.targetNodeId === node.id && conn.targetPortId === input.id
-            ),
-            isHovered: false, // Would need hover state tracking
-            nodeId: node.id
-          })
-        }
+        const position = inputPositions[index]
+        if (!position) return
+        ports.push({
+          id: `${node.id}-input-${input.id}`,
+          x: node.x + position.x,
+          y: node.y + position.y,
+          type: input.type,
+          isConnected: connections.some(conn => conn.targetNodeId === node.id && conn.targetPortId === input.id),
+          isHovered: false,
+          nodeId: node.id
+        })
       })
 
-      // Output ports
       node.outputs?.forEach((output, index) => {
-        const position = portPositions.outputs[index]
-        if (position) {
-          ports.push({
-            id: `${node.id}-output-${output.id}`,
-            x: node.x + position.x,
-            y: node.y + position.y,
-            type: output.type,
-            isConnected: connections.some(conn => 
-              conn.sourceNodeId === node.id && conn.sourcePortId === output.id
-            ),
-            isHovered: false, // Would need hover state tracking
-            nodeId: node.id
-          })
-        }
+        const position = outputPositions[index]
+        if (!position) return
+        ports.push({
+          id: `${node.id}-output-${output.id}`,
+          x: node.x + position.x,
+          y: node.y + position.y,
+          type: output.type,
+          isConnected: connections.some(conn => conn.sourceNodeId === node.id && conn.sourcePortId === output.id),
+          isHovered: false,
+          nodeId: node.id
+        })
       })
     })
 
     return ports
-  }, [nodes, connections, nodeVariant, enableModeSystem])
+  }, [nodes, connections, enableModeSystem])
 
   // Apply mode theme to canvas container
   useEffect(() => {
@@ -258,22 +227,7 @@ const ModeAwareWorkflowCanvas = React.memo<ModeAwareWorkflowCanvasProps>(({
   }, [enableModeSystem, addEventListener, showDebugInfo])
 
   // Enhanced interaction handlers that respect mode behavior
-  const handleNodeClick = useCallback((node: WorkflowNode, ctrlKey: boolean) => {
-    if (!modeBehavior.enableMultiSelection && ctrlKey) {
-      // Mode doesn't support multi-selection, ignore ctrl key
-      onNodeClick(node, false)
-    } else {
-      onNodeClick(node, ctrlKey)
-    }
-  }, [onNodeClick, modeBehavior.enableMultiSelection])
-
-  const handlePortClick = useCallback((nodeId: string, portId: string, portType: 'input' | 'output') => {
-    if (!modeBehavior.canCreateConnections) {
-      // Mode doesn't allow connection creation
-      return
-    }
-    onPortClick(nodeId, portId, portType)
-  }, [onPortClick, modeBehavior.canCreateConnections])
+  // (Removed unused handleNodeClick / handlePortClick to satisfy lint)
 
   const handleCanvasDragOver = useCallback((event: React.DragEvent) => {
     if (!modeBehavior.enableDragAndDrop) {
@@ -300,18 +254,21 @@ const ModeAwareWorkflowCanvas = React.memo<ModeAwareWorkflowCanvasProps>(({
     
     // Render connections with mode-specific strategy
     if (currentMode) {
-      const connectionsHTML = renderingStrategy.renderConnections(
-        modeAwareConnections,
-        currentMode.theme.connections
-      )
-      
-      const portsHTML = renderingStrategy.renderPorts(
-        modeAwarePorts,
-        currentMode.theme.ports
-      )
-      
-      // Insert HTML (this is a simplified approach - in practice, you'd use D3 data binding)
-      modeGroup.html(connectionsHTML + portsHTML)
+      // If strategy exposes batch render helpers use them; else fallback to individual creation
+      // @ts-expect-error - runtime feature detection
+      if (typeof renderingStrategy.renderConnections === 'function') {
+        // @ts-expect-error dynamic call
+        const connectionsHTML = renderingStrategy.renderConnections(
+          modeAwareConnections,
+          currentMode.theme.connections
+        )
+        // @ts-expect-error dynamic call
+        const portsHTML = renderingStrategy.renderPorts(
+          modeAwarePorts,
+            currentMode.theme.ports
+        )
+        modeGroup.html((connectionsHTML || '') + (portsHTML || ''))
+      }
     }
   }, [enableModeSystem, renderingStrategy, currentMode, modeAwareConnections, modeAwarePorts, svgRef])
 
@@ -355,8 +312,8 @@ const ModeAwareWorkflowCanvas = React.memo<ModeAwareWorkflowCanvasProps>(({
     return (
       <div className="mode-indicator">
         <div className="mode-indicator-badge" style={{
-          backgroundColor: currentMode.theme.customProperties['--mode-primary-color'],
-          color: currentMode.theme.customProperties['--mode-text-color'] || '#ffffff'
+          backgroundColor: currentMode.theme.customProperties?.['--mode-primary-color'] || currentMode.theme.primary,
+          color: currentMode.theme.customProperties?.['--mode-text-color'] || currentMode.theme.foreground || '#ffffff'
         }}>
           {currentMode.name}
         </div>
@@ -367,7 +324,7 @@ const ModeAwareWorkflowCanvas = React.memo<ModeAwareWorkflowCanvasProps>(({
   return (
     <div 
       ref={canvasContainerRef}
-      className={`canvas-container ${enableModeSystem && currentMode ? currentMode.theme.cssClassName : ''}`}
+  className={`canvas-container ${enableModeSystem && currentMode ? (currentMode.theme.cssClassName || '') : ''}`}
       onDragOver={handleCanvasDragOver}
       style={{
         position: 'relative',
@@ -410,7 +367,7 @@ const ModeAwareWorkflowCanvas = React.memo<ModeAwareWorkflowCanvasProps>(({
               >
                 <path
                   d="M0,0 L0,6 L9,3 z"
-                  fill={currentMode.theme.connections.defaultColor}
+                  fill={currentMode.theme.connections?.defaultColor || currentMode.theme.primary}
                 />
               </marker>
               
@@ -425,7 +382,7 @@ const ModeAwareWorkflowCanvas = React.memo<ModeAwareWorkflowCanvasProps>(({
               >
                 <path
                   d="M0,0 L0,6 L9,3 z"
-                  fill={currentMode.theme.connections.hoverColor}
+                  fill={currentMode.theme.connections?.hoverColor || currentMode.theme.secondary || currentMode.theme.primary}
                 />
               </marker>
               
@@ -440,7 +397,7 @@ const ModeAwareWorkflowCanvas = React.memo<ModeAwareWorkflowCanvasProps>(({
               >
                 <path
                   d="M0,0 L0,6 L9,3 z"
-                  fill={currentMode.theme.connections.selectedColor}
+                  fill={currentMode.theme.connections?.selectedColor || currentMode.theme.success || currentMode.theme.primary}
                 />
               </marker>
 
@@ -450,7 +407,7 @@ const ModeAwareWorkflowCanvas = React.memo<ModeAwareWorkflowCanvasProps>(({
                   dx="0" 
                   dy="2" 
                   stdDeviation="4" 
-                  floodColor={currentMode.theme.connections.defaultColor} 
+                  floodColor={currentMode.theme.connections?.defaultColor || currentMode.theme.primary} 
                   floodOpacity="0.3"
                 />
               </filter>
@@ -474,12 +431,12 @@ const ModeAwareWorkflowCanvas = React.memo<ModeAwareWorkflowCanvasProps>(({
               width="20" 
               height="20" 
               patternUnits="userSpaceOnUse"
-              opacity={currentMode?.theme.canvas.gridOpacity || 0.5}
+              opacity={currentMode?.theme.canvas?.gridOpacity || 0.5}
             >
               <path 
                 d="M 20 0 L 0 0 0 20" 
                 fill="none" 
-                stroke={currentMode?.theme.canvas.gridColor || '#e5e7eb'} 
+                stroke={currentMode?.theme.canvas?.gridColor || '#e5e7eb'} 
                 strokeWidth="1"
               />
             </pattern>

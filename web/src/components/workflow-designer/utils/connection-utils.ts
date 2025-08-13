@@ -20,6 +20,7 @@ import {
   calculateConnectionOffset,
   getConnectionFlow,
   validatePathInputs,
+  generateOrthogonalRoundedPath,
   type PathConfig} from './path-generation'
 import {
   getConnectionGroupInfo as getConnectionGroupInfoCore,
@@ -28,6 +29,7 @@ import {
 // Re-export types for backward compatibility
 export type { PortPosition } from '../types'
 export type { PathConfig, ConnectionFlow } from './path-generation'
+export { generateOrthogonalRoundedPath, generateAdaptiveOrthogonalRoundedPath } from './path-generation'
 export type { AnalyzableConnection, GroupedConnection, ConnectionGroupInfo } from './connection-analysis'
 
 /**
@@ -72,7 +74,7 @@ export function generateVariantAwareConnectionPath(
   }
 
   // Determine connection flow
-  const flow = getConnectionFlow(isSourceBottomPort, isTargetBottomPort)
+  const flow = getConnectionFlow(isSourceBottomPort)
   
   // Generate optimized path
   return generateConnectionPath(sourcePos, targetPos, flow, config)
@@ -86,7 +88,8 @@ export function calculateConnectionPreviewPath(
   sourcePortId: string,
   previewPosition: { x: number; y: number },
   variant: NodeVariant = 'standard',
-  config?: PathConfig
+  config?: PathConfig,
+  modeId: string = 'workflow'
 ): string {
   // Determine if this is a bottom port
   const isSourceBottomPort = isBottomPort(sourceNode, sourcePortId)
@@ -101,10 +104,29 @@ export function calculateConnectionPreviewPath(
   }
 
   // Determine connection flow
-  const flow = getConnectionFlow(isSourceBottomPort, false) // Preview is never to a bottom port
+  const flow = getConnectionFlow(isSourceBottomPort) // Preview is never to a bottom port
   
-  // Generate preview path
+  // Architecture mode should preview orthogonal (right‑angle) path with radius to match final rendering
+  if (modeId === 'architecture') {
+    return generateOrthogonalRoundedPath(sourcePos, previewPosition, 16)
+  }
+
+  // Generate curved preview path (default)
   return generatePreviewPath(sourcePos, previewPosition, flow, config)
+}
+
+/**
+ * Mode-aware convenience preview path (wrapper) for callers that know only connectionStart + mouse position.
+ */
+export function generateModeAwarePreviewPath(
+  sourceNode: WorkflowNode,
+  sourcePortId: string,
+  previewPosition: { x: number; y: number },
+  modeId: string,
+  variant: NodeVariant = 'standard',
+  config?: PathConfig
+): string {
+  return calculateConnectionPreviewPath(sourceNode, sourcePortId, previewPosition, variant, config, modeId)
 }
 
 /**
@@ -156,6 +178,46 @@ export function generateMultipleConnectionPath(
   
   // Generate offset path
   return generateOffsetPath(sourcePos, targetPos, yOffset, config)
+}
+
+/**
+ * Mode-aware high level convenience API.
+ * Accepts a Connection object + node list + mode id and returns appropriate path.
+ * - workflow/debug/default => existing bezier logic
+ * - architecture => orthogonal with rounded corners (Manhattan style)
+ */
+export function generateModeAwareConnectionPath(
+  connection: { sourceNodeId: string; sourcePortId: string; targetNodeId: string; targetPortId: string },
+  nodes: WorkflowNode[],
+  variant: NodeVariant = 'standard',
+  modeId: string = 'workflow',
+  config?: PathConfig
+): string {
+  const sourceNode = nodes.find(n => n.id === connection.sourceNodeId)
+  const targetNode = nodes.find(n => n.id === connection.targetNodeId)
+  if (!sourceNode || !targetNode) return ''
+
+  if (modeId === 'architecture') {
+    // Use port positioning to get start/end anchor points then orthogonal path
+    const isSourceBottom = isBottomPort(sourceNode, connection.sourcePortId)
+    const isTargetBottom = isBottomPort(targetNode, connection.targetPortId)
+    const sourceType = isSourceBottom ? 'bottom' : 'output'
+    const targetType = isTargetBottom ? 'bottom' : 'input'
+    const sourcePos = calculatePortPositionCore(sourceNode, connection.sourcePortId, sourceType, variant)
+    const targetPos = calculatePortPositionCore(targetNode, connection.targetPortId, targetType, variant)
+    if (!validatePathInputs(sourcePos, targetPos)) return ''
+    return generateOrthogonalRoundedPath(sourcePos, targetPos, 16)
+  }
+
+  // Fallback to existing bezier
+  return generateVariantAwareConnectionPath(
+    sourceNode,
+    connection.sourcePortId,
+    targetNode,
+    connection.targetPortId,
+    variant,
+    config
+  )
 }
 
 /**

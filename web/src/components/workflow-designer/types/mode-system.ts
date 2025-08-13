@@ -29,6 +29,29 @@ export interface ModeTheme {
   readonly error: string
   readonly gradients: ThemeGradients
   readonly shadows: ThemeShadows
+  // Optional extended theme sections (present when built via factory)
+  readonly connections?: {
+    readonly defaultColor: string
+    readonly hoverColor: string
+    readonly selectedColor: string
+    readonly strokeWidth?: number
+    readonly hoverStrokeWidth?: number
+    readonly selectedStrokeWidth?: number
+    readonly opacity?: number
+    readonly hoverOpacity?: number
+    readonly selectedOpacity?: number
+    readonly markerType?: string
+  }
+  readonly ports?: Record<string, unknown>
+  readonly canvas?: {
+    readonly backgroundColor?: string
+    readonly gridColor?: string
+    readonly gridSize?: number
+    readonly gridOpacity?: number
+  }
+  readonly nodes?: Record<string, unknown>
+  readonly cssClassName?: string
+  readonly customProperties?: Record<string, string>
 }
 
 export interface ThemeGradients {

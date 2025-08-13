@@ -8,6 +8,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import * as d3 from 'd3'
+import { generateOrthogonalRoundedPath } from '../utils/connection-utils'
 import type { 
   ModeRenderingStrategy, 
   ModeDefinition, 
@@ -18,6 +19,7 @@ import type {
   ModeTheme,
   Point2D
 } from '../types/mode-system'
+// (Optional) shared generators imported elsewhere; not relying here to allow fine‑tuned architecture styling
 
 /**
  * Base Abstract Strategy - Template Method Pattern
@@ -94,7 +96,7 @@ abstract class BaseRenderingStrategy implements ModeRenderingStrategy {
       .on('click', () => this.onPortClick(element, port))
   }
 
-  protected applyCanvasBackground(canvas: CanvasRenderData): void {
+  protected applyCanvasBackground(_canvas: CanvasRenderData): void {
     const container = d3.select('.canvas-container')
     const background = this.mode.canvasStyle.backgroundType === 'gradient' 
       ? this.mode.canvasStyle.backgroundValue 
@@ -119,7 +121,7 @@ abstract class BaseRenderingStrategy implements ModeRenderingStrategy {
   }
 
   // Event handlers
-  protected onConnectionHover(element: SVGElement, connection: ConnectionRenderData, isHovered: boolean): void {
+  protected onConnectionHover(element: SVGElement, _connection: ConnectionRenderData, isHovered: boolean): void {
     const { hoverEffect } = this.mode.connectionStyle
     const d3Element = d3.select(element)
 
@@ -140,7 +142,7 @@ abstract class BaseRenderingStrategy implements ModeRenderingStrategy {
     }
   }
 
-  protected onPortHover(element: SVGElement, port: PortRenderData, isHovered: boolean): void {
+  protected onPortHover(element: SVGElement, _port: PortRenderData, isHovered: boolean): void {
     const { hoverEffect } = this.mode.portStyle
     const d3Element = d3.select(element)
 
@@ -159,12 +161,12 @@ abstract class BaseRenderingStrategy implements ModeRenderingStrategy {
     }
   }
 
-  protected onConnectionClick(element: SVGElement, connection: ConnectionRenderData): void {
+  protected onConnectionClick(_element: SVGElement, connection: ConnectionRenderData): void {
     // Connection click handling - can be overridden by specific strategies
     console.log('Connection clicked:', connection.id)
   }
 
-  protected onPortClick(element: SVGElement, port: PortRenderData): void {
+  protected onPortClick(_element: SVGElement, port: PortRenderData): void {
     // Port click handling - can be overridden by specific strategies
     console.log('Port clicked:', port.id)
   }
@@ -188,7 +190,7 @@ abstract class BaseRenderingStrategy implements ModeRenderingStrategy {
     console.log(`${this.mode.name} mode deactivated`)
   }
 
-  onThemeChanged(theme: ModeTheme): void {
+  onThemeChanged(_theme: ModeTheme): void {
     // Theme change handling - can be overridden
     console.log(`Theme changed for ${this.mode.name}`)
   }
@@ -316,7 +318,7 @@ export class WorkflowRenderingStrategy extends BaseRenderingStrategy {
     })
   }
 
-  protected createAnimationDefinitions(defs: SVGDefsElement): void {
+  protected createAnimationDefinitions(_defs: SVGDefsElement): void {
     // Create CSS animations for workflow mode
     const style = document.createElement('style')
     style.textContent = `
@@ -336,7 +338,7 @@ export class WorkflowRenderingStrategy extends BaseRenderingStrategy {
     document.head.appendChild(style)
   }
 
-  protected createGridPattern(canvas: CanvasRenderData, gridStyle: any): void {
+  protected createGridPattern(_canvas: CanvasRenderData, gridStyle: any): void {
     // Workflow mode uses subtle dot grid
     const svg = d3.select('.workflow-canvas')
     let defs = svg.select<SVGDefsElement>('defs')
@@ -365,7 +367,7 @@ export class WorkflowRenderingStrategy extends BaseRenderingStrategy {
       .attr('fill', 'url(#workflow-grid)')
   }
 
-  protected createOverlayEffect(canvas: CanvasRenderData, effect: any): void {
+  protected createOverlayEffect(_canvas: CanvasRenderData, _effect: any): void {
     // Workflow mode typically doesn't use overlay effects
     // This is intentionally minimal to maintain clean appearance
   }
@@ -504,7 +506,7 @@ export class ArchitectureRenderingStrategy extends BaseRenderingStrategy {
     })
   }
 
-  protected createAnimationDefinitions(defs: SVGDefsElement): void {
+  protected createAnimationDefinitions(_defs: SVGDefsElement): void {
     const style = document.createElement('style')
     style.textContent = `
       @keyframes architecture-pulse {
@@ -529,7 +531,7 @@ export class ArchitectureRenderingStrategy extends BaseRenderingStrategy {
     document.head.appendChild(style)
   }
 
-  protected createGridPattern(canvas: CanvasRenderData, gridStyle: any): void {
+  protected createGridPattern(_canvas: CanvasRenderData, gridStyle: any): void {
     // Architecture mode uses blueprint-style line grid
     const svg = d3.select('.workflow-canvas')
     let defs = svg.select<SVGDefsElement>('defs')
@@ -561,7 +563,7 @@ export class ArchitectureRenderingStrategy extends BaseRenderingStrategy {
       .attr('fill', 'url(#architecture-grid)')
   }
 
-  protected createOverlayEffect(canvas: CanvasRenderData, effect: any): void {
+  protected createOverlayEffect(_canvas: CanvasRenderData, effect: any): void {
     if (effect.type === 'vignette') {
       const svg = d3.select('.workflow-canvas')
       let defs = svg.select<SVGDefsElement>('defs')
@@ -594,20 +596,9 @@ export class ArchitectureRenderingStrategy extends BaseRenderingStrategy {
   }
 
   private calculateArchitecturalPath(connection: ConnectionRenderData): string {
-    const { sourcePoint, targetPoint } = connection
-    
-    // Create angular, architectural-style connections
-    const midX = (sourcePoint.x + targetPoint.x) / 2
-    const midY = (sourcePoint.y + targetPoint.y) / 2
-    
-    // Create L-shaped path for architectural feel
-    if (Math.abs(targetPoint.x - sourcePoint.x) > Math.abs(targetPoint.y - sourcePoint.y)) {
-      // Horizontal first
-      return `M ${sourcePoint.x} ${sourcePoint.y} L ${midX} ${sourcePoint.y} L ${midX} ${targetPoint.y} L ${targetPoint.x} ${targetPoint.y}`
-    } else {
-      // Vertical first
-      return `M ${sourcePoint.x} ${sourcePoint.y} L ${sourcePoint.x} ${midY} L ${targetPoint.x} ${midY} L ${targetPoint.x} ${targetPoint.y}`
-    }
+  const { sourcePoint, targetPoint } = connection
+  // Future: could pass node boxes if available via metadata
+  return generateOrthogonalRoundedPath(sourcePoint, targetPoint, 18, { strategy: 'auto', allowDoubleBend: false })
   }
 }
 
@@ -751,7 +742,7 @@ export class DebugRenderingStrategy extends BaseRenderingStrategy {
     })
   }
 
-  protected createAnimationDefinitions(defs: SVGDefsElement): void {
+  protected createAnimationDefinitions(_defs: SVGDefsElement): void {
     const style = document.createElement('style')
     style.textContent = `
       @keyframes debug-wave {
@@ -777,7 +768,7 @@ export class DebugRenderingStrategy extends BaseRenderingStrategy {
     document.head.appendChild(style)
   }
 
-  protected createGridPattern(canvas: CanvasRenderData, gridStyle: any): void {
+  protected createGridPattern(_canvas: CanvasRenderData, gridStyle: any): void {
     // Debug mode uses technical cross-hatch grid
     const svg = d3.select('.workflow-canvas')
     let defs = svg.select<SVGDefsElement>('defs')
@@ -815,7 +806,7 @@ export class DebugRenderingStrategy extends BaseRenderingStrategy {
       .attr('fill', 'url(#debug-grid)')
   }
 
-  protected createOverlayEffect(canvas: CanvasRenderData, effect: any): void {
+  protected createOverlayEffect(_canvas: CanvasRenderData, effect: any): void {
     const svg = d3.select('.workflow-canvas')
     
     if (effect.type === 'scanlines') {

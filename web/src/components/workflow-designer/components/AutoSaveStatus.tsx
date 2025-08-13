@@ -198,7 +198,9 @@ export function AutoSaveStatus({ className = '', showFullStatus = false }: Reado
   }
   
   const status = getStatusDisplay()
-  const lastSavedTime = getTimeAgo(lastSavedTs || state.lastSaved)
+  // Normalize last saved timestamp (state.lastSaved can be null)
+  const effectiveLastSaved = lastSavedTs > 0 ? lastSavedTs : (state.lastSaved ?? 0)
+  const lastSavedTime = getTimeAgo(effectiveLastSaved)
   
   if (showFullStatus) {
     return (
@@ -210,9 +212,9 @@ export function AutoSaveStatus({ className = '', showFullStatus = false }: Reado
           <span className={`text-sm font-medium ${status.color}`} style={{ verticalAlign: 'middle' }}>
             {status.text}
           </span>
-      {lastSavedTs > 0 && !isAutoSaving && (
+      {effectiveLastSaved > 0 && !isAutoSaving && (
             <span className="text-xs text-gray-500">
-        Last saved: {formatTime(lastSavedTs || state.lastSaved)} ({lastSavedTime})
+        Last saved: {formatTime(effectiveLastSaved)} ({lastSavedTime})
             </span>
           )}
       {error && (

@@ -5,6 +5,14 @@
 
 import type { WorkflowNode, Connection } from '../types'
 
+// Normalized shape for checksum operations (no metadata)
+interface DraftWorkflowNormalized {
+  name: string
+  nodes: Array<WorkflowNode & { x: number; y: number }>
+  connections: Connection[]
+  canvasTransform: { x: number; y: number; k: number }
+}
+
 // Draft workflow interface
 export interface DraftWorkflow {
   id: string
@@ -90,19 +98,18 @@ function generateChecksum(data: Omit<DraftWorkflow, 'metadata'>): string {
 }
 
 // Normalize data for consistent checksum generation
-function normalizeDataForChecksum(data: Omit<DraftWorkflow, 'metadata'>): Record<string, unknown> {
+function normalizeDataForChecksum(data: Omit<DraftWorkflow, 'metadata'>): DraftWorkflowNormalized {
   return {
     name: data.name,
     nodes: data.nodes.map(node => ({
       ...node,
-      // Use exact positions for precise change detection
-      x: Math.round(node.x), // Round to nearest pixel
-      y: Math.round(node.y)  // Round to nearest pixel
+      x: Math.round(node.x),
+      y: Math.round(node.y)
     })),
-  connections: [...data.connections].sort((a: Connection, b: Connection) => a.id.localeCompare(b.id)),
+    connections: [...data.connections].sort((a, b) => a.id.localeCompare(b.id)),
     canvasTransform: {
       x: Math.round(data.canvasTransform.x),
-      y: Math.round(data.canvasTransform.y),  
+      y: Math.round(data.canvasTransform.y),
       k: Math.round(data.canvasTransform.k * 100) / 100
     }
   }
@@ -286,9 +293,6 @@ function performAutoSave(draft: Omit<DraftWorkflow, 'metadata'>): void {
   
   isAutoSaving = true
   autoSaveCallback?.('started')
-  try {
-    window.dispatchEvent(new CustomEvent('workflow:autosave', { detail: { status: 'started' } }))
-  } catch {}
   
   try {
     // Performance warning for large workflows
@@ -300,26 +304,16 @@ function performAutoSave(draft: Omit<DraftWorkflow, 'metadata'>): void {
     
     if (success) {
       autoSaveCallback?.('completed')
-      try {
-        window.dispatchEvent(new CustomEvent('workflow:autosave', { detail: { status: 'completed', timestamp: Date.now() } }))
-      } catch {}
       
       // Reset change history after successful save
       changeHistory = []
     } else {
       console.error('❌ Auto-save failed')
       autoSaveCallback?.('failed', 'Save operation failed')
-      try {
-        window.dispatchEvent(new CustomEvent('workflow:autosave', { detail: { status: 'failed', error: 'Save operation failed', timestamp: Date.now() } }))
-      } catch {}
     }
   } catch (error) {
     console.error('❌ Auto-save error:', error)
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    autoSaveCallback?.('failed', message)
-    try {
-      window.dispatchEvent(new CustomEvent('workflow:autosave', { detail: { status: 'failed', error: message, timestamp: Date.now() } }))
-    } catch {}
+    autoSaveCallback?.('failed', error instanceof Error ? error.message : 'Unknown error')
   } finally {
     isAutoSaving = false
   }
@@ -371,7 +365,6 @@ export function deleteDraftWorkflow(draftId: string): boolean {
 /**
  * Get enhanced storage statistics with performance metrics
  */
-// eslint-disable-next-line
 export function getWorkflowStorageStats() {
   let totalSize = 0
   let draftCount = 0

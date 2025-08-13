@@ -24,7 +24,7 @@ import {
 } from '../utils/workflow-storage'
 
 // Workflow state interface (extends centralized types)
-interface WorkflowState {
+export interface WorkflowState {
   // Core data
   workflowName: string
   nodes: WorkflowNode[]
@@ -51,9 +51,7 @@ interface WorkflowState {
     isDragging: boolean
     draggedNodeId: string | null
     dragStartPosition: { x: number; y: number } | null
-  currentPosition: { x: number; y: number } | null
-  initialNodePosition: { x: number; y: number } | null
-  wasDirtyBeforeDrag: boolean
+    currentPosition: { x: number; y: number } | null
   }
   
   // Mode state
@@ -73,7 +71,7 @@ interface WorkflowState {
 }
 
 // Action types
-type WorkflowAction =
+export type WorkflowAction =
   // Workflow actions
   | { type: 'SET_WORKFLOW_NAME'; payload: string }
   | { type: 'LOAD_WORKFLOW'; payload: { nodes: WorkflowNode[]; connections: Connection[] } }
@@ -126,7 +124,6 @@ type WorkflowAction =
   | { type: 'START_DRAGGING'; payload: { nodeId: string; startPosition: { x: number; y: number } } }
   | { type: 'UPDATE_DRAG_POSITION'; payload: { x: number; y: number } }
   | { type: 'END_DRAGGING' }
-  | { type: 'CANCEL_DRAGGING' }
   
   // Workflow state actions
   | { type: 'MARK_DIRTY' }
@@ -176,9 +173,7 @@ const initialState: WorkflowState = {
     isDragging: false,
     draggedNodeId: null,
     dragStartPosition: null,
-  currentPosition: null,
-  initialNodePosition: null,
-  wasDirtyBeforeDrag: false
+    currentPosition: null
   },
   designerMode: 'workflow',
   architectureMode: 'context',
@@ -223,34 +218,45 @@ const loadConnectionsFromStorage = (workflowName: string): Connection[] => {
 }
 
 const validateConnections = (connections: Connection[], nodes: WorkflowNode[]): Connection[] => {
-  const nodeIds = new Set(nodes.map(n => n.id))
-  
+  if (connections.length === 0 || nodes.length === 0) return []
+
+  // Precompute node & port indexes for O(1) validation
+  const nodeIds = new Set<string>()
+  const nodePortMap = new Map<string, { inputs: Set<string>; outputs: Set<string>; bottoms: Set<string> }>()
+
+  for (const n of nodes) {
+    nodeIds.add(n.id)
+    nodePortMap.set(n.id, {
+      inputs: new Set(n.inputs.map(p => p.id)),
+      outputs: new Set(n.outputs.map(p => p.id)),
+      bottoms: new Set((n.bottomPorts || []).map(p => p.id))
+    })
+  }
+
   return connections.filter(conn => {
-    // Check if both nodes exist
+    // Node existence fast check
     if (!nodeIds.has(conn.sourceNodeId) || !nodeIds.has(conn.targetNodeId)) {
       console.warn('Invalid connection - missing node:', conn)
       return false
     }
-    
-    // Check if ports exist on nodes
-    const sourceNode = nodes.find(n => n.id === conn.sourceNodeId)
-    const targetNode = nodes.find(n => n.id === conn.targetNodeId)
-    
-    if (!sourceNode || !targetNode) return false
-    
-  const sourcePortExists = sourceNode.outputs.some(p => p.id === conn.sourcePortId) ||
-               sourceNode.bottomPorts?.some(p => p.id === conn.sourcePortId)
-  const targetPortExists = targetNode.inputs.some(p => p.id === conn.targetPortId) ||
-               targetNode.bottomPorts?.some(p => p.id === conn.targetPortId)
-    
+
+    const sourcePorts = nodePortMap.get(conn.sourceNodeId)
+    const targetPorts = nodePortMap.get(conn.targetNodeId)
+    if (!sourcePorts || !targetPorts) return false
+
+    const sourcePortExists = sourcePorts.outputs.has(conn.sourcePortId) || sourcePorts.bottoms.has(conn.sourcePortId)
+    const targetPortExists = targetPorts.inputs.has(conn.targetPortId) || targetPorts.bottoms.has(conn.targetPortId)
+
     if (!sourcePortExists || !targetPortExists) {
       console.warn('Invalid connection - missing port:', conn)
       return false
     }
-    
     return true
   })
 }
+
+// Cache last validation signature (module scope – not part of React state)
+let lastValidationSignature: string | null = null
 
 const markStateAsDirty = (state: WorkflowState): WorkflowState => ({
   ...state,
@@ -481,7 +487,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
         }
       }
     
-    case 'CLEAR_CONNECTION_STATE': {
+    case 'CLEAR_CONNECTION_STATE':
       console.log('CLEAR_CONNECTION_STATE reducer called')
       const newState = {
         ...state,
@@ -494,8 +500,8 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
       }
       
       // Auto-save will be triggered by useEffect after isConnecting becomes false
+      
       return newState
-    }
     
     case 'SET_EXECUTION_STATE':
       return {
@@ -558,12 +564,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
           isDragging: true,
           draggedNodeId: action.payload.nodeId,
           dragStartPosition: action.payload.startPosition,
-          currentPosition: action.payload.startPosition,
-          initialNodePosition: (() => {
-            const node = state.nodes.find(n => n.id === action.payload.nodeId)
-            return node ? { x: node.x, y: node.y } : null
-          })(),
-          wasDirtyBeforeDrag: state.isDirty
+          currentPosition: action.payload.startPosition
         }
       }
     
@@ -583,47 +584,9 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
           isDragging: false,
           draggedNodeId: null,
           dragStartPosition: null,
-          currentPosition: null,
-          initialNodePosition: null,
-          wasDirtyBeforeDrag: false
+          currentPosition: null
         }
       }
-
-    case 'CANCEL_DRAGGING': {
-      // Revert node position to initialNodePosition without marking dirty
-      const { draggedNodeId, initialNodePosition, wasDirtyBeforeDrag } = state.draggingState
-      if (!draggedNodeId || !initialNodePosition) {
-        return {
-          ...state,
-          draggingState: {
-            isDragging: false,
-            draggedNodeId: null,
-            dragStartPosition: null,
-            currentPosition: null,
-            initialNodePosition: null,
-            wasDirtyBeforeDrag: false
-          }
-        }
-      }
-
-      const revertedNodes = state.nodes.map(node =>
-        node.id === draggedNodeId ? { ...node, x: initialNodePosition.x, y: initialNodePosition.y } : node
-      )
-
-      return {
-        ...state,
-        nodes: revertedNodes,
-        isDirty: wasDirtyBeforeDrag,
-        draggingState: {
-          isDragging: false,
-          draggedNodeId: null,
-          dragStartPosition: null,
-          currentPosition: null,
-          initialNodePosition: null,
-          wasDirtyBeforeDrag: false
-        }
-      }
-    }
     
     case 'MARK_DIRTY':
       return {
@@ -707,8 +670,31 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
     }
     
     case 'AUTO_SAVE_DRAFT': {
-      // No-op reducer to avoid any render from auto-save actions
-      return state
+      const draftId = `auto-save-${state.workflowName}`
+      const draftData = {
+        id: draftId,
+        name: state.workflowName,
+        nodes: state.nodes,
+        connections: state.connections,
+        canvasTransform: state.canvasTransform,
+        // Include modes in auto-save
+        designerMode: state.designerMode,
+        architectureMode: state.architectureMode
+      }
+      
+      // Perform auto-save without triggering re-render
+      autoSaveDraftWorkflow(draftData)
+      console.log('💾 Auto-save completed silently (no re-render)')
+      
+      // Return state unchanged to prevent re-render
+      return {
+        ...state,  
+        // Only update timestamp without causing visual changes
+        autoSaveState: {
+          ...state.autoSaveState,
+          lastAutoSaveAttempt: Date.now()
+        }
+      }
     }
     
     case 'AUTO_SAVE_STARTED': {
@@ -969,12 +955,6 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     dispatch({ type: 'END_DRAGGING' })
   }, [dispatch])
   
-  const cancelDragging = useCallback(() => {
-    const currentState = currentStateRef.current
-    if (!currentState.draggingState.isDragging) return
-    dispatch({ type: 'CANCEL_DRAGGING' })
-  }, [dispatch])
-  
   const isDragging = useCallback(() => {
     return currentStateRef.current.draggingState.isDragging
   }, [])
@@ -983,20 +963,31 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     return currentStateRef.current.draggingState.draggedNodeId
   }, [])
   
-  // Set up auto-save state callback (fully disabled to avoid re-renders from autosave)
+  // Set up auto-save state callback
   useEffect(() => {
-    /* eslint-disable @typescript-eslint/no-unused-vars */
-    const callback = (_status: 'started' | 'completed' | 'failed', _error?: string) => {
-      // Intentionally no-op to keep auto-save fully silent (no state updates)
+    const callback = (status: 'started' | 'completed' | 'failed', error?: string) => {
+      switch (status) {
+        case 'started':
+          dispatch({ type: 'AUTO_SAVE_STARTED' })
+          break
+        case 'completed':
+          dispatch({ type: 'AUTO_SAVE_COMPLETED' })
+          break
+        case 'failed':
+          dispatch({ 
+            type: 'AUTO_SAVE_FAILED', 
+            payload: { error: error || 'Unknown error' }
+          })
+          break
+      }
     }
-    /* eslint-enable @typescript-eslint/no-unused-vars */
-
+    
     setAutoSaveCallback(callback)
-
+    
     return () => {
       setAutoSaveCallback(() => {})
     }
-  }, [])
+  }, [dispatch])
 
   // Auto-load connections when workflow name changes
   useEffect(() => {
@@ -1008,54 +999,39 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     }
   }, [state.workflowName])
   
-  // Auto-validate connections when nodes change
+  // Auto-validate connections when node / connection identity set changes (not every minor update)
   useEffect(() => {
-    if (state.nodes.length > 0 && state.connections.length > 0) {
+    if (state.nodes.length === 0 || state.connections.length === 0) return
+    const nodeSig = state.nodes.map(n => n.id).sort().join(',')
+    const connSig = state.connections.map(c => c.id).sort().join(',')
+    const signature = `${nodeSig}|${connSig}`
+    if (lastValidationSignature !== signature) {
+      lastValidationSignature = signature
       validateConnections()
     }
-  }, [state.nodes.length, state.connections.length, validateConnections])
+  }, [state.nodes, state.connections, validateConnections])
 
-  // Auto-save draft when workflow changes (debounced, direct call; skip during drag/connection to prevent flicker)
+  // Auto-save draft when workflow changes (debounced to prevent flickering during drag)
   useEffect(() => {
     if (state.isDirty && state.nodes.length > 0) {
-      // Skip auto-save during drag/connection to prevent port flickering
-      if (state.connectionState.isConnecting || state.draggingState.isDragging) {
+      // Skip auto-save during drag operations to prevent port flickering
+      if (state.connectionState.isConnecting) {
+        console.log('🚫 Skipping auto-save during drag operation to prevent flickering')
         return
       }
       
       // Debounce auto-save to prevent excessive saves during rapid changes
       const autoSaveTimer = setTimeout(() => {
-        const draftId = `auto-save-${state.workflowName}`
-        const draftData = {
-          id: draftId,
-          name: state.workflowName,
-          nodes: state.nodes,
-          connections: state.connections,
-          canvasTransform: state.canvasTransform,
-          designerMode: state.designerMode,
-          architectureMode: state.architectureMode
-        }
-        // Direct auto-save (no dispatch, no re-render)
-        autoSaveDraftWorkflow(draftData)
+        dispatch({ type: 'AUTO_SAVE_DRAFT' })
       }, 1000) // 1 second debounce
       
       return () => clearTimeout(autoSaveTimer)
     }
-  }, [
-    state.isDirty,
-    state.nodes,
-    state.connections,
-    state.workflowName,
-    state.connectionState.isConnecting,
-    state.draggingState.isDragging,
-    state.canvasTransform,
-    state.designerMode,
-    state.architectureMode
-  ])
+  }, [state.isDirty, state.nodes, state.connections, state.workflowName, state.connectionState.isConnecting, dispatch])
   
-  // Auto-save after drag/connection operations complete (without triggering re-render)
+  // Auto-save after drag operations complete (without triggering re-render)
   useEffect(() => {
-    if (!state.connectionState.isConnecting && !state.draggingState.isDragging && state.isDirty && state.nodes.length > 0) {
+    if (!state.connectionState.isConnecting && state.isDirty && state.nodes.length > 0) {
       // If we just finished a drag operation and need to save
       const dragEndAutoSaveTimer = setTimeout(() => {
         console.log('💾 Silent auto-save triggered after drag completion (no re-render)')
@@ -1079,7 +1055,7 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
       
       return () => clearTimeout(dragEndAutoSaveTimer)
     }
-  }, [state.connectionState.isConnecting, state.draggingState.isDragging, state.isDirty, state.nodes, state.connections, state.workflowName, state.canvasTransform, state.designerMode, state.architectureMode])
+  }, [state.connectionState.isConnecting, state.isDirty, state.nodes, state.connections, state.workflowName, state.canvasTransform, state.designerMode, state.architectureMode])
   
   const contextValue: WorkflowContextType = useMemo(() => ({
     state,
@@ -1104,11 +1080,9 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     startDragging,
     updateDragPosition,
     endDragging,
-    cancelDragging,
     isDragging,
     getDraggedNodeId
-  }), [state, svgRef, containerRef, dispatch, isNodeSelected, getSelectedNodesList, canDropOnPort, canDropOnNode, validateConnections, saveConnectionsToStorage, loadConnectionsFromStorageHandler, toggleAutoSave, saveDraft, loadDraft, autoSaveDraft, deleteDraft, listDrafts, getStorageStats, getAutoSaveStatus, startDragging, updateDragPosition, endDragging, cancelDragging, isDragging, getDraggedNodeId])
-  
+  }), [state, svgRef, containerRef, dispatch, isNodeSelected, getSelectedNodesList, canDropOnPort, canDropOnNode, validateConnections, saveConnectionsToStorage, loadConnectionsFromStorageHandler, toggleAutoSave, saveDraft, loadDraft, autoSaveDraft, deleteDraft, listDrafts, getStorageStats, getAutoSaveStatus, startDragging, updateDragPosition, endDragging, isDragging, getDraggedNodeId])
   
   return (
     <WorkflowContext.Provider value={contextValue}>
@@ -1127,6 +1101,4 @@ export function useWorkflowContext() {
   return context
 }
 
-// Export types (centralized types are re-exported from ../types)
-export type { WorkflowState, WorkflowAction }
-export type { ExecutionState, CanvasTransform, ConnectionState, UIState } from '../types'
+// (Types relocated to WorkflowContextExports.ts to satisfy Fast Refresh constraints)

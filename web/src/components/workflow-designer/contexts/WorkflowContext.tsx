@@ -68,6 +68,9 @@ export interface WorkflowState {
     lastAutoSaveAttempt: number
     autoSaveError: string | null
   }
+
+  // Draft tracking
+  currentDraftId: string | null
 }
 
 // Action types
@@ -139,6 +142,7 @@ export type WorkflowAction =
   | { type: 'AUTO_SAVE_COMPLETED' }
   | { type: 'AUTO_SAVE_FAILED'; payload: { error: string } }
   | { type: 'DELETE_DRAFT'; payload: string }
+  | { type: 'DETACH_CURRENT_DRAFT' }
 
 // Initial state
 const initialState: WorkflowState = {
@@ -183,7 +187,8 @@ const initialState: WorkflowState = {
     isAutoSaving: false,
     lastAutoSaveAttempt: 0,
     autoSaveError: null
-  }
+  },
+  currentDraftId: null
 }
 
 // Helper functions for connection management
@@ -634,13 +639,16 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
         architectureMode: state.architectureMode
       }
       
-      const success = saveDraftWorkflow(draftData)
+  const success = saveDraftWorkflow(draftData, { bumpVersion: true })
       if (success) {
         console.log('✅ Draft saved successfully:', draftId, 'with mode:', state.designerMode)
         return {
           ...state,
           lastSaved: Date.now(),
-          isDirty: false
+          isDirty: false,
+          currentDraftId: draftId,
+          // If user passed a new name, update workflowName so UI reflects rename
+          workflowName: name ? name : state.workflowName
         }
       }
       return state
@@ -665,12 +673,16 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
           selectedConnection: null
         },
         isDirty: false,
-        lastSaved: draft.metadata.updatedAt
+  lastSaved: draft.metadata.updatedAt,
+  currentDraftId: draft.id
       }
     }
     
     case 'AUTO_SAVE_DRAFT': {
-      const draftId = `auto-save-${state.workflowName}`
+      // If we have a current draft (and it's not an auto-save temp), update that instead of spawning a parallel auto-save draft
+      const draftId = state.currentDraftId && !state.currentDraftId.startsWith('auto-save-')
+        ? state.currentDraftId
+        : `auto-save-${state.workflowName}`
       const draftData = {
         id: draftId,
         name: state.workflowName,
@@ -683,7 +695,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
       }
       
       // Perform auto-save without triggering re-render
-      autoSaveDraftWorkflow(draftData)
+  autoSaveDraftWorkflow(draftData)
       console.log('💾 Auto-save completed silently (no re-render)')
       
       // Return state unchanged to prevent re-render
@@ -739,6 +751,13 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
         console.log('✅ Draft deleted successfully:', action.payload)
       }
       return state
+    }
+
+    case 'DETACH_CURRENT_DRAFT': {
+      return {
+        ...state,
+        currentDraftId: null
+      }
     }
     
     default:

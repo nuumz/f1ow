@@ -1,238 +1,176 @@
-// ===== DRAFT MANAGER STYLES =====
+// ===== NEW DRAFT MANAGER REDESIGN =====
+// Legacy styles removed above. Design now applied directly to base draft-manager classes (no .redesign suffix).
 
 @use 'variables' as *;
 @use 'functions' as *;
 
-// Modal overlay and base - Clean and elegant
+$accent: #3b82f6; // primary brand blue
+$accent-hover: #2563eb; // darker hover state
+$border: #e5e7eb; // neutral border
+$border-subtle: #f1f5f9; // subtle background border
+$bg-soft: #f8fafc;
+$bg-panel: #ffffff;
+$radius-sm: 6px;
+$radius-md: 10px;
+$radius-lg: 14px;
+$shadow-lg: 0 4px 18px -2px rgba(0,0,0,.08), 0 10px 32px -4px rgba(0,0,0,.06);
+$transition-fast: 140ms cubic-bezier(.4,0,.2,1);
+
 .draft-manager-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: z-index(modal);
-  padding: spacing(3);
-  animation: fadeIn 0.25s ease-out;
+  position: fixed; inset: 0; display:flex; align-items:center; justify-content:center;
+  background: radial-gradient(circle at 30% 20%, rgba(0,0,0,.45), rgba(0,0,0,.6));
+  backdrop-filter: blur(6px) saturate(1.2);
+  padding: 2rem; z-index: z-index(modal);
+  animation: dm-fade .25s ease-out;
 }
 
 .draft-manager-modal {
-  background: white;
-  border-radius: border-radius(xl);
-  width: 100%;
-  max-width: 1200px;
-  max-height: 85vh;
-  overflow: hidden;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  position: relative;
-  z-index: z-index(modal) + 1;
-  animation: slideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-  display: flex;
-  flex-direction: column;
-  border: 1px solid color(gray-200);
-}
+  // Width fixed to exact sum of grid columns (380 + 450 = 830) to avoid leftover blank strip.
+  // Falls back to 92vw on very small screens; single-column breakpoint still applies below.
+  width: calc(380px + 450px);
+  max-width: 92vw;
+  max-height: 86vh; background: $bg-panel;
+  border-radius: $radius-lg; box-shadow: $shadow-lg; display:flex; flex-direction:column; overflow:hidden;
+  animation: dm-pop .38s cubic-bezier(.25,1.15,.45,1); position:relative; border:1px solid $border-subtle;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
 
-// Header section - Simple and clean
-.draft-manager-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: spacing(6) spacing(8);
-  border-bottom: 1px solid color(gray-100);
-  background: white;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
+  &:focus { outline:none; }
 
-.draft-manager-title {
-  display: flex;
-  align-items: flex-start;
-  gap: spacing(4);
-
-  .draft-manager-icon {
-    color: color(primary);
-    flex-shrink: 0;
-    padding: spacing(2);
-    background: rgba(color(primary), 0.1);
-    border-radius: border-radius(md);
+  .draft-manager-header {
+    display:flex; align-items:center; justify-content:space-between; padding: 20px 28px 18px;
+    border-bottom:1px solid $border-subtle; background:linear-gradient(to bottom,#fff, #fff 60%, #fdfdfd);
   }
+  .draft-manager-title { display:flex; gap:14px; align-items:flex-start; }
+  .draft-manager-title h2 { font-size:1.375rem; letter-spacing:-.02em; margin:0 0 2px; font-weight:600; color:#111827; }
+  .draft-manager-title p { margin:0; font-size:.85rem; color:#64748b; font-weight:500; }
+  .draft-manager-icon { background:#eef4ff; border-radius:$radius-sm; padding:6px; color:$accent; box-shadow:inset 0 0 0 1px rgba($accent,.1); }
 
-  div {
-    h2 {
-      font-size: 1.5rem;
-      font-weight: font-weight(bold);
-      color: color(gray-900);
-      margin: 0 0 spacing(1) 0;
-      letter-spacing: -0.025em;
-    }
+  .draft-manager-actions { display:flex; gap:10px; }
+  .draft-action-btn { width:38px; height:38px; border:1px solid $border; background:#fff; border-radius:$radius-sm; display:flex; align-items:center; justify-content:center; color:#6b7280; cursor:pointer; transition:background $transition-fast, color $transition-fast, border-color $transition-fast, transform $transition-fast; }
+  .draft-action-btn:hover { background:#f1f5f9; color:#374151; }
+  .draft-action-btn:active { transform:scale(.94); }
+  .draft-action-btn.active { background:$accent; color:#fff; border-color:$accent; box-shadow:0 0 0 2px rgba($accent,.25); }
+  .draft-action-btn:disabled { opacity:.5; cursor:not-allowed; }
 
-    p {
-      font-size: font-size(base);
-      color: color(gray-600);
-      margin: 0;
-      font-weight: font-weight(medium);
-    }
-  }
-}
+  .draft-manager-content { flex:1; display:grid; grid-template-columns:380px 450px; overflow:hidden; background:linear-gradient(135deg,#fafbfc,#f5f7fa); }
 
-.draft-manager-actions {
-  display: flex;
-  gap: 8px;
-}
+  // LEFT PANEL
+  .draft-list-panel { border-right:1px solid $border-subtle; background:$bg-panel; display:flex; flex-direction:column; overflow:hidden; }
+  // (legacy save section removed from left panel – retained styles trimmed)
 
-.draft-action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid #e5e7eb;
-  background: white;
-  color: #6b7280;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: all 0.2s;
+  // Click-to-edit draft name
+  // Unify heading & input dimensions to prevent layout shift when toggling edit mode
+  .draft-details-text { position:relative; min-height:calc(1.1em + 4px); }
+  .draft-details-name.editable,
+  .draft-name-edit-input { font-size:1.05rem; font-weight:600; letter-spacing:-.01em; line-height:1.2; display:inline-block; box-sizing:border-box; }
+  // Remove horizontal padding to keep left edge fixed
+  .draft-details-name.editable { cursor:text; position:relative; margin:0 0 4px; padding:0; border:1px solid transparent; border-radius:6px; transition:background $transition-fast, border-color $transition-fast; }
+  .draft-details-name.editable:hover { background:rgba($accent,.08); }
+  .draft-name-edit-input { margin:0 0 1px -4px; padding:2px 4px; border:1px solid $accent; border-radius:6px; background:#fff; color:#0f172a; width:auto; min-width:40%; box-shadow:0 0 0 2px rgba($accent,.15); }
+  .draft-name-edit-input:focus { outline:none; box-shadow:0 0 0 2px rgba($accent,.25); }
+  // Align subtitle flush to left edge
+  .draft-details-subtitle { padding-left:0 !important; margin-left:0 !important; }
+  .draft-name-edit-input:focus { outline:none; }
 
-  &:hover {
-    color: #374151;
-    background: #f9fafb;
-    border-color: #d1d5db;
-  }
+  // Empty panel save quick form
+  .draft-empty-save { margin-top:14px; width:100%; max-width:360px; display:flex; flex-direction:column; gap:10px; }
+  .draft-empty-save-row { display:flex; gap:10px; }
+  .draft-empty-save-input { flex:1; border:1px solid $border; background:#fff; border-radius:$radius-sm; padding:10px 12px; font-size:.8rem; }
+  .draft-empty-save-input:focus { outline:none; border-color:$accent; box-shadow:0 0 0 2px rgba($accent,.2); }
+  .draft-empty-save-btn { display:inline-flex; align-items:center; gap:6px; padding:10px 14px; background:$accent; color:#fff; border:1px solid $accent; border-radius:$radius-sm; font-size:.7rem; font-weight:600; letter-spacing:.05em; cursor:pointer; text-transform:uppercase; }
+  .draft-empty-save-btn:hover:not(:disabled) { background:$accent-hover; }
+  .draft-empty-save-btn:disabled { opacity:.55; cursor:not-allowed; }
 
-  &.active {
-    background: #3b82f6;
-    color: white;
-    border-color: #3b82f6;
-  }
 
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    
-    &:hover {
-      background: white;
-      border-color: #e5e7eb;
-      color: #6b7280;
-    }
-  }
+  .draft-input-group { display:flex; gap:10px; }
+  .draft-input { flex:1; border:1px solid $border; background:#fff; border-radius:$radius-sm; padding:10px 12px; font-size:.85rem; color:#334155; transition:border-color $transition-fast, box-shadow $transition-fast, background $transition-fast; }
+  .draft-input:focus { outline:none; border-color:$accent; box-shadow:0 0 0 2px rgba($accent,.25); }
+  .draft-input::placeholder { color:#94a3b8; }
 
-  .spinning {
-    animation: spin 1s linear infinite;
-  }
-}
+  .draft-save-btn { display:inline-flex; align-items:center; gap:6px; padding:10px 16px; font-size:.8rem; font-weight:500; border-radius:$radius-sm; background:$accent; color:#fff; border:1px solid $accent; cursor:pointer; transition:background $transition-fast, box-shadow $transition-fast; }
+  .draft-save-btn:hover:not(:disabled) { background:$accent-hover; }
+  .draft-save-btn:disabled { opacity:.55; cursor:not-allowed; }
 
-// Content area with sidebar - Clean and simple
-.draft-manager-content {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-  background: #fafafa;
-}
+  // SEARCH + SORT BAR
+  .draft-search-section { padding:0 18px 4px; }
+  .draft-search-bar { position:relative; display:flex; align-items:center; margin-bottom:10px; }
+  .draft-search-icon { position:absolute; left:10px; color:#94a3b8; }
+  .draft-search-input { width:100%; padding:8px 10px 8px 30px; border:1px solid $border; border-radius:$radius-sm; background:#fff; font-size:.8rem; color:#334155; transition:border-color $transition-fast, box-shadow $transition-fast; }
+  .draft-search-input:focus { outline:none; border-color:$accent; box-shadow:0 0 0 2px rgba($accent,.2); }
 
-// Left Panel - Clean draft list
-.draft-list-panel,
-.draft-list-section {
-  width: 400px;
-  border-right: 1px solid #e5e7eb;
-  display: flex;
-  flex-direction: column;
-  background: white;
-  overflow: hidden;
-}
+  .sort-bar { display:flex; gap:6px; padding-bottom:6px; }
+  .sort-bar .draft-filter-tab { flex:0 0 auto; font-size:.7rem; letter-spacing:.04em; padding:6px 10px; border:1px solid $border; background:#fff; border-radius:$radius-sm; display:inline-flex; align-items:center; gap:4px; cursor:pointer; color:#475569; font-weight:500; transition:background $transition-fast, border-color $transition-fast, color $transition-fast; }
+  .sort-bar .draft-filter-tab.active { background:$accent; color:#fff; border-color:$accent; box-shadow:0 2px 4px -1px rgba($accent,.35); }
+  .sort-bar .draft-filter-tab:not(.active):hover { background:#f1f5f9; }
+  .sort-bar .draft-filter-tab.disabled { opacity:.5; cursor:default; }
 
-// Save Section - Simple and clean
-.draft-save-section {
-  padding: 24px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  margin: 16px;
-  border-radius: 8px;
+  // LIST
+  .draft-list-container { flex:1; overflow:auto; padding:4px 10px 14px 14px; scrollbar-width:thin; }
+  .draft-list-container::-webkit-scrollbar { width:10px; }
+  .draft-list-container::-webkit-scrollbar-track { background:transparent; }
+  .draft-list-container::-webkit-scrollbar-thumb { background:rgba(0,0,0,.12); border-radius:40px; }
+  .draft-list { display:flex; flex-direction:column; gap:6px; }
 
-  .draft-save-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 16px;
-    font-size: 1.125rem;
-    font-weight: 600;
-    color: #1e293b;
-  }
+  .draft-item { position:relative; background:#fff; border:1px solid $border-subtle; border-radius:$radius-md; padding:10px 12px 8px; cursor:pointer; transition:background $transition-fast, border-color $transition-fast, box-shadow $transition-fast, transform $transition-fast; display:flex; flex-direction:column; }
+  .draft-item:hover { background:#f1f5f9; border-color:$border; }
+  .draft-item.selected { border-color:$accent; box-shadow:0 0 0 1px $accent, 0 2px 4px -2px rgba($accent,.4); }
+  .draft-item:active { transform:translateY(1px); }
 
-  .draft-save-form {
-    .draft-input-group {
-      display: flex;
-      gap: 12px;
-      
-      .draft-input {
-        flex: 1;
-        padding: 12px;
-        border: 1px solid #d1d5db;
-        border-radius: 6px;
-        background: white;
-        color: #374151;
-        font-size: 14px;
-        transition: border-color 0.2s;
-        
-        &::placeholder {
-          color: #9ca3af;
-        }
-        
-        &:focus {
-          outline: none;
-          border-color: #3b82f6;
-        }
-      }
-      
-      .draft-save-btn {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 12px 16px;
-        background: #3b82f6;
-        color: white;
-        border: none;
-        border-radius: 6px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background-color 0.2s;
-        white-space: nowrap;
-        
-        &:hover:not(:disabled) {
-          background: #2563eb;
-        }
-        
-        &:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-      }
-    }
+  .draft-item-main { display:flex; gap:10px; align-items:center; }
+  .draft-item-icon { width:30px; height:30px; display:flex; align-items:center; justify-content:center; background:#f1f5f9; border-radius:$radius-sm; color:#475569; }
+  .draft-item-name { margin:0 0 2px; font-size:.8rem; font-weight:600; color:#0f172a; line-height:1.1; max-width:180px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .draft-item-date { margin:0; font-size:.65rem; font-weight:500; color:#64748b; }
+  .draft-item-meta-row { display:flex; align-items:center; gap:4px; margin-top:6px; font-size:.62rem; letter-spacing:.05em; text-transform:uppercase; font-weight:600; color:#64748b; }
+  .draft-version { color:#334155; }
+  .draft-item-actions { position:absolute; top:6px; right:6px; display:flex; gap:6px; opacity:0; transform:translateY(-4px); transition:opacity $transition-fast, transform $transition-fast; }
+  .draft-item:hover .draft-item-actions, .draft-item.selected .draft-item-actions { opacity:1; transform:translateY(0); }
+  .inline-action { width:28px; height:28px; border:1px solid $border; background:#fff; border-radius:$radius-sm; display:flex; align-items:center; justify-content:center; color:#475569; cursor:pointer; padding:0; transition:background $transition-fast, color $transition-fast, border-color $transition-fast, box-shadow $transition-fast; }
+  .inline-action:hover { background:#fff; border-color:$accent; color:$accent; box-shadow:0 0 0 2px rgba($accent,.15); }
+  .inline-action.danger:hover { background:#fee2e2; border-color:#ef4444; color:#b91c1c; box-shadow:0 0 0 2px rgba(239,68,68,.25); }
+
+  .draft-empty-state { padding:60px 20px; text-align:center; color:#64748b; display:flex; flex-direction:column; gap:10px; }
+  .draft-empty-state h3 { margin:8px 0 2px; font-size:.95rem; font-weight:600; color:#0f172a; }
+  .draft-empty-icon { color:#94a3b8; }
+
+  // RIGHT PANEL
+  .draft-details-panel { background:#fbfbfc; border-left:1px solid $border-subtle; display:flex; flex-direction:column; position:relative; overflow:hidden; max-width:450px; width:100%; }
+  .draft-details-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; color:#64748b; }
+  .draft-details-empty h3 { margin:0; font-size:1rem; font-weight:600; color:#0f172a; }
+  .draft-details-header { padding:30px 34px 6px; display:flex; align-items:center; justify-content:space-between; }
+  .draft-details-info { display:flex; gap:14px; align-items:center; }
+  .draft-details-icon { width:44px; height:44px; background:#eef4ff; border-radius:12px; display:flex; align-items:center; justify-content:center; color:$accent; box-shadow:inset 0 0 0 1px rgba($accent,.15); }
+  .draft-details-name { margin:0 0 4px; font-size:1.05rem; font-weight:600; letter-spacing:-.01em; color:#0f172a; }
+  .draft-details-subtitle { margin:0; font-size:.7rem; font-weight:500; letter-spacing:.04em; text-transform:uppercase; color:#64748b; }
+
+  .draft-actions-group { display:flex; gap:12px; padding:10px 34px 4px; }
+  .draft-action-primary, .draft-action-danger { display:inline-flex; align-items:center; gap:7px; padding:10px 16px; font-size:.75rem; font-weight:600; border-radius:$radius-sm; border:1px solid transparent; cursor:pointer; letter-spacing:.04em; text-transform:uppercase; transition:background $transition-fast, color $transition-fast, box-shadow $transition-fast; }
+  .draft-action-primary { background:$accent; color:#fff; }
+  .draft-action-primary:hover { background:$accent-hover; }
+  .draft-action-danger { background:#fff; color:#dc2626; border-color:#fecaca; }
+  .draft-action-danger:hover { background:#fee2e2; border-color:#fca5a5; }
+
+  .draft-info-cards { padding:14px 34px 24px; display:grid; gap:14px; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); }
+  .draft-info-card { background:#fff; border:1px solid $border-subtle; border-radius:$radius-md; padding:12px 14px 10px; display:flex; flex-direction:column; gap:4px; position:relative; overflow:hidden; }
+  .draft-info-label { font-size:.65rem; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:#64748b; }
+  .draft-info-value { font-size:.8rem; font-weight:600; color:#0f172a; letter-spacing:.01em; }
+
+  // FOOTER
+  .draft-manager-footer { display:flex; align-items:center; justify-content:space-between; padding:14px 24px 16px; border-top:1px solid $border-subtle; background:linear-gradient(to top,#fff 65%, #f8fafc); font-size:.75rem; font-weight:500; letter-spacing:.02em; }
+  .draft-footer-info { display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+  .draft-unsaved-indicator, .draft-saved-indicator { display:inline-flex; align-items:center; gap:6px; font-size:.7rem; font-weight:600; }
+  .draft-unsaved-dot { width:8px; height:8px; background:linear-gradient(135deg,#f97316,#f59e0b); border-radius:50%; animation: pulse 1.4s ease-in-out infinite; box-shadow:0 0 0 2px rgba(249,115,22,.3); }
+  // Responsive collapse
+  @media (max-width: 880px) {
+    width: 100%;
+    .draft-manager-content { grid-template-columns:1fr; }
+    .draft-details-panel { border-left:none; border-top:1px solid $border-subtle; max-width:none; }
   }
 }
 
-// Animations
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
+// UTILITY ANIMATIONS
+@keyframes dm-fade { from { opacity:0; } to { opacity:1; } }
+@keyframes dm-pop { from { opacity:0; transform:translateY(18px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }
+@keyframes pulse { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(.55); opacity:.6; } }
 
-@keyframes slideIn {
-  from { 
-    opacity: 0;
-    transform: translateY(-30px) scale(0.95);
-  }
-  to { 
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
+// DARK MODE SUPPORT (prefers-color-scheme)
+// Dark theme removed to force light as default. Reintroduce via a .theme-dark wrapper if needed later.

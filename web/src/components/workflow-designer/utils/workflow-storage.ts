@@ -164,19 +164,50 @@ export function setAutoSaveCallback(callback: (status: 'started' | 'completed' |
 /**
  * Save draft workflow to localStorage with performance optimizations
  */
-export function saveDraftWorkflow(draft: Omit<DraftWorkflow, 'metadata'>): boolean {
+interface SaveOptions { bumpVersion?: boolean }
+
+export function saveDraftWorkflow(draft: Omit<DraftWorkflow, 'metadata'>, options: SaveOptions = {}): boolean {
   const startTime = performance.now()
   
   try {
     // Generate checksum for change detection
     const checksum = generateChecksum(draft)
-    
+    const key = `${STORAGE_CONFIG.DRAFT_PREFIX}${draft.id}`
+
+    // Attempt to load existing draft to preserve createdAt / bump version
+    let existing: DraftWorkflow | null = null
+    try {
+      const existingRaw = localStorage.getItem(key)
+      if (existingRaw) {
+        existing = JSON.parse(existingRaw) as DraftWorkflow
+      }
+    } catch {
+      existing = null
+    }
+
+    // Derive version (increment only if bumpVersion true or new draft)
+    let newVersion = STORAGE_CONFIG.CURRENT_VERSION
+    if (existing?.metadata?.version) {
+      const prev = existing.metadata.version
+      if (options.bumpVersion !== false) {
+        const prevNum = Number(prev)
+        if (!Number.isNaN(prevNum)) {
+          newVersion = (prevNum + 1).toString()
+        } else {
+          newVersion = `${prev}-rev${Date.now()}`
+        }
+      } else {
+        newVersion = prev // keep same version on silent update (auto-save)
+      }
+    }
+
+    const createdAt = existing?.metadata?.createdAt || Date.now()
     const fullDraft: DraftWorkflow = {
       ...draft,
       metadata: {
-        createdAt: Date.now(),
+        createdAt,
         updatedAt: Date.now(),
-        version: STORAGE_CONFIG.CURRENT_VERSION,
+        version: newVersion,
         checksum,
         compressed: false
       }
@@ -194,14 +225,13 @@ export function saveDraftWorkflow(draft: Omit<DraftWorkflow, 'metadata'>): boole
       }
     }
     
-    const key = `${STORAGE_CONFIG.DRAFT_PREFIX}${draft.id}`
     localStorage.setItem(key, dataToStore)
     
     // Cache the saved data for change detection
     lastSavedData = JSON.stringify(fullDraft)
     
-    const saveTime = performance.now() - startTime
-    console.log(`✅ Draft saved: ${draft.name} (${saveTime.toFixed(1)}ms, ${dataToStore.length} bytes)`)
+  const saveTime = performance.now() - startTime
+  console.log(`✅ Draft saved: ${draft.name} (${saveTime.toFixed(1)}ms, ${dataToStore.length} bytes)${options.bumpVersion === false ? ' (no version bump)' : ''}`)
     
     // Warn if save took too long
     if (saveTime > STORAGE_CONFIG.MAX_SAVE_TIME) {
@@ -300,7 +330,7 @@ function performAutoSave(draft: Omit<DraftWorkflow, 'metadata'>): void {
       console.log(`⚠️ Large workflow detected: ${draft.nodes.length} nodes`)
     }
     
-    const success = saveDraftWorkflow(draft)
+  const success = saveDraftWorkflow(draft, { bumpVersion: false })
     
     if (success) {
       autoSaveCallback?.('completed')

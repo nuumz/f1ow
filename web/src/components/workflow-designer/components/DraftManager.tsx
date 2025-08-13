@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Save, Trash2, Download, RefreshCw, FileText, Settings, X, Plus, Search } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { Save, Trash2, Download, RefreshCw, FileText, Settings, X, Search, ArrowUpDown, Calendar, ChevronUp, ChevronDown } from 'lucide-react'
 import { useWorkflowContext } from '../contexts/WorkflowContext'
 import type { DraftWorkflow } from '../utils/workflow-storage'
 
@@ -31,9 +31,55 @@ const DraftStatusIcon = ({ size = 16, variant = 'default' }: { size?: number; va
   </svg>
 )
 
-interface DraftManagerProps {
-  isOpen: boolean
-  onClose: () => void
+interface DraftManagerProps { isOpen: boolean; onClose: () => void }
+
+type SortKey = 'name' | 'updated' | 'created' | 'version'
+interface SortState { key: SortKey; dir: 'asc' | 'desc' }
+
+interface DraftListItemProps {
+  draft: Pick<DraftWorkflow,'id'|'name'|'metadata'>
+  isSelected: boolean
+  onSelect: (id: string) => void
+  onLoad: (id: string) => void
+  onDelete: (id: string, name: string) => void
+  formatRelativeTime: (ts:number)=>string
+}
+
+const DraftListItem = ({ draft, isSelected, onSelect, onLoad, onDelete, formatRelativeTime }: DraftListItemProps) => {
+  return (
+    <div
+      role="option"
+      aria-selected={isSelected}
+      tabIndex={-1}
+      key={draft.id}
+  className={`draft-item ${isSelected ? 'selected' : ''}`}
+      onClick={() => onSelect(draft.id)}
+      onDoubleClick={() => onLoad(draft.id)}
+    >
+      <div className="draft-item-main">
+        <div className="draft-item-icon"><FileText size={16} /></div>
+        <div className="draft-item-text">
+          <h4 className="draft-item-name" title={draft.name}>{draft.name}</h4>
+          <p className="draft-item-date" title={new Date(draft.metadata.updatedAt).toLocaleString()}>
+            {formatRelativeTime(draft.metadata.updatedAt)}
+          </p>
+        </div>
+      </div>
+      <div className="draft-item-meta-row">
+        <span className="draft-version" title={`Version ${draft.metadata.version}`}>v{draft.metadata.version}</span>
+        <span className="draft-dot">•</span>
+        <span className="draft-type">Draft</span>
+      </div>
+      <div className="draft-item-actions">
+        <button className="inline-action" onClick={(e)=>{e.stopPropagation(); onLoad(draft.id)}} title="Load">
+          <Download size={14} />
+        </button>
+        <button className="inline-action danger" onClick={(e)=>{e.stopPropagation(); onDelete(draft.id, draft.name)}} title="Delete">
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </div>
+  )
 }
 
 export default function DraftManager({ isOpen, onClose }: DraftManagerProps) {
@@ -50,9 +96,14 @@ export default function DraftManager({ isOpen, onClose }: DraftManagerProps) {
   const [storageStats, setStorageStats] = useState<ReturnType<typeof getStorageStats> | null>(null)
   const [selectedDraft, setSelectedDraft] = useState<string | null>(null)
   const [newDraftName, setNewDraftName] = useState('')
+  // Inline name editing for selected draft
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [editingName, setEditingName] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showSettings, setShowSettings] = useState(false)
+  const [sort, setSort] = useState<SortState>({ key: 'updated', dir: 'desc' })
+  const listContainerRef = useRef<HTMLDivElement | null>(null)
 
   // Load drafts and stats
   const refreshData = useCallback(() => {
@@ -86,18 +137,42 @@ export default function DraftManager({ isOpen, onClose }: DraftManagerProps) {
 
     setIsLoading(true)
     try {
-      const draftId = `draft-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
+      // If we have a current draft, update it (reuse ID) else create new
+      const draftId = state.currentDraftId || `draft-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
       saveDraft(draftId, newDraftName.trim())
-      setNewDraftName('')
+      if (!state.currentDraftId) {
+        console.log('✅ Draft created & set as current')
+      } else {
+        console.log('✅ Draft updated (version increment)')
+      }
       refreshData()
-      console.log('✅ Draft saved successfully')
     } catch (error) {
       console.error('Failed to save draft:', error)
       alert('Failed to save draft')
     } finally {
       setIsLoading(false)
     }
-  }, [newDraftName, saveDraft, refreshData])
+  }, [newDraftName, saveDraft, refreshData, state.currentDraftId])
+
+  // Commit rename for selected draft (uses editingName)
+  const commitRename = useCallback(async (draftId: string) => {
+    const name = editingName.trim()
+    if (!name) { setIsEditingName(false); setEditingName(''); return }
+    if (drafts.find(d=>d.id===draftId)?.name === name) { setIsEditingName(false); return }
+    setIsLoading(true)
+    try {
+      saveDraft(draftId, name)
+      console.log('✅ Draft renamed')
+      refreshData()
+    } catch (e) {
+      console.error('Failed to rename draft', e)
+    } finally {
+      setIsLoading(false)
+      setIsEditingName(false)
+    }
+  }, [editingName, saveDraft, refreshData, drafts])
+
+  // Removed save-as-new explicit button (panel feature removed)
 
   // Load selected draft
   const handleLoadDraft = useCallback(async (draftId: string) => {
@@ -161,16 +236,58 @@ export default function DraftManager({ isOpen, onClose }: DraftManagerProps) {
   }
 
   // Filter drafts based on search and type
-  const filteredDrafts = drafts.filter(draft => {
-    const matchesSearch = draft.name.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesSearch
-  })
+  const filteredDrafts = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    const base = q ? drafts.filter(d => d.name.toLowerCase().includes(q)) : drafts.slice()
+    base.sort((a,b) => {
+      const dirMul = sort.dir === 'asc' ? 1 : -1
+      switch (sort.key) {
+        case 'name': return a.name.localeCompare(b.name) * dirMul
+        case 'updated': return (a.metadata.updatedAt - b.metadata.updatedAt) * dirMul
+        case 'created': return (a.metadata.createdAt - b.metadata.createdAt) * dirMul
+        case 'version': {
+          const av = Number(a.metadata.version) || 0
+          const bv = Number(b.metadata.version) || 0
+            return (av - bv) * dirMul
+        }
+        default: return 0
+      }
+    })
+    return base
+  }, [drafts, searchQuery, sort])
+
+  const cycleSort = (key: SortKey) => {
+    setSort(prev => {
+      if (prev.key !== key) return { key, dir: key === 'name' ? 'asc' : 'desc' }
+      // toggle dir
+      return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+    })
+  }
+
+  // Keyboard navigation (arrow up/down, enter, delete)
+  const handleKeyNav = useCallback((e: React.KeyboardEvent) => {
+    if (!filteredDrafts.length) return
+    if (['ArrowDown','ArrowUp','Enter','Delete','Backspace'].includes(e.key)) e.preventDefault()
+    const currentIndex = selectedDraft ? filteredDrafts.findIndex(d=>d.id===selectedDraft) : -1
+    if (e.key === 'ArrowDown') {
+      const next = filteredDrafts[Math.min(filteredDrafts.length-1, currentIndex + 1)]
+      if (next) setSelectedDraft(next.id)
+    } else if (e.key === 'ArrowUp') {
+      const prev = filteredDrafts[Math.max(0, currentIndex <= 0 ? 0 : currentIndex - 1)]
+      if (prev) setSelectedDraft(prev.id)
+    } else if (e.key === 'Enter' && selectedDraft) {
+      handleLoadDraft(selectedDraft)
+    } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedDraft) {
+      const target = drafts.find(d=>d.id===selectedDraft)
+      if (target) handleDeleteDraft(selectedDraft, target.name)
+    }
+  }, [filteredDrafts, selectedDraft, handleLoadDraft, handleDeleteDraft, drafts])
 
   if (!isOpen) return null
 
   return (
     <div className="draft-manager-overlay">
-      <div className="draft-manager-modal">
+  <div className="draft-manager-modal" onKeyDown={handleKeyNav} tabIndex={0} ref={listContainerRef}>
         {/* Header */}
         <div className="draft-manager-header">
           <div className="draft-manager-title">
@@ -209,33 +326,7 @@ export default function DraftManager({ isOpen, onClose }: DraftManagerProps) {
         <div className="draft-manager-content">
           {/* Left Panel - Draft List */}
           <div className="draft-list-panel">
-            {/* Save New Draft Section */}
-            <div className="draft-save-section">
-              <div className="draft-save-header">
-                <Plus size={18} />
-                <span>Save Current Workflow</span>
-              </div>
-              <div className="draft-save-form">
-                <div className="draft-input-group">
-                  <input
-                    type="text"
-                    value={newDraftName}
-                    onChange={(e) => setNewDraftName(e.target.value)}
-                    placeholder="Enter draft name..."
-                    className="draft-input"
-                    onKeyPress={(e) => e.key === 'Enter' && handleSaveDraft()}
-                  />
-                  <button
-                    onClick={handleSaveDraft}
-                    disabled={isLoading || !newDraftName.trim()}
-                    className="draft-save-btn"
-                  >
-                    <Save size={16} />
-                    Save Draft
-                  </button>
-                </div>
-              </div>
-            </div>
+            {/* (Save form moved to right panel to reduce clutter) */}
 
             {/* Search and Filter */}
             <div className="draft-search-section">
@@ -249,15 +340,21 @@ export default function DraftManager({ isOpen, onClose }: DraftManagerProps) {
                   className="draft-search-input"
                 />
               </div>
-              <div className="draft-filter-tabs">
-                <button className="draft-filter-tab active">
-                  All Drafts ({drafts.length})
+              <div className="draft-filter-tabs sort-bar">
+                <button type="button" className={`draft-filter-tab ${sort.key==='updated' ? 'active': ''}`} onClick={()=>cycleSort('updated')}>
+                  <Calendar size={14}/> Updated {sort.key==='updated' && (sort.dir==='asc'? <ChevronUp size={12}/> : <ChevronDown size={12}/>)}
+                </button>
+                <button type="button" className={`draft-filter-tab ${sort.key==='name' ? 'active': ''}`} onClick={()=>cycleSort('name')}>
+                  <ArrowUpDown size={14}/> Name {sort.key==='name' && (sort.dir==='asc'? <ChevronUp size={12}/> : <ChevronDown size={12}/>)}
+                </button>
+                <button type="button" disabled className="draft-filter-tab disabled">
+                  All ({drafts.length})
                 </button>
               </div>
             </div>
 
             {/* Draft List */}
-            <div className="draft-list-container">
+            <div className="draft-list-container" role="listbox" aria-label="Draft list">
               {filteredDrafts.length === 0 ? (
                 <div className="draft-empty-state">
                   {searchQuery ? (
@@ -276,32 +373,16 @@ export default function DraftManager({ isOpen, onClose }: DraftManagerProps) {
                 </div>
               ) : (
                 <div className="draft-list">
-                  {filteredDrafts.map((draft) => (
-                    <div
+                  {filteredDrafts.map(draft => (
+                    <DraftListItem
                       key={draft.id}
-                      className={`draft-item ${selectedDraft === draft.id ? 'selected' : ''}`}
-                      onClick={() => setSelectedDraft(draft.id)}
-                    >
-                      <div className="draft-item-header">
-                        <div className="draft-item-icon">
-                          <FileText size={16} />
-                        </div>
-                        <div className="draft-item-info">
-                          <h4 className="draft-item-name">{draft.name}</h4>
-                          <p className="draft-item-date">{formatRelativeTime(draft.metadata.updatedAt)}</p>
-                        </div>
-                        <div className="draft-item-status">
-                          <DraftStatusIcon size={18} variant="subtle" />
-                        </div>
-                      </div>
-                      <div className="draft-item-meta">
-                        <span className="draft-version">v{draft.metadata.version}</span>
-                        <span className="draft-dot">•</span>
-                        <span className="draft-type">
-                          Draft
-                        </span>
-                      </div>
-                    </div>
+                      draft={draft}
+                      isSelected={selectedDraft===draft.id}
+                      onSelect={setSelectedDraft}
+                      onLoad={handleLoadDraft}
+                      onDelete={handleDeleteDraft}
+                      formatRelativeTime={formatRelativeTime}
+                    />
                   ))}
                 </div>
               )}
@@ -318,14 +399,34 @@ export default function DraftManager({ isOpen, onClose }: DraftManagerProps) {
                   
                   return (
                     <>
-                      {/* Draft Details */}
+                      {/* Draft Details with click-to-edit name */}
                       <div className="draft-details-header">
                         <div className="draft-details-info">
                           <div className="draft-details-icon">
                             <FileText size={20} />
                           </div>
-                          <div>
-                            <h3 className="draft-details-name">{draft.name}</h3>
+                          <div className="draft-details-text">
+                            {!isEditingName ? (
+                              <h3
+                                className="draft-details-name editable"
+                                title="Click to rename"
+                                onClick={()=>{ setIsEditingName(true); setEditingName(draft.name); }}
+                              >
+                                {draft.name}
+                              </h3>
+                            ) : (
+                              <input
+                                className="draft-name-edit-input"
+                                value={editingName}
+                                autoFocus
+                                onChange={(e)=>setEditingName(e.target.value)}
+                                onKeyDown={(e)=> {
+                                  if (e.key==='Enter') commitRename(draft.id)
+                                  if (e.key==='Escape') { setIsEditingName(false); setEditingName('') }
+                                }}
+                                onBlur={()=> commitRename(draft.id)}
+                              />
+                            )}
                             <p className="draft-details-subtitle">
                               Saved {formatRelativeTime(draft.metadata.updatedAt)}
                             </p>
@@ -412,8 +513,27 @@ export default function DraftManager({ isOpen, onClose }: DraftManagerProps) {
                 <div className="draft-empty-illustration">
                   <FileText size={64} />
                 </div>
-                <h3>Select a Draft</h3>
-                <p>Choose a draft from the list to view details and actions</p>
+                <h3>No Draft Selected</h3>
+                <p>Create or update a draft from current workflow</p>
+                <div className="draft-empty-save">
+                  <div className="draft-empty-save-row">
+                    <input
+                      type="text"
+                      value={newDraftName}
+                      onChange={(e)=>setNewDraftName(e.target.value)}
+                      placeholder="Enter draft name..."
+                      onKeyPress={(e)=> e.key==='Enter' && newDraftName.trim() && handleSaveDraft()}
+                      className="draft-empty-save-input"
+                    />
+                    <button
+                      onClick={handleSaveDraft}
+                      disabled={isLoading || !newDraftName.trim()}
+                      className="draft-empty-save-btn"
+                    >
+                      <Save size={16}/> {state.currentDraftId ? 'Update Draft' : 'Save Draft'}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>

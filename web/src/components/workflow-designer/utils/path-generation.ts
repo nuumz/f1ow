@@ -23,6 +23,93 @@ const DEFAULT_PATH_CONFIG: Required<PathConfig> = {
   smoothingFactor: 2.5
 }
 
+// Type aliases for better code readability
+type BoxSide = 'left' | 'right' | 'top' | 'bottom' | 'none'
+type Orientation = 'horizontal' | 'vertical' | 'none'
+
+// Centralized fixed lead length (was previously duplicated as 30 / 50)
+// Keep existing current visual of 50px leads for orthogonal styles to avoid regression.
+const FIXED_LEAD_LENGTH = 50
+
+// ---------------------------------------------------------------------------
+// Shared internal helpers
+// ---------------------------------------------------------------------------
+
+
+/** Project a point that is inside a box to the nearest side facing the toward point */
+function projectPointToBoxSide(
+  point: PortPosition,
+  box: { x: number; y: number; width: number; height: number },
+  toward: PortPosition,
+  radius: number
+): PortPosition {
+  if (point.x < box.x || point.x > box.x + box.width || point.y < box.y || point.y > box.y + box.height) {
+    return point
+  }
+  const cx = box.x + box.width / 2
+  const cy = box.y + box.height / 2
+  const dx = toward.x - cx
+  const dy = toward.y - cy
+  const absDx = Math.abs(dx)
+  const absDy = Math.abs(dy)
+  const pad = Math.min(Math.max(radius, 4), Math.min(box.width, box.height) / 2)
+  if (absDx >= absDy) {
+    if (dx >= 0) {
+      return { x: box.x + box.width, y: Math.min(box.y + box.height - pad, Math.max(box.y + pad, point.y)) }
+    }
+    return { x: box.x, y: Math.min(box.y + box.height - pad, Math.max(box.y + pad, point.y)) }
+  }
+  if (dy >= 0) {
+    return { y: box.y + box.height, x: Math.min(box.x + box.width - pad, Math.max(box.x + pad, point.x)) }
+  }
+  return { y: box.y, x: Math.min(box.x + box.width - pad, Math.max(box.x + pad, point.x)) }
+}
+
+/** Build a sharp orthogonal (Manhattan) SVG path from ordered waypoints */
+function buildSharpOrthogonalPath(points: PortPosition[]): string {
+  if (points.length < 2) return ''
+  return points.map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`)).join(' ')
+}
+
+/** Enforce fixed straight lead segments at start (always) and optionally at end (for multi-bend paths) */
+function enforceFixedSegments(
+  pts: PortPosition[],
+  fixed = FIXED_LEAD_LENGTH,
+  enforceEnd = true
+): PortPosition[] {
+  if (pts.length < 3) return pts
+  const cloned = pts.map(p => ({ ...p }))
+  const start = cloned[0]
+  const first = cloned[1]
+  const preEnd = cloned[cloned.length - 2]
+  const end = cloned[cloned.length - 1]
+
+  // Start segment normalization
+  if (start.x === first.x) { // vertical
+    const dir = Math.sign(first.y - start.y) || 1
+    const len = Math.abs(first.y - start.y)
+    if (len > fixed) first.y = start.y + dir * fixed
+  } else if (start.y === first.y) { // horizontal
+    const dir = Math.sign(first.x - start.x) || 1
+    const len = Math.abs(first.x - start.x)
+    if (len > fixed) first.x = start.x + dir * fixed
+  }
+
+  if (enforceEnd && cloned.length > 3) {
+    if (preEnd.x === end.x) { // vertical end approach
+      const dir = Math.sign(preEnd.y - end.y) || 1
+      const len = Math.abs(end.y - preEnd.y)
+      if (len > fixed) preEnd.y = end.y + dir * fixed
+    } else if (preEnd.y === end.y) { // horizontal end approach
+      const dir = Math.sign(preEnd.x - end.x) || 1
+      const len = Math.abs(end.x - preEnd.x)
+      if (len > fixed) preEnd.x = end.x + dir * fixed
+    }
+  }
+  return cloned
+}
+
+
 /**
  * Types of connection flows for different path algorithms
  */
@@ -169,56 +256,31 @@ export interface OrthogonalPathOptions {
   minSegment?: number // minimum straight segment length before corner
 }
 
+/**
+ * Generates an orthogonal (Manhattan) SVG path with rounded 90° corners between two points.
+ * Useful for schematic or blueprint-style connections, supporting single or double bends.
+ *
+ * @param source - The starting port position.
+ * @param target - The ending port position.
+ * @param radius - The corner radius for rounded bends.
+ * @param options - Additional options for routing and box projections.
+ * @returns SVG path string for the orthogonal rounded connection.
+ */
 export function generateOrthogonalRoundedPath(
   source: PortPosition,
   target: PortPosition,
   radius = 14,
   options?: OrthogonalPathOptions
 ): string {
+  const fixedLead = FIXED_LEAD_LENGTH
   const opts: Required<Pick<OrthogonalPathOptions, 'strategy' | 'allowDoubleBend' | 'minSegment'>> = {
     strategy: options?.strategy || 'auto',
     allowDoubleBend: options?.allowDoubleBend ?? false,
     minSegment: options?.minSegment ?? 12
   }
 
-  // If node boxes provided and source/target are inside, project to nearest side facing the other point
-  const projectPointToBoxSide = (
-    point: PortPosition,
-    box: { x: number; y: number; width: number; height: number },
-    toward: PortPosition
-  ): PortPosition => {
-    // If already outside box, return as-is
-    if (point.x < box.x || point.x > box.x + box.width || point.y < box.y || point.y > box.y + box.height) {
-      return point
-    }
-    const cx = box.x + box.width / 2
-    const cy = box.y + box.height / 2
-    const dx = toward.x - cx
-    const dy = toward.y - cy
-    const absDx = Math.abs(dx)
-    const absDy = Math.abs(dy)
-    const pad = Math.min(Math.max(radius, 4), Math.min(box.width, box.height) / 2)
-    if (absDx >= absDy) {
-      // Exit left or right
-      if (dx >= 0) {
-        return { x: box.x + box.width, y: Math.min(box.y + box.height - pad, Math.max(box.y + pad, point.y)) }
-      } else {
-        return { x: box.x, y: Math.min(box.y + box.height - pad, Math.max(box.y + pad, point.y)) }
-      }
-    } else {
-      // Exit top or bottom
-      if (dy >= 0) {
-        return { y: box.y + box.height, x: Math.min(box.x + box.width - pad, Math.max(box.x + pad, point.x)) }
-      } else {
-        return { y: box.y, x: Math.min(box.x + box.width - pad, Math.max(box.x + pad, point.x)) }
-      }
-    }
-  }
-
-  let start = source
-  let end = target
-  if (options?.sourceBox) start = projectPointToBoxSide(source, options.sourceBox, target)
-  if (options?.targetBox) end = projectPointToBoxSide(target, options.targetBox, start)
+  let start = options?.sourceBox ? projectPointToBoxSide(source, options.sourceBox, target, radius) : source
+  let end = options?.targetBox ? projectPointToBoxSide(target, options.targetBox, start, radius) : target
 
   let dx = end.x - start.x
   let dy = end.y - start.y
@@ -240,28 +302,52 @@ export function generateOrthogonalRoundedPath(
 
   // Single-corner path (preferred) or double-bend fallback
   if (!opts.allowDoubleBend) {
-    // Corner point
-    const corner = horizontalFirst ? { x: end.x, y: start.y } : { x: start.x, y: end.y }
+    const axisSpan = horizontalFirst ? Math.abs(end.x - start.x) : Math.abs(end.y - start.y)
+    const straightSegmentLength = clampLeadLength(axisSpan, radius, fixedLead)
+    
+  // Calculate intermediate points with fixed straight segments
+    let startExtended: PortPosition
+    let endExtended: PortPosition
+    
+    if (horizontalFirst) {
+      // For horizontal-first: extend horizontally from start, then extend horizontally to end
+      startExtended = { x: start.x + Math.sign(dx) * straightSegmentLength, y: start.y }
+      endExtended = { x: end.x - Math.sign(dx) * straightSegmentLength, y: end.y }
+    } else {
+      // For vertical-first: extend vertically from start, then extend vertically to end
+      startExtended = { x: start.x, y: start.y + Math.sign(dy) * straightSegmentLength }
+      endExtended = { x: end.x, y: end.y - Math.sign(dy) * straightSegmentLength }
+    }
+    
+    // Corner point between the extended segments
+    const corner = horizontalFirst ? { x: endExtended.x, y: startExtended.y } : { x: startExtended.x, y: endExtended.y }
+    
     // Compute effective radius limited by segment lengths
-    const seg1Len = horizontalFirst ? Math.abs(corner.x - start.x) : Math.abs(corner.y - start.y)
-    const seg2Len = horizontalFirst ? Math.abs(end.y - corner.y) : Math.abs(end.x - corner.x)
-    let r = Math.min(radius, seg1Len / 2, seg2Len / 2)
-    if (r < 4) r = Math.min(4, radius)
+    const seg1Len = horizontalFirst ? Math.abs(corner.x - startExtended.x) : Math.abs(corner.y - startExtended.y)
+    const seg2Len = horizontalFirst ? Math.abs(endExtended.y - corner.y) : Math.abs(endExtended.x - corner.x)
+    const r = Math.max(4, Math.min(radius, seg1Len / 2, seg2Len / 2))
 
     // Entry & exit points around corner
     let entry: PortPosition
     let exit: PortPosition
     if (horizontalFirst) {
-      entry = { x: corner.x - Math.sign(dx) * r, y: corner.y }
-      exit = { x: corner.x, y: corner.y + Math.sign(dy) * r }
+      const cornerDx = corner.x - startExtended.x
+      const cornerDy = endExtended.y - corner.y
+      entry = { x: corner.x - Math.sign(cornerDx) * r, y: corner.y }
+      exit = { x: corner.x, y: corner.y + Math.sign(cornerDy) * r }
     } else {
-      entry = { x: corner.x, y: corner.y - Math.sign(dy) * r }
-      exit = { x: corner.x + Math.sign(dx) * r, y: corner.y }
+      const cornerDy = corner.y - startExtended.y
+      const cornerDx = endExtended.x - corner.x
+      entry = { x: corner.x, y: corner.y - Math.sign(cornerDy) * r }
+      exit = { x: corner.x + Math.sign(cornerDx) * r, y: corner.y }
     }
+    
     return [
       `M ${start.x} ${start.y}`,
-      horizontalFirst ? `L ${entry.x} ${entry.y}` : `L ${entry.x} ${entry.y}`,
+      `L ${startExtended.x} ${startExtended.y}`,
+      `L ${entry.x} ${entry.y}`,
       `Q ${corner.x} ${corner.y} ${exit.x} ${exit.y}`,
+      `L ${endExtended.x} ${endExtended.y}`,
       `L ${end.x} ${end.y}`
     ].join(' ')
   }
@@ -271,9 +357,28 @@ export function generateOrthogonalRoundedPath(
   const originalTarget = end
   dx = originalTarget.x - originalSource.x
   dy = originalTarget.y - originalSource.y
-  const midPrimary = horizontalFirst ? originalSource.x + dx / 2 : originalSource.y + dy / 2
-  const p1 = horizontalFirst ? { x: midPrimary, y: originalSource.y } : { x: originalSource.x, y: midPrimary }
-  const p2 = horizontalFirst ? { x: midPrimary, y: originalTarget.y } : { x: originalTarget.x, y: midPrimary }
+  // Fixed straight segments from start and end with clamping similar to single-bend
+  const axisSpan = horizontalFirst ? Math.abs(originalTarget.x - originalSource.x) : Math.abs(originalTarget.y - originalSource.y)
+  const straightSegmentLength = clampLeadLength(axisSpan, radius, fixedLead)
+  
+  // Calculate extended points with 50px straight segments
+  let startExtended: PortPosition
+  let endExtended: PortPosition
+  
+  if (horizontalFirst) {
+    startExtended = { x: originalSource.x + Math.sign(dx) * straightSegmentLength, y: originalSource.y }
+    endExtended = { x: originalTarget.x - Math.sign(dx) * straightSegmentLength, y: originalTarget.y }
+  } else {
+    startExtended = { x: originalSource.x, y: originalSource.y + Math.sign(dy) * straightSegmentLength }
+    endExtended = { x: originalTarget.x, y: originalTarget.y - Math.sign(dy) * straightSegmentLength }
+  }
+  
+  // Calculate midpoint between extended segments
+  const extendedDx = endExtended.x - startExtended.x
+  const extendedDy = endExtended.y - startExtended.y
+  const midPrimary = horizontalFirst ? startExtended.x + extendedDx / 2 : startExtended.y + extendedDy / 2
+  const p1 = horizontalFirst ? { x: midPrimary, y: startExtended.y } : { x: startExtended.x, y: midPrimary }
+  const p2 = horizontalFirst ? { x: midPrimary, y: endExtended.y } : { x: endExtended.x, y: midPrimary }
 
   function cornerSegment(prev: PortPosition, corner: PortPosition, next: PortPosition): string {
     const vxIn = Math.sign(corner.x - prev.x)
@@ -295,8 +400,10 @@ export function generateOrthogonalRoundedPath(
   }
   return [
     `M ${originalSource.x} ${originalSource.y}`,
-    cornerSegment(originalSource, p1, p2),
-    cornerSegment(p1, p2, originalTarget),
+    `L ${startExtended.x} ${startExtended.y}`,
+    cornerSegment(startExtended, p1, p2),
+    cornerSegment(p1, p2, endExtended),
+    `L ${endExtended.x} ${endExtended.y}`,
     `L ${originalTarget.x} ${originalTarget.y}`
   ].join(' ')
 }
@@ -336,28 +443,7 @@ function inflateRect(r: {x:number;y:number;width:number;height:number}, pad: num
   return { x: r.x - pad, y: r.y - pad, width: r.width + pad*2, height: r.height + pad*2 }
 }
 
-function buildRoundedPath(points: PortPosition[], radius: number): string {
-  if (points.length < 2) return ''
-  const parts: string[] = [`M ${points[0].x} ${points[0].y}`]
-  for (let i = 1; i < points.length - 1; i++) {
-    const prev = points[i-1]
-    const corner = points[i]
-    const next = points[i+1]
-    const vxIn = Math.sign(corner.x - prev.x)
-    const vyIn = Math.sign(corner.y - prev.y)
-    const vxOut = Math.sign(next.x - corner.x)
-    const vyOut = Math.sign(next.y - corner.y)
-    const segInLen = Math.abs(corner.x - prev.x) + Math.abs(corner.y - prev.y)
-    const segOutLen = Math.abs(next.x - corner.x) + Math.abs(next.y - corner.y)
-    const r = Math.min(radius, segInLen/2, segOutLen/2)
-    const entry: PortPosition = { x: corner.x - vxIn * r * (vxIn!==0?1:0), y: corner.y - vyIn * r * (vyIn!==0?1:0) }
-    const exit: PortPosition = { x: corner.x + vxOut * r * (vxOut!==0?1:0), y: corner.y + vyOut * r * (vyOut!==0?1:0) }
-    parts.push(`L ${entry.x} ${entry.y} Q ${corner.x} ${corner.y} ${exit.x} ${exit.y}`)
-  }
-  const last = points[points.length - 1]
-  parts.push(`L ${last.x} ${last.y}`)
-  return parts.join(' ')
-}
+// Rounded path helper removed (logic switched to sharp 90° only for adaptive variant)
 
 export function generateAdaptiveOrthogonalRoundedPath(
   source: PortPosition,
@@ -365,6 +451,8 @@ export function generateAdaptiveOrthogonalRoundedPath(
   radius = 14,
   options?: AdaptivePathOptions
 ): string {
+  // Reuse shared helpers buildSharpOrthogonalPath & enforceFixedSegments
+
   const obstacles = (options?.obstacles || [])
     .map(o => options?.clearance ? inflateRect(o, options.clearance) : o)
   const maxBends = options?.maxBends ?? 4
@@ -372,111 +460,35 @@ export function generateAdaptiveOrthogonalRoundedPath(
   // Derive anchor points via existing projection if boxes provided
   let start = source
   let end = target
-  if (options?.sourceBox) {
-    start = generateOrthogonalRoundedPath(source, target, radius, { ...options, allowDoubleBend: false })
-      ? source : source // placeholder (reuse projection util below instead of parsing path)
-  }
-  // We'll reuse project logic by calling internal projection from previous function: replicate minimal part
-  const project = (
-    point: PortPosition,
-    box?: {x:number;y:number;width:number;height:number},
-    toward?: PortPosition
-  ) => {
-    if (!box || !toward) return point
-    if (point.x < box.x || point.x > box.x+box.width || point.y < box.y || point.y > box.y+box.height) return point
-    const cx = box.x + box.width/2
-    const cy = box.y + box.height/2
-    const dx = toward.x - cx
-    const dy = toward.y - cy
-    const absDx = Math.abs(dx)
-    const absDy = Math.abs(dy)
-    const pad = Math.min(Math.max(radius,4), Math.min(box.width, box.height)/2)
-    if (absDx >= absDy) {
-      if (dx >= 0) return { x: box.x + box.width, y: Math.min(box.y+box.height-pad, Math.max(box.y+pad, point.y)) }
-      return { x: box.x, y: Math.min(box.y+box.height-pad, Math.max(box.y+pad, point.y)) }
-    } else {
-      if (dy >= 0) return { y: box.y + box.height, x: Math.min(box.x+box.width-pad, Math.max(box.x+pad, point.x)) }
-      return { y: box.y, x: Math.min(box.x+box.width-pad, Math.max(box.x+pad, point.x)) }
-    }
-  }
-  if (options?.sourceBox) start = project(start, options.sourceBox, target)
-  if (options?.targetBox) end = project(end, options.targetBox, start)
+  if (options?.sourceBox) start = projectPointToBoxSide(start, options.sourceBox, target, radius)
+  if (options?.targetBox) end = projectPointToBoxSide(end, options.targetBox, start, radius)
 
   // Determine which side of the boxes we exited/entered (if boxes provided) so we can decide bend count.
-  type Side = 'left' | 'right' | 'top' | 'bottom' | 'none'
-  const detectSide = (pt: PortPosition, box?: {x:number;y:number;width:number;height:number}): Side => {
-    if (!box) return 'none'
-    const eps = 0.5
-    if (Math.abs(pt.x - box.x) < eps) return 'left'
-    if (Math.abs(pt.x - (box.x + box.width)) < eps) return 'right'
-    if (Math.abs(pt.y - box.y) < eps) return 'top'
-    if (Math.abs(pt.y - (box.y + box.height)) < eps) return 'bottom'
-    return 'none'
-  }
-  const startSide = detectSide(start, options?.sourceBox)
-  const endSide = detectSide(end, options?.targetBox)
-  const startOrientation: 'horizontal' | 'vertical' | 'none' = (startSide === 'left' || startSide === 'right') ? 'horizontal' : (startSide === 'top' || startSide === 'bottom') ? 'vertical' : 'none'
-  const endOrientation: 'horizontal' | 'vertical' | 'none' = (endSide === 'left' || endSide === 'right') ? 'horizontal' : (endSide === 'top' || endSide === 'bottom') ? 'vertical' : 'none'
+  const startSide = detectBoxSide(start, options?.sourceBox)
+  const endSide = detectBoxSide(end, options?.targetBox)
+  const startOrientation = getOrientationFromSide(startSide)
+  const endOrientation = getOrientationFromSide(endSide)
 
   // Base attempt: single bend
-  const horizontalFirst = Math.abs(end.x - start.x) >= Math.abs(end.y - start.y)
-  let candidatePoints: PortPosition[] = []
+  let candidatePoints = generateCandidatePoints(start, end, startOrientation, endOrientation)
 
-  // If both orientations are the same (both horizontal exits or both vertical) and positions require change on the orthogonal axis,
-  // we prefer a TWO-BEND path: start -> mid dogleg -> turn -> end, yielding two rounded corners for clearer schematic shape.
-  if (startOrientation !== 'none' && startOrientation === endOrientation) {
-    if (startOrientation === 'horizontal') {
-      if (Math.abs(start.y - end.y) < 0.5) {
-        // Aligned horizontally, straight line is fine
-        candidatePoints = [start, end]
-      } else {
-        const midX = (start.x + end.x) / 2
-        candidatePoints = [
-          start,
-          { x: midX, y: start.y },
-          { x: midX, y: end.y },
-          end
-        ]
-      }
-    } else { // vertical orientation
-      if (Math.abs(start.x - end.x) < 0.5) {
-        candidatePoints = [start, end]
-      } else {
-        const midY = (start.y + end.y) / 2
-        candidatePoints = [
-          start,
-          { x: start.x, y: midY },
-          { x: end.x, y: midY },
-          end
-        ]
-      }
+  if (!hasObstacleIntersection(candidatePoints, obstacles)) {
+    // Custom rule: if start port exits from left/right side (horizontal orientation) enforce first fixed horizontal segment.
+    const FIXED = FIXED_LEAD_LENGTH
+    const orientedPoints = handleOrientedRouting(start, end, startOrientation, endOrientation, FIXED)
+    if (orientedPoints) {
+      return buildSharpOrthogonalPath(orientedPoints)
     }
-  }
-
-  // If not filled (different orientation or boxes missing), fallback to single-corner L-shape candidate.
-  if (candidatePoints.length === 0) {
-    candidatePoints = [start]
-    const corner = horizontalFirst ? { x: end.x, y: start.y } : { x: start.x, y: end.y }
-    candidatePoints.push(corner)
-    candidatePoints.push(end)
-  }
-
-  const hasObstacleIntersection = () => {
-    for (let i = 0; i < candidatePoints.length -1; i++) {
-      const a = candidatePoints[i]
-      const b = candidatePoints[i+1]
-      for (const ob of obstacles) {
-        if (rectIntersectsSegment(ob, a, b)) return true
-      }
+    
+    // General case (non-horizontal start) keeps previous behavior with fixed length enforcement.
+    if (candidatePoints.length >= 3) {
+      return buildSharpOrthogonalPath(enforceFixedSegments(candidatePoints, FIXED_LEAD_LENGTH, true))
     }
-    return false
-  }
-
-  if (!hasObstacleIntersection()) {
-    return buildRoundedPath(candidatePoints, radius)
+    return buildSharpOrthogonalPath(candidatePoints)
   }
 
   // Introduce dogleg: push path outward along primary axis
+  const horizontalFirst = Math.abs(end.x - start.x) >= Math.abs(end.y - start.y)
   const dirX = Math.sign(end.x - start.x) || 1
   const dirY = Math.sign(end.y - start.y) || 1
   const offset = Math.max(40, radius * 3)
@@ -495,9 +507,9 @@ export function generateAdaptiveOrthogonalRoundedPath(
   // If still intersecting and allowed more bends, attempt secondary lateral shift
   const checkAndMaybeSecondary = () => {
     const intersects = () => {
-      for (let i=0;i<doglegPoints.length-1;i++) {
-        const a = doglegPoints[i]; const b = doglegPoints[i+1]
-        for (const ob of obstacles) if (rectIntersectsSegment(ob,a,b)) return true
+      for (let i = 0; i < doglegPoints.length - 1; i++) {
+        const a = doglegPoints[i]; const b = doglegPoints[i + 1]
+        for (const ob of obstacles) if (rectIntersectsSegment(ob, a, b)) return true
       }
       return false
     }
@@ -506,18 +518,21 @@ export function generateAdaptiveOrthogonalRoundedPath(
     const extraOffset = offset * 1.6
     if (horizontalFirst) {
       const extraX = start.x + dirX * extraOffset
-      doglegPoints.splice(1,0,{ x: extraX, y: start.y })
-      doglegPoints.splice(doglegPoints.length-1,0,{ x: extraX, y: end.y })
+      doglegPoints.splice(1, 0, { x: extraX, y: start.y })
+      doglegPoints.splice(doglegPoints.length - 1, 0, { x: extraX, y: end.y })
     } else {
       const extraY = start.y + dirY * extraOffset
-      doglegPoints.splice(1,0,{ x: start.x, y: extraY })
-      doglegPoints.splice(doglegPoints.length-1,0,{ x: end.x, y: extraY })
+      doglegPoints.splice(1, 0, { x: start.x, y: extraY })
+      doglegPoints.splice(doglegPoints.length - 1, 0, { x: end.x, y: extraY })
     }
     return !intersects()
   }
   checkAndMaybeSecondary()
 
-  return buildRoundedPath(doglegPoints, radius)
+  if (doglegPoints.length >= 3) {
+    return buildSharpOrthogonalPath(enforceFixedSegments(doglegPoints, FIXED_LEAD_LENGTH, true))
+  }
+  return buildSharpOrthogonalPath(doglegPoints)
 }
 
 /**
@@ -581,4 +596,195 @@ export function validatePathInputs(source: PortPosition, target: PortPosition): 
     isFinite(source.x) && isFinite(source.y) &&
     isFinite(target.x) && isFinite(target.y)
   )
+}
+
+/** Clamp desired lead length to available axis span given radius; ensures minimum 4px */
+function clampLeadLength(axisSpan: number, radius: number, desired: number): number {
+  const minNeeded = 2 * desired + 2 * radius + 2
+  if (axisSpan >= minNeeded) return desired
+  const shrinkLead = Math.max(4, (axisSpan - (2 * radius + 2)) / 2)
+  return isFinite(shrinkLead) && shrinkLead > 0 ? shrinkLead : 4
+}
+
+/** Detect which side of a box a point exits from */
+function detectBoxSide(pt: PortPosition, box?: {x:number;y:number;width:number;height:number}): BoxSide {
+  if (!box) return 'none'
+  const eps = 0.5
+  if (Math.abs(pt.x - box.x) < eps) return 'left'
+  if (Math.abs(pt.x - (box.x + box.width)) < eps) return 'right'
+  if (Math.abs(pt.y - box.y) < eps) return 'top'
+  if (Math.abs(pt.y - (box.y + box.height)) < eps) return 'bottom'
+  return 'none'
+}
+
+/** Get orientation from box side */
+function getOrientationFromSide(side: BoxSide): Orientation {
+  if (side === 'left' || side === 'right') return 'horizontal'
+  if (side === 'top' || side === 'bottom') return 'vertical'
+  return 'none'
+}
+
+/** Generate 3-bend pattern for horizontal→vertical transitions */
+function generateHorizontalToVertical3Bend(
+  start: PortPosition,
+  end: PortPosition,
+  FIXED: number
+): PortPosition[] {
+  const dirX = Math.sign(end.x - start.x) || 1
+  const dirY = Math.sign(end.y - start.y) || 1
+  const firstPoint: PortPosition = { x: start.x + dirX * FIXED, y: start.y }
+  
+  const totalY = end.y - start.y
+  let midY = start.y + totalY / 2
+  const minGap = FIXED * 1.2
+  if (Math.abs(midY - start.y) < minGap) midY = start.y + dirY * minGap
+  if (Math.abs(end.y - midY) < minGap) midY = end.y - dirY * minGap
+  
+  const approachDirY = dirY
+  let preEndY = end.y - approachDirY * FIXED
+  if (Math.abs(end.y - start.y) < FIXED * 3) {
+    preEndY = end.y - approachDirY * Math.max(8, Math.abs(end.y - start.y) / 4)
+  }
+  
+  const points = [
+    start,
+    firstPoint,
+    { x: firstPoint.x, y: midY },
+    { x: end.x, y: midY }
+  ]
+  
+  if (preEndY !== end.y) points.push({ x: end.x, y: preEndY })
+  points.push(end)
+  
+  return points
+}
+
+/** Generate 3-bend pattern for vertical→horizontal transitions */
+/** Generate candidate points for basic routing */
+function generateCandidatePoints(
+  start: PortPosition,
+  end: PortPosition,
+  startOrientation: Orientation,
+  endOrientation: Orientation
+): PortPosition[] {
+  const horizontalFirst = Math.abs(end.x - start.x) >= Math.abs(end.y - start.y)
+  
+  // If both orientations are the same (both horizontal exits or both vertical) and positions require change on the orthogonal axis,
+  // we prefer a TWO-BEND path: start -> mid dogleg -> turn -> end, yielding two rounded corners for clearer schematic shape.
+  if (startOrientation !== 'none' && startOrientation === endOrientation) {
+    if (startOrientation === 'horizontal') {
+      if (Math.abs(start.y - end.y) < 0.5) {
+        return [start, end]
+      } else {
+        const midX = (start.x + end.x) / 2
+        return [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end]
+      }
+    } else { // vertical orientation
+      if (Math.abs(start.x - end.x) < 0.5) {
+        return [start, end]
+      } else {
+        const midY = (start.y + end.y) / 2
+        return [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end]
+      }
+    }
+  }
+
+  // If not filled (different orientation or boxes missing), fallback to single-corner L-shape candidate.
+  const corner = horizontalFirst ? { x: end.x, y: start.y } : { x: start.x, y: end.y }
+  return [start, corner, end]
+}
+
+/** Check if candidate points intersect with obstacles */
+function hasObstacleIntersection(
+  candidatePoints: PortPosition[],
+  obstacles: Array<{ x: number; y: number; width: number; height: number }>
+): boolean {
+  for (let i = 0; i < candidatePoints.length - 1; i++) {
+    const a = candidatePoints[i]
+    const b = candidatePoints[i + 1]
+    for (const ob of obstacles) {
+      if (rectIntersectsSegment(ob, a, b)) return true
+    }
+  }
+  return false
+}
+
+/** Handle oriented routing with fixed leads */
+function handleOrientedRouting(
+  start: PortPosition,
+  end: PortPosition,
+  startOrientation: Orientation,
+  endOrientation: Orientation,
+  FIXED: number
+): PortPosition[] | null {
+  if (startOrientation === 'horizontal') {
+    const dirX = Math.sign(end.x - start.x) || 1
+    const firstPoint: PortPosition = { x: start.x + dirX * FIXED, y: start.y }
+    
+    if (endOrientation === 'horizontal') {
+      const dirEndX = Math.sign(end.x - start.x) || 1
+      const preEnd: PortPosition = { x: end.x - dirEndX * FIXED, y: end.y }
+      if (Math.abs(firstPoint.x - preEnd.x) < 1) {
+        return [start, firstPoint, { x: firstPoint.x, y: end.y }, end]
+      } else {
+        return [start, firstPoint, { x: firstPoint.x, y: end.y }, preEnd, end]
+      }
+    } else if (endOrientation === 'vertical') {
+      return generateHorizontalToVertical3Bend(start, end, FIXED)
+    } else {
+      return [start, firstPoint, { x: firstPoint.x, y: end.y }, end]
+    }
+  } else if (startOrientation === 'vertical') {
+    const dirY = Math.sign(end.y - start.y) || 1
+    const firstPoint: PortPosition = { x: start.x, y: start.y + dirY * FIXED }
+    
+    if (endOrientation === 'vertical') {
+      const dirEndY = Math.sign(end.y - start.y) || 1
+      const preEnd: PortPosition = { x: end.x, y: end.y - dirEndY * FIXED }
+      if (Math.abs(firstPoint.y - preEnd.y) < 1) {
+        return [start, firstPoint, { x: end.x, y: firstPoint.y }, end]
+      } else {
+        return [start, firstPoint, { x: end.x, y: firstPoint.y }, preEnd, end]
+      }
+    } else if (endOrientation === 'horizontal') {
+      return generateVerticalToHorizontal3Bend(start, end, FIXED)
+    } else {
+      return [start, firstPoint, { x: end.x, y: firstPoint.y }, end]
+    }
+  }
+  return null
+}
+
+function generateVerticalToHorizontal3Bend(
+  start: PortPosition,
+  end: PortPosition,
+  FIXED: number
+): PortPosition[] {
+  const dirY = Math.sign(end.y - start.y) || 1
+  const dirX = Math.sign(end.x - start.x) || 1
+  const firstPoint: PortPosition = { x: start.x, y: start.y + dirY * FIXED }
+  
+  const totalX = end.x - start.x
+  let midX = start.x + totalX / 2
+  const minGap = FIXED * 1.2
+  if (Math.abs(midX - start.x) < minGap) midX = start.x + dirX * minGap
+  if (Math.abs(end.x - midX) < minGap) midX = end.x - dirX * minGap
+  
+  const approachDirX = dirX
+  let preEndX = end.x - approachDirX * FIXED
+  if (Math.abs(end.x - start.x) < FIXED * 3) {
+    preEndX = end.x - approachDirX * Math.max(8, Math.abs(end.x - start.x) / 4)
+  }
+  
+  const points = [
+    start,
+    firstPoint,
+    { x: midX, y: firstPoint.y },
+    { x: midX, y: end.y }
+  ]
+  
+  if (preEndX !== end.x) points.push({ x: preEndX, y: end.y })
+  points.push(end)
+  
+  return points
 }

@@ -2074,24 +2074,11 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         event.stopPropagation();
         onConnectionClick(d);
       })
-      .on("mouseenter", function (this: any, event: any, d: Connection) {
+  .on("mouseenter", function (this: any, _event: any, d: Connection) {
         // Get the connection group (parent g element)
         const connectionGroup = d3.select(this.parentNode as SVGGElement);
         const connectionPath = connectionGroup.select(".connection-path");
         const isSelected = selectedConnection?.id === d.id;
-
-        // Debug logging
-        if (process.env.NODE_ENV === 'development') {
-          console.log('🎯 Connection hover enter:', {
-            connectionId: d.id,
-            isSelected,
-            element: this,
-            parentNode: this.parentNode,
-            connectionGroup: connectionGroup.node(),
-            connectionPath: connectionPath.node(),
-            event: event.type
-          });
-        }
 
         // Clear any pending timeout
         if (hoverTimeoutRef.current) {
@@ -2111,7 +2098,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           // Keep hitbox at fixed width for consistent hover area
         }
       })
-      .on("mouseleave", function (this: any, event: any, d: Connection) {
+  .on("mouseleave", function (this: any, _event: any, d: Connection) {
         const connectionGroup = d3.select(this.parentNode as SVGGElement);
         const connectionPath = connectionGroup.select(".connection-path");
         const isSelected = selectedConnection?.id === d.id;
@@ -2121,7 +2108,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           console.log('🎯 Connection hover leave:', {
             connectionId: d.id,
             isSelected,
-            event: event.type
+            event: _event.type
           });
         }
 

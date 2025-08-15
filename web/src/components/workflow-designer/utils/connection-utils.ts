@@ -218,9 +218,17 @@ export function calculateConnectionPreviewPath(
     // Prefer adaptive path to better match final routing around obstacles
     const startSide = detectPortSide(sourceNode, sourcePortId, sourcePos)
     const startOrientation = sideToOrientation(startSide)
-    // When starting from a bottom port, snap to target's top edge center if a hover target box is known
+    // When starting from a bottom port, snap to target's top/bottom edge center depending on proximity if a hover target box is known
+    // Rule: if (topPortTargetY - sourceY) <= 50px => use target bottom port; else use target top port
+  const SNAP_THRESHOLD = 50
     const previewEnd = (isSourceBottomPort && hoverTargetBox)
-      ? { x: hoverTargetBox.x + hoverTargetBox.width / 2, y: hoverTargetBox.y }
+      ? (() => {
+          const sourceY = sourcePos.y
+          const topY = hoverTargetBox.y
+          const bottomY = hoverTargetBox.y + hoverTargetBox.height
+      const useBottom = (topY - sourceY) < SNAP_THRESHOLD
+          return { x: hoverTargetBox.x + hoverTargetBox.width / 2, y: useBottom ? bottomY : topY }
+        })()
       : previewPosition
     const endOrientation = (isSourceBottomPort && hoverTargetBox)
       ? 'vertical'
@@ -373,8 +381,14 @@ function generateArchitectureModeConnectionPath(
   type SidePortId = '__side-left' | '__side-right' | '__side-top' | '__side-bottom'
   let targetSidePortId: SidePortId
   if (isSourceBottom) {
-    // Architecture rule: when starting from bottom port, always connect to target's top port
-    targetSidePortId = '__side-top'
+    // Architecture rule: when starting from bottom port, choose target side based on vertical proximity
+    // If target top is within 50px below the source Y, use target bottom; else use target top
+  const SNAP_THRESHOLD = 50
+    const tBox = buildNodeBox(targetNode)
+    const sourceY = sourcePos.y
+    const topY = tBox.y
+  const useBottom = (topY - sourceY) < SNAP_THRESHOLD
+    targetSidePortId = useBottom ? '__side-bottom' : '__side-top'
   } else if (isVirtualSidePortId(connection.targetPortId)) {
     const tp = connection.targetPortId
     // Narrow to side-port union (fallback to auto if unexpected id)

@@ -5,6 +5,27 @@
  */
 
 import type { WorkflowNode, PortPosition, NodeVariant } from '../types'
+import { getShapeAwareDimensions } from './node-utils'
+
+// Shared helpers for virtual side ports (architecture omni-ports)
+const isVirtualSidePortId = (id: string) => id.startsWith('__side-')
+const getVirtualSidePortPosition = (node: WorkflowNode, portId: string): PortPosition => {
+  const dims = getShapeAwareDimensions(node)
+  const halfW = (dims.width || 200) / 2
+  const halfH = (dims.height || 80) / 2
+  switch (portId) {
+    case '__side-top':
+      return { x: node.x, y: node.y - halfH }
+    case '__side-right':
+      return { x: node.x + halfW, y: node.y }
+    case '__side-bottom':
+      return { x: node.x, y: node.y + halfH }
+    case '__side-left':
+      return { x: node.x - halfW, y: node.y }
+    default:
+      return { x: node.x, y: node.y }
+  }
+}
 
 // Import modular utilities
 import {
@@ -56,16 +77,19 @@ export function generateVariantAwareConnectionPath(
   variant: NodeVariant = 'standard',
   config?: PathConfig
 ): string {
-  // Determine port types
-  const isSourceBottomPort = isBottomPort(sourceNode, sourcePortId)
-  const isTargetBottomPort = isBottomPort(targetNode, targetPortId)
-  
+  // Determine port types including virtual side-ports
+  const isSourceBottomPort = isBottomPort(sourceNode, sourcePortId) || sourcePortId === '__side-bottom'
+  const isTargetBottomPort = isBottomPort(targetNode, targetPortId) || targetPortId === '__side-bottom'
   const sourcePortType = isSourceBottomPort ? 'bottom' : 'output'
   const targetPortType = isTargetBottomPort ? 'bottom' : 'input'
   
-  // Calculate port positions
-  const sourcePos = calculatePortPositionCore(sourceNode, sourcePortId, sourcePortType, variant)
-  const targetPos = calculatePortPositionCore(targetNode, targetPortId, targetPortType, variant)
+  // Calculate port positions (use side-port anchors when applicable)
+  const sourcePos = isVirtualSidePortId(sourcePortId)
+    ? getVirtualSidePortPosition(sourceNode, sourcePortId)
+    : calculatePortPositionCore(sourceNode, sourcePortId, sourcePortType, variant)
+  const targetPos = isVirtualSidePortId(targetPortId)
+    ? getVirtualSidePortPosition(targetNode, targetPortId)
+    : calculatePortPositionCore(targetNode, targetPortId, targetPortType, variant)
 
   // Validate positions
   if (!validatePathInputs(sourcePos, targetPos)) {
@@ -91,11 +115,13 @@ export function calculateConnectionPreviewPath(
   config?: PathConfig,
   modeId: string = 'workflow'
 ): string {
-  // Determine if this is a bottom port
-  const isSourceBottomPort = isBottomPort(sourceNode, sourcePortId)
+  // Determine if this is a bottom port (include side-bottom)
+  const isSourceBottomPort = isBottomPort(sourceNode, sourcePortId) || sourcePortId === '__side-bottom'
   const portType = isSourceBottomPort ? 'bottom' : 'output'
   
-  const sourcePos = calculatePortPositionCore(sourceNode, sourcePortId, portType, variant)
+  const sourcePos = isVirtualSidePortId(sourcePortId)
+    ? getVirtualSidePortPosition(sourceNode, sourcePortId)
+    : calculatePortPositionCore(sourceNode, sourcePortId, portType, variant)
   
   // Validate positions
   if (!validatePathInputs(sourcePos, previewPosition)) {
@@ -108,7 +134,7 @@ export function calculateConnectionPreviewPath(
   
   // Architecture mode should preview orthogonal (right‑angle) path with radius to match final rendering
   if (modeId === 'architecture') {
-  return generateOrthogonalRoundedPath(sourcePos, previewPosition, 18, { strategy: 'auto', allowDoubleBend: false })
+    return generateOrthogonalRoundedPath(sourcePos, previewPosition, 16)
   }
 
   // Generate curved preview path (default)
@@ -133,6 +159,7 @@ export function generateModeAwarePreviewPath(
  * Generate connection path with offset for multiple connections between same nodes
  * Architecture mode uses bundled representation while workflow mode shows individual lines
  */
+// eslint-disable-next-line max-params
 export function generateMultipleConnectionPath(
   sourceNode: WorkflowNode,
   sourcePortId: string,
@@ -198,15 +225,19 @@ export function generateModeAwareConnectionPath(
   if (!sourceNode || !targetNode) return ''
 
   if (modeId === 'architecture') {
-    // Use port positioning to get start/end anchor points then orthogonal path
-    const isSourceBottom = isBottomPort(sourceNode, connection.sourcePortId)
-    const isTargetBottom = isBottomPort(targetNode, connection.targetPortId)
+  // Use port positioning (including virtual side-port anchors) for start/end, then orthogonal path
+    const isSourceBottom = isBottomPort(sourceNode, connection.sourcePortId) || connection.sourcePortId === '__side-bottom'
+    const isTargetBottom = isBottomPort(targetNode, connection.targetPortId) || connection.targetPortId === '__side-bottom'
     const sourceType = isSourceBottom ? 'bottom' : 'output'
     const targetType = isTargetBottom ? 'bottom' : 'input'
-    const sourcePos = calculatePortPositionCore(sourceNode, connection.sourcePortId, sourceType, variant)
-    const targetPos = calculatePortPositionCore(targetNode, connection.targetPortId, targetType, variant)
+    const sourcePos = isVirtualSidePortId(connection.sourcePortId)
+      ? getVirtualSidePortPosition(sourceNode, connection.sourcePortId)
+      : calculatePortPositionCore(sourceNode, connection.sourcePortId, sourceType, variant)
+    const targetPos = isVirtualSidePortId(connection.targetPortId)
+      ? getVirtualSidePortPosition(targetNode, connection.targetPortId)
+      : calculatePortPositionCore(targetNode, connection.targetPortId, targetType, variant)
     if (!validatePathInputs(sourcePos, targetPos)) return ''
-  return generateOrthogonalRoundedPath(sourcePos, targetPos, 18, { strategy: 'auto', allowDoubleBend: false })
+    return generateOrthogonalRoundedPath(sourcePos, targetPos, 16)
   }
 
   // Fallback to existing bezier

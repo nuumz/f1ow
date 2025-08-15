@@ -222,7 +222,11 @@ const loadConnectionsFromStorage = (workflowName: string): Connection[] => {
   return []
 }
 
-const validateConnections = (connections: Connection[], nodes: WorkflowNode[]): Connection[] => {
+const validateConnections = (
+  connections: Connection[],
+  nodes: WorkflowNode[],
+  designerMode?: 'workflow' | 'architecture'
+): Connection[] => {
   if (connections.length === 0 || nodes.length === 0) return []
 
   // Precompute node & port indexes for O(1) validation
@@ -238,6 +242,9 @@ const validateConnections = (connections: Connection[], nodes: WorkflowNode[]): 
     })
   }
 
+  const allowVirtualSidePorts = designerMode === 'architecture'
+  const isVirtualSidePort = (portId: string) => portId.startsWith('__side-')
+
   return connections.filter(conn => {
     // Node existence fast check
     if (!nodeIds.has(conn.sourceNodeId) || !nodeIds.has(conn.targetNodeId)) {
@@ -249,11 +256,24 @@ const validateConnections = (connections: Connection[], nodes: WorkflowNode[]): 
     const targetPorts = nodePortMap.get(conn.targetNodeId)
     if (!sourcePorts || !targetPorts) return false
 
-    const sourcePortExists = sourcePorts.outputs.has(conn.sourcePortId) || sourcePorts.bottoms.has(conn.sourcePortId)
-    const targetPortExists = targetPorts.inputs.has(conn.targetPortId) || targetPorts.bottoms.has(conn.targetPortId)
+    const sourcePortExists =
+      sourcePorts.outputs.has(conn.sourcePortId) ||
+      sourcePorts.bottoms.has(conn.sourcePortId) ||
+      (allowVirtualSidePorts && isVirtualSidePort(conn.sourcePortId))
+
+    const targetPortExists =
+      targetPorts.inputs.has(conn.targetPortId) ||
+      targetPorts.bottoms.has(conn.targetPortId) ||
+      (allowVirtualSidePorts && isVirtualSidePort(conn.targetPortId))
 
     if (!sourcePortExists || !targetPortExists) {
-      console.warn('Invalid connection - missing port:', conn)
+      console.warn('Invalid connection - missing port:', {
+        connection: conn,
+        sourcePortExists,
+        targetPortExists,
+        allowVirtualSidePorts,
+        designerMode
+      })
       return false
     }
     return true
@@ -390,7 +410,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
     }
     
     case 'VALIDATE_CONNECTIONS': {
-      const validConnections = validateConnections(state.connections, state.nodes)
+      const validConnections = validateConnections(state.connections, state.nodes, state.designerMode)
       const invalidCount = state.connections.length - validConnections.length
       
       if (invalidCount > 0) {
@@ -419,7 +439,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
     }
     
     case 'LOAD_CONNECTIONS_FROM_STORAGE': {
-      const validConnections = validateConnections(action.payload, state.nodes)
+      const validConnections = validateConnections(action.payload, state.nodes, state.designerMode)
       console.log('✅ Loaded connections from storage:', validConnections.length, 'connections')
       return { ...state, connections: validConnections, isDirty: false }
     }
@@ -878,11 +898,19 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
       }
     })
     
+    // In architecture mode, allow duplicates for virtual side ports because they are omni-ports
+    const isVirtualSidePort = (id: string) => id.startsWith('__side-')
+    if (state.designerMode === 'architecture' && (
+      isVirtualSidePort(connectionStart.portId) || isVirtualSidePort(targetPortId)
+    )) {
+      return true
+    }
+
     // Allow connection if exact same connection doesn't exist
     // This allows multiple connections from one output to multiple inputs
     // and multiple connections to one input from multiple outputs
     return !existingConnection
-  }, [state.connectionState, state.connections])
+  }, [state.connectionState, state.connections, state.designerMode])
   
   const canDropOnNode = useCallback((targetNodeId: string) => {
     const { connectionStart } = state.connectionState

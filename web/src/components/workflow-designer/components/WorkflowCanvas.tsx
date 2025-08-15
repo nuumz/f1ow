@@ -35,6 +35,31 @@ import {
 // Production connection imports removed - simplified to use standard connection paths
 // Connection config imports removed - simplified architecture
 
+// ========== CONSTANTS ==========
+// Performance and caching constants
+const PERFORMANCE_CONSTANTS = {
+  MAX_CACHE_SIZE: 1000,
+  CACHE_CLEANUP_THRESHOLD: 1200,
+  GRID_CACHE_DURATION: 30000, // 30 seconds
+  CACHE_AGE_LIMIT: 1000, // 1 second
+  CLEANUP_INTERVAL: 30000, // 30 seconds
+  RAF_THROTTLE_INTERVAL: 16, // ~60fps
+} as const;
+
+// Grid rendering constants
+const GRID_CONSTANTS = {
+  BASE_GRID_SIZE: 20,
+  GRID_CACHE_TOLERANCE: 100, // pixels
+  VIEWPORT_CACHE_TOLERANCE: 400, // pixels
+  VIEWPORT_HEIGHT_TOLERANCE: 500, // pixels
+  CACHE_HIT_LOG_INTERVAL: 100,
+  PERFORMANCE_LOG_INTERVAL: 100,
+  PERFORMANCE_WARNING_INTERVAL: 50,
+} as const;
+
+// Arrow marker constants (commented out as not currently used - for future dynamic sizing)
+// Arrow marker constants removed (unused)
+
 // Type aliases for better maintainability
 type CallbackPriority = "high" | "normal" | "low";
 type NodeZIndexState = "normal" | "selected" | "dragging";
@@ -270,27 +295,53 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     [svgRef]
   );
 
-  // Cleanup timeouts and RAF callbacks on unmount
+  // Comprehensive cleanup for all timeouts, RAF callbacks, and refs on unmount
   useEffect(() => {
-    const updateTimeout = updateTimeoutRef.current;
-    return () => {
+    const cleanup = () => {
+      // Clear all timeout refs
       if (hoverTimeoutRef.current) {
         clearTimeout(hoverTimeoutRef.current);
+        hoverTimeoutRef.current = null;
       }
-      if (updateTimeout) {
-        clearTimeout(updateTimeout);
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+        updateTimeoutRef.current = null;
       }
+
+      // Clear all RAF refs
       if (rafIdRef.current) {
         cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
       }
       if (batchedConnectionUpdateRef.current) {
         cancelAnimationFrame(batchedConnectionUpdateRef.current);
+        batchedConnectionUpdateRef.current = null;
       }
       if (batchedVisualUpdateRef.current) {
         cancelAnimationFrame(batchedVisualUpdateRef.current);
+        batchedVisualUpdateRef.current = null;
       }
-      // Production connection manager cleanup removed
+      if (highlightRafRef.current) {
+        cancelAnimationFrame(highlightRafRef.current);
+        highlightRafRef.current = null;
+      }
+
+      // Clear timeout refs that might be referenced later in the component
+      if (dragStateCleanupRef.current) {
+        clearTimeout(dragStateCleanupRef.current);
+        dragStateCleanupRef.current = null;
+      }
+
+      // Clear grid performance monitor
+      if (gridPerformanceRef.current) {
+        gridPerformanceRef.current = null;
+      }
+
+      // Reset boolean flags
+      rafScheduledRef.current = false;
     };
+
+    return cleanup;
   }, []);
 
   // Enhanced connection system initialization removed - simplified to standard paths
@@ -429,10 +480,10 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     }
   }, []);
 
-  // Cache size limits to prevent memory issues
-  const MAX_CACHE_SIZE = 1000;
-  const CACHE_CLEANUP_THRESHOLD = 1200;
-  const GRID_CACHE_DURATION = 30000; // 30 seconds cache for grid patterns (maximized for >80% hit rate)
+  // Cache size limits to prevent memory issues - using constants
+  const MAX_CACHE_SIZE = PERFORMANCE_CONSTANTS.MAX_CACHE_SIZE;
+  const CACHE_CLEANUP_THRESHOLD = PERFORMANCE_CONSTANTS.CACHE_CLEANUP_THRESHOLD;
+  const GRID_CACHE_DURATION = PERFORMANCE_CONSTANTS.GRID_CACHE_DURATION;
 
   // High-performance pattern-based grid creation with enhanced caching and performance monitoring
   const createGrid = useCallback(
@@ -451,7 +502,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       }
 
       // Use GridOptimizer for intelligent grid calculations
-      const baseGridSize = 20;
+      const baseGridSize = GRID_CONSTANTS.BASE_GRID_SIZE;
 
       // Use GridOptimizer to determine if grid should be shown
       if (!GridOptimizer.shouldShowGrid(transform.k)) {
@@ -461,15 +512,17 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       }
 
       // PERFORMANCE OPTIMIZATION: Maximized cache key tolerance for >80% hit rate
+      const tolerance = GRID_CONSTANTS.GRID_CACHE_TOLERANCE;
+      const viewportTolerance = GRID_CONSTANTS.VIEWPORT_CACHE_TOLERANCE;
       const roundedTransform = {
-        x: Math.round(transform.x / 100) * 100, // Further increased tolerance to 100px for maximum cache hits
-        y: Math.round(transform.y / 100) * 100, // Further increased tolerance to 100px for maximum cache hits
+        x: Math.round(transform.x / tolerance) * tolerance,
+        y: Math.round(transform.y / tolerance) * tolerance,
         k: Math.round(transform.k * 5) / 5, // Reduced precision to 0.2 steps for maximum cache efficiency
       };
 
       const transformString = `${roundedTransform.x},${roundedTransform.y},${roundedTransform.k}`;
-      const viewportString = `${Math.round(viewportWidth / 400) * 400}x${
-        Math.round(viewportHeight / 400) * 400
+      const viewportString = `${Math.round(viewportWidth / viewportTolerance) * viewportTolerance}x${
+        Math.round(viewportHeight / viewportTolerance) * viewportTolerance
       }`;
       const cacheKey = `${transformString}:${viewportString}`;
 
@@ -482,15 +535,15 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         cached &&
         cached.transform === cacheKey &&
         now - cached.lastRenderTime < GRID_CACHE_DURATION &&
-        Math.abs(cached.viewport.width - viewportWidth) < 500 && // Maximum tolerance to boost cache hits
-        Math.abs(cached.viewport.height - viewportHeight) < 500; // Maximum tolerance to boost cache hits
+        Math.abs(cached.viewport.width - viewportWidth) < GRID_CONSTANTS.VIEWPORT_HEIGHT_TOLERANCE &&
+        Math.abs(cached.viewport.height - viewportHeight) < GRID_CONSTANTS.VIEWPORT_HEIGHT_TOLERANCE;
 
       if (isCacheValid) {
         gridPerformanceRef.current?.recordCacheHit();
         // Minimal logging - only log every 100th cache hit to reduce noise
         if (process.env.NODE_ENV === "development") {
           const metrics = gridPerformanceRef.current?.getMetrics();
-          if (metrics && metrics.cacheHits % 100 === 0) {
+          if (metrics && metrics.cacheHits % GRID_CONSTANTS.CACHE_HIT_LOG_INTERVAL === 0) {
             console.log("🎯 Grid Cache Hit (every 100th)", {
               cacheKey,
               totalHits: metrics.cacheHits,
@@ -506,7 +559,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         // Only log significant cache misses to reduce noise even further
         if (process.env.NODE_ENV === "development") {
           const metrics = gridPerformanceRef.current?.getMetrics();
-          if (metrics && metrics.cacheMisses % 100 === 0) {
+          if (metrics && metrics.cacheMisses % GRID_CONSTANTS.CACHE_HIT_LOG_INTERVAL === 0) {
             console.log("🔄 Grid Cache Miss (every 100th)", {
               cacheKey,
               cachedKey: cached.transform,
@@ -636,7 +689,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const metrics = gridPerformanceRef.current.getMetrics();
 
         // Only log detailed performance every 100 renders to reduce noise
-        if (metrics.renderCount % 100 === 0) {
+        if (metrics.renderCount % GRID_CONSTANTS.PERFORMANCE_LOG_INTERVAL === 0) {
           console.log("🔍 Grid Performance Summary (every 100 renders)", {
             renderTime: `${renderTime.toFixed(2)}ms`,
             avgRenderTime: `${metrics.avgRenderTime.toFixed(2)}ms`,
@@ -649,7 +702,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const report = gridPerformanceRef.current.getPerformanceReport();
         if (
           (report.status === "warning" || report.status === "poor") &&
-          metrics.renderCount % 50 === 0
+          metrics.renderCount % GRID_CONSTANTS.PERFORMANCE_WARNING_INTERVAL === 0
         ) {
           console.warn(
             `🚨 Grid Performance ${report.status.toUpperCase()} (every 50th):`,
@@ -658,7 +711,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         }
       }
     },
-    [showGrid]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [showGrid] // GRID_CACHE_DURATION is const and doesn't need to be included
   );
 
   // Enhanced cache and memory management utilities
@@ -697,7 +751,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     ) {
       gridCacheRef.current = null;
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps  
+  }, []); // Constants don't need to be included in dependencies
 
   // Schedule regular cache cleanup every 30 seconds
   useEffect(() => {
@@ -1286,6 +1341,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       }
       return path;
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       nodeMap,
       nodeVariant,
@@ -1293,7 +1349,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       workflowContextState.designerMode,
       nodes,
       trimPathForArrow,
-    ]
+    ] // CACHE_CLEANUP_THRESHOLD is const and doesn't need to be included
   );
 
   // Memoized configurable dimensions calculation (shape-aware)
@@ -1329,7 +1385,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   // Helper function to calculate optimal bottom port positioning
   // Uses either 80% of node width OR node width minus 40px (whichever is smaller)
   const calculateBottomPortLayout = useCallback(
-    (nodeData: any, portIndex: number) => {
+    (nodeData: WorkflowNode, portIndex: number) => {
       const dimensions = getConfigurableDimensions(nodeData);
       const nodeWidth = dimensions.width || 200;
       const nodeHeight = dimensions.height || 80;
@@ -1419,7 +1475,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
   // Unified drop state management
   const setDropFeedback = useCallback(
-    (nodeElement: any, show: boolean) => {
+    (nodeElement: d3.Selection<SVGGElement, unknown, null, undefined>, show: boolean) => {
       if (!nodeElement) return;
 
       // Set node-level feedback
@@ -1431,9 +1487,10 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       if (show && isConnecting && connectionStart) {
         nodeElement
           .selectAll(".input-port-group")
-          .classed("can-dropped", function (this: any, portData: any) {
+          .classed("can-dropped", function (d: unknown) {
+            const portData = d as NodePort;
             const typedPortData = portData as NodePort & { nodeId: string };
-            const nodeId = nodeElement.datum()?.id;
+            const nodeId = (nodeElement.datum() as WorkflowNode)?.id;
 
             if (!nodeId || !connectionStart) return false;
 
@@ -1716,14 +1773,15 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   useEffect(() => {
     if (!svgRef.current) return;
 
-    // Copy refs at the start of the effect for cleanup
-    const currentSvgRef = svgRef.current;
-    const connectionPathCache = connectionPathCacheRef.current;
-    const allNodeElements = allNodeElementsRef.current;
+    try {
+      // Copy refs at the start of the effect for cleanup
+      const currentSvgRef = svgRef.current;
+      const connectionPathCache = connectionPathCacheRef.current;
+      const allNodeElements = allNodeElementsRef.current;
 
-    const svg = d3.select(currentSvgRef);
+      const svg = d3.select(currentSvgRef);
     // Initialize or reuse defs
-    let defs = svg.select<any>("defs");
+    let defs = svg.select<SVGDefsElement>("defs");
     if (defs.empty()) {
       defs = svg.append("defs");
     } else {
@@ -1732,7 +1790,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     }
 
     // Background rect (ensure single)
-    let bg = svg.select<any>("rect.svg-canvas-background");
+    let bg = svg.select<SVGRectElement>("rect.svg-canvas-background");
     if (bg.empty()) {
       bg = svg.append("rect").attr("class", "svg-canvas-background");
     }
@@ -1799,22 +1857,22 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     createArrowMarker("arrowhead-architecture-hover", "#6d28d9", 20);
 
     // Layer hierarchy (ensure single instances)
-    let g = svg.select<any>("g.canvas-root");
+    let g = svg.select<SVGGElement>("g.canvas-root");
     if (g.empty()) {
       g = svg.append("g").attr("class", "canvas-root");
     }
-    let gridLayer = g.select<any>("g.grid-layer");
+    let gridLayer = g.select<SVGGElement>("g.grid-layer");
     if (gridLayer.empty()) {
       gridLayer = g
         .append("g")
         .attr("class", "grid-layer")
         .style("pointer-events", "none");
     }
-    let mainNodeLayer = g.select<any>("g.node-layer");
+    let mainNodeLayer = g.select<SVGGElement>("g.node-layer");
     if (mainNodeLayer.empty()) {
       mainNodeLayer = g.append("g").attr("class", "node-layer");
     }
-    let connectionLayer = g.select<any>("g.connection-layer");
+    let connectionLayer = g.select<SVGGElement>("g.connection-layer");
     if (connectionLayer.empty()) {
       connectionLayer = g.append("g").attr("class", "connection-layer");
     }
@@ -2321,16 +2379,16 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           hoverTargetBox
         );
 
-        // Determine preview marker based on source port type and direction
-        const isSourceBottomPort = sourceNode.bottomPorts?.some(
-          (p) => p.id === connectionStart.portId
-        );
-        const isLeftToRight = connectionPreview.x > sourceNode.x;
-        let previewMarker = "url(#arrowhead)";
+        // Determine preview marker consistent with final connection markers
+        const isWorkflowMode = workflowContextState.designerMode === 'workflow'
+        const isSourceBottomPort = sourceNode.bottomPorts?.some((p) => p.id === connectionStart.portId)
 
-        if (isSourceBottomPort && !isLeftToRight) {
-          previewMarker = "url(#arrowhead-left)";
-        }
+        // If hovering a node, use its center x to decide direction; otherwise use cursor x
+        const effectiveTargetX = hoveredNode ? hoveredNode.x : connectionPreview.x
+        const isLeftToRight = effectiveTargetX > sourceNode.x
+        const previewMarker = isSourceBottomPort && !isLeftToRight
+          ? getLeftArrowMarker('default')
+          : getArrowMarkerForMode(isWorkflowMode, 'default')
 
         g.append("path")
           .attr("class", "connection-preview")
@@ -2338,6 +2396,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           .attr("stroke", "#2196F3")
           .attr("stroke-width", 2)
           .attr("stroke-dasharray", "5,5")
+          .attr("stroke-linecap", "round")
           .attr("fill", "none")
           .attr("marker-end", previewMarker)
           .attr("pointer-events", "none")
@@ -2518,6 +2577,21 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         }
       });
 
+    // Architecture-mode dashed outline (hover/focus ring style)
+    nodeEnter
+      .append("rect")
+      .attr("class", "node-arch-outline")
+      .style("pointer-events", "none")
+      .style("fill", "none")
+      .style("stroke", "#3b82f6")
+      .style("stroke-width", 2)
+      .style("stroke-dasharray", "6,6")
+      .style("opacity", 0.8)
+      .style("display", () =>
+        workflowContextState.designerMode === "architecture" ? null : "none"
+      )
+
+
     // Update node background attributes (shape-aware)
     nodeGroups
       .select(".node-background")
@@ -2577,6 +2651,22 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
         return 2;
       });
+
+    // Update architecture outline box to slightly exceed node bounds
+    nodeGroups
+      .select('.node-arch-outline')
+      .each(function (d: any) {
+        const outline = d3.select(this)
+        const dims = getConfigurableDimensions(d)
+        const pad = 8
+        outline
+          .attr('x', -dims.width / 2 - pad)
+          .attr('y', -dims.height / 2 - pad)
+          .attr('width', dims.width + pad * 2)
+          .attr('height', dims.height + pad * 2)
+          .attr('rx', 16)
+          .style('display', () => workflowContextState.designerMode === 'architecture' ? null : 'none')
+      })
 
     // Apply visual styling to all nodes using centralized system with improved stability
     nodeGroups.each(function (d: any) {
@@ -2708,19 +2798,33 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr("class", "node-label")
       .style("pointer-events", "none");
 
+    // Architecture-mode sublabel (smaller text under main label)
+    nodeEnter
+      .append('text')
+      .attr('class', 'node-sublabel')
+      .style('pointer-events', 'none')
+      .style('opacity', 0.8)
+
     // Legacy badge removed - it was visual clutter without adding meaningful value
 
     nodeGroups
       .select(".node-label")
       .attr("x", (d: any) => {
         const dimensions = getConfigurableDimensions(d);
+        if (workflowContextState.designerMode === 'architecture') {
+          // Place to the right of the node box
+          return dimensions.width / 2 + 18;
+        }
         return dimensions.labelOffset?.x || 0;
       })
       .attr("y", (d: any) => {
         const dimensions = getConfigurableDimensions(d);
+        if (workflowContextState.designerMode === 'architecture') {
+          return -6;
+        }
         return dimensions.labelOffset?.y || 15;
       })
-      .attr("text-anchor", "middle")
+  .attr("text-anchor", () => workflowContextState.designerMode === 'architecture' ? 'start' : 'middle')
       .attr("dominant-baseline", "middle")
       .attr(
         "font-size",
@@ -2733,6 +2837,21 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const nodeTypeInfo = NodeTypes[d.type as keyof typeof NodeTypes];
         return nodeTypeInfo?.label || d.label || d.type;
       });
+
+    // Update sublabel in architecture mode (e.g., show node id or version)
+    nodeGroups
+      .select('.node-sublabel')
+      .attr('x', (d: any) => {
+        const dimensions = getConfigurableDimensions(d)
+        return workflowContextState.designerMode === 'architecture' ? (dimensions.width / 2 + 18) : 0
+      })
+  .attr('y', () => workflowContextState.designerMode === 'architecture' ? 10 : 99999) // push offscreen when hidden
+  .attr('text-anchor', () => workflowContextState.designerMode === 'architecture' ? 'start' : 'middle')
+      .attr('dominant-baseline', 'middle')
+      .attr('font-size', (d: any) => (getConfigurableDimensions(d).fontSize || 12) - 3)
+      .attr('fill', '#6b7280')
+  .style('display', () => workflowContextState.designerMode === 'architecture' ? null : 'none')
+      .text((d: any) => d.metadata?.version || d.id)
 
     // Legacy badge update removed - badge has been completely removed
 
@@ -4681,6 +4800,19 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       gridCacheRef.current = null;
       allNodeElements?.clear();
     };
+    } catch (error) {
+      console.error("Error in main D3 rendering effect:", error);
+      // Reset caches on error to prevent further issues
+      if (connectionPathCacheRef.current) {
+        connectionPathCacheRef.current.clear();
+      }
+      if (gridCacheRef.current) {
+        gridCacheRef.current = null;
+      }
+      if (allNodeElementsRef.current) {
+        allNodeElementsRef.current.clear();
+      }
+    }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes, connections, nodeVariant, selectedNodes, selectedConnection]); // Minimal dependencies to prevent infinite re-renders - other deps cause infinite loops
@@ -4692,8 +4824,9 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       return;
     }
 
-    const svg = d3.select(svgRef.current);
-    const gridLayer = svg.select(".grid-layer");
+    try {
+      const svg = d3.select(svgRef.current);
+      const gridLayer = svg.select(".grid-layer");
 
     if (gridLayer.empty()) {
       return;
@@ -4708,6 +4841,13 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     if (gridLayerElement) {
       const typedGridLayer = d3.select(gridLayerElement as SVGGElement);
       createGrid(typedGridLayer, canvasTransform, rect.width, rect.height);
+    }
+    } catch (error) {
+      console.error("Error in grid rendering effect:", error);
+      // Reset grid cache on error
+      if (gridCacheRef.current) {
+        gridCacheRef.current = null;
+      }
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4854,16 +4994,14 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           hoverTargetBox
         );
 
-        // Determine preview marker based on source port type and direction
-        const isSourceBottomPort = sourceNode.bottomPorts?.some(
-          (p) => p.id === connectionStart.portId
-        );
-        const isLeftToRight = connectionPreview.x > sourceNode.x;
-        let previewMarker = "url(#arrowhead)";
-
-        if (isSourceBottomPort && !isLeftToRight) {
-          previewMarker = "url(#arrowhead-left)";
-        }
+        // Determine preview marker consistent with final connection markers
+        const isWorkflowMode = workflowContextState.designerMode === 'workflow'
+        const isSourceBottomPort = sourceNode.bottomPorts?.some((p) => p.id === connectionStart.portId)
+        const effectiveTargetX = hoveredNode ? hoveredNode.x : connectionPreview.x
+        const isLeftToRight = effectiveTargetX > sourceNode.x
+        const previewMarker = isSourceBottomPort && !isLeftToRight
+          ? getLeftArrowMarker('default')
+          : getArrowMarkerForMode(isWorkflowMode, 'default')
 
         g.append("path")
           .attr("class", "connection-preview")
@@ -4871,6 +5009,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           .attr("stroke", "#2196F3")
           .attr("stroke-width", 2)
           .attr("stroke-dasharray", "5,5")
+          .attr("stroke-linecap", "round")
           .attr("fill", "none")
           .attr("marker-end", previewMarker)
           .attr("pointer-events", "none")
@@ -5034,23 +5173,24 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       }
     });
 
-    // NOTE: updatePortHighlighting intentionally omitted to keep dependency array minimal; it's stable (empty deps)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Fixed: Added all required dependencies to prevent stale closures
+    // Uses memoized functions where possible to prevent infinite re-renders
   }, [
     isConnecting,
-    connectionStart?.nodeId,
-    connectionStart?.portId,
-    connectionPreview?.x,
-    connectionPreview?.y,
+    connectionPreview,
+    connectionStart,
     nodeVariant,
     isInitialized,
     workflowContextState.designerMode,
-    canDropOnPort,
-    connectionPreview,
-    connectionStart,
-    getConfigurableDimensions,
     nodeMap,
+    nodes, // Required for hover detection and port highlighting
     svgRef,
+    canDropOnPort, // Required for port highlighting logic
+    updatePortHighlighting, // Required but should be stable (empty deps)
+    getConfigurableDimensions,
+    getArrowMarkerForMode,
+    getLeftArrowMarker,
+    // Note: getConfigurableDimensions is a stable function but used internally
   ]);
 
   // REMOVED: Architecture mode port visibility JavaScript management

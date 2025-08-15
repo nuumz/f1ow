@@ -80,6 +80,57 @@ const ModeAwareWorkflowCanvas = React.memo<ModeAwareWorkflowCanvasProps>((props)
   // Memoized mode-aware connection data
   const modeAwareConnections = useMemo(() => {
     const modeId = currentMode?.id || 'workflow'
+
+    // Architecture mode: group multiple logical connections between the same node pair into a single visual path
+    if (modeId === 'architecture') {
+      const groups = new Map<string, {
+        representative: typeof connections[number],
+        members: typeof connections,
+      }>()
+
+      for (const conn of connections) {
+        const key = `${conn.sourceNodeId}->${conn.targetNodeId}`
+        if (!groups.has(key)) {
+          groups.set(key, { representative: conn, members: [] as typeof connections })
+        }
+        const group = groups.get(key)!
+        group.members.push(conn)
+      }
+
+      const grouped = Array.from(groups.entries()).map(([key, group]) => {
+        const rep = group.representative
+        const path = generateModeAwareConnectionPath(
+          {
+            sourceNodeId: rep.sourceNodeId,
+            sourcePortId: rep.sourcePortId,
+            targetNodeId: rep.targetNodeId,
+            targetPortId: rep.targetPortId
+          },
+          nodes,
+          undefined,
+          modeId
+        ) || ''
+
+        // Consider group selected if any member is selected
+        const isGroupSelected = !!(selectedConnection && group.members.some(m => m.id === selectedConnection.id))
+
+        return {
+          id: key, // stable id per source->target pair
+          path,
+          isSelected: isGroupSelected,
+          isHovered: false,
+          // extra metadata that strategies could use (non-breaking)
+          metadata: {
+            count: group.members.length,
+            memberIds: group.members.map(m => m.id)
+          }
+        }
+      })
+
+      return grouped
+    }
+
+    // Default (workflow/debug): one path per connection
     return connections.map(conn => {
       const path = generateModeAwareConnectionPath(
         {

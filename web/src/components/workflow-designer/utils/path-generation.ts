@@ -254,6 +254,7 @@ export interface OrthogonalPathOptions {
   strategy?: 'auto' | 'horizontal-first' | 'vertical-first'
   allowDoubleBend?: boolean // fallback to old two-corner style when true
   minSegment?: number // minimum straight segment length before corner
+  forceSourceSide?: 'bottom' | 'auto' // เพิ่ม option สำหรับบังคับด้าน
 }
 
 /**
@@ -272,76 +273,67 @@ export function generateOrthogonalRoundedPath(
   radius = 14,
   options?: OrthogonalPathOptions
 ): string {
-  const fixedLead = FIXED_LEAD_LENGTH
+  // กำหนดจุดเริ่มต้นและปลาย
+  let start = source;
+  let end = target;
+  
+  // เช็คว่า target อยู่ต่ำกว่า source (Y มากกว่า) ให้เริ่มจากด้านล่าง
+  if (options?.forceSourceSide === 'bottom' || (!options?.forceSourceSide && target.y > source.y + 8)) {
+    start = { x: source.x, y: source.y + 30 };
+  }
+  
+  if (options?.sourceBox) start = projectPointToBoxSide(start, options.sourceBox, end, radius);
+  if (options?.targetBox) end = projectPointToBoxSide(end, options.targetBox, start, radius);
+
+  let dx = end.x - start.x;
+  let dy = end.y - start.y;
+  if (dx === 0 || dy === 0) {
+    return `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
+  }
+  const fixedLead = FIXED_LEAD_LENGTH;
   const opts: Required<Pick<OrthogonalPathOptions, 'strategy' | 'allowDoubleBend' | 'minSegment'>> = {
     strategy: options?.strategy || 'auto',
     allowDoubleBend: options?.allowDoubleBend ?? false,
     minSegment: options?.minSegment ?? 12
-  }
-
-  let start = options?.sourceBox ? projectPointToBoxSide(source, options.sourceBox, target, radius) : source
-  let end = options?.targetBox ? projectPointToBoxSide(target, options.targetBox, start, radius) : target
-
-  let dx = end.x - start.x
-  let dy = end.y - start.y
-
-  // Degenerate line
-  if (dx === 0 || dy === 0) {
-    return `M ${start.x} ${start.y} L ${end.x} ${end.y}`
-  }
-
-  let horizontalFirst: boolean
+  };
+  let horizontalFirst: boolean;
   switch (opts.strategy) {
     case 'horizontal-first':
-      horizontalFirst = true; break
+      horizontalFirst = true; break;
     case 'vertical-first':
-      horizontalFirst = false; break
+      horizontalFirst = false; break;
     default:
-      horizontalFirst = Math.abs(dx) >= Math.abs(dy)
+      horizontalFirst = Math.abs(dx) >= Math.abs(dy);
   }
-
-  // Single-corner path (preferred) or double-bend fallback
   if (!opts.allowDoubleBend) {
-    const axisSpan = horizontalFirst ? Math.abs(end.x - start.x) : Math.abs(end.y - start.y)
-    const straightSegmentLength = clampLeadLength(axisSpan, radius, fixedLead)
-    
-  // Calculate intermediate points with fixed straight segments
-    let startExtended: PortPosition
-    let endExtended: PortPosition
-    
+    const axisSpan = horizontalFirst ? Math.abs(end.x - start.x) : Math.abs(end.y - start.y);
+    const straightSegmentLength = clampLeadLength(axisSpan, radius, fixedLead);
+    let startExtended: PortPosition;
+    let endExtended: PortPosition;
     if (horizontalFirst) {
-      // For horizontal-first: extend horizontally from start, then extend horizontally to end
-      startExtended = { x: start.x + Math.sign(dx) * straightSegmentLength, y: start.y }
-      endExtended = { x: end.x - Math.sign(dx) * straightSegmentLength, y: end.y }
+      startExtended = { x: start.x + Math.sign(dx) * straightSegmentLength, y: start.y };
+      endExtended = { x: end.x - Math.sign(dx) * straightSegmentLength, y: end.y };
     } else {
-      // For vertical-first: extend vertically from start, then extend vertically to end
-      startExtended = { x: start.x, y: start.y + Math.sign(dy) * straightSegmentLength }
-      endExtended = { x: end.x, y: end.y - Math.sign(dy) * straightSegmentLength }
+      startExtended = { x: start.x, y: start.y + Math.sign(dy) * straightSegmentLength };
+      endExtended = { x: end.x, y: end.y - Math.sign(dy) * straightSegmentLength };
     }
-    
-    // Corner point between the extended segments
-    const corner = horizontalFirst ? { x: endExtended.x, y: startExtended.y } : { x: startExtended.x, y: endExtended.y }
-    
-    // Compute effective radius limited by segment lengths
-    const seg1Len = horizontalFirst ? Math.abs(corner.x - startExtended.x) : Math.abs(corner.y - startExtended.y)
-    const seg2Len = horizontalFirst ? Math.abs(endExtended.y - corner.y) : Math.abs(endExtended.x - corner.x)
-    const r = Math.max(4, Math.min(radius, seg1Len / 2, seg2Len / 2))
-
-    // Entry & exit points around corner
-    let entry: PortPosition
-    let exit: PortPosition
+    const corner = horizontalFirst ? { x: endExtended.x, y: startExtended.y } : { x: startExtended.x, y: endExtended.y };
+    const seg1Len = horizontalFirst ? Math.abs(corner.x - startExtended.x) : Math.abs(corner.y - startExtended.y);
+    const seg2Len = horizontalFirst ? Math.abs(endExtended.y - corner.y) : Math.abs(endExtended.x - corner.x);
+    const r = Math.max(4, Math.min(radius, seg1Len / 2, seg2Len / 2));
+    let entry: PortPosition;
+    let exit: PortPosition;
     if (horizontalFirst) {
-      const cornerDx = corner.x - startExtended.x
-      const cornerDy = endExtended.y - corner.y
-      entry = { x: corner.x - Math.sign(cornerDx) * r, y: corner.y }
-      exit = { x: corner.x, y: corner.y + Math.sign(cornerDy) * r }
+      const cornerDx = corner.x - startExtended.x;
+      const cornerDy = endExtended.y - corner.y;
+      entry = { x: corner.x - Math.sign(cornerDx) * r, y: corner.y };
+      exit = { x: corner.x, y: corner.y + Math.sign(cornerDy) * r };
     } else {
-      const cornerDy = corner.y - startExtended.y
-      const cornerDx = endExtended.x - corner.x
-      entry = { x: corner.x, y: corner.y - Math.sign(cornerDy) * r }
-      exit = { x: corner.x + Math.sign(cornerDx) * r, y: corner.y }
+      const cornerDy = corner.y - startExtended.y;
+      const cornerDx = endExtended.x - corner.x;
+      entry = { x: corner.x, y: corner.y - Math.sign(cornerDy) * r };
+      exit = { x: corner.x + Math.sign(cornerDx) * r, y: corner.y };
     }
-    
     return [
       `M ${start.x} ${start.y}`,
       `L ${startExtended.x} ${startExtended.y}`,
@@ -349,63 +341,11 @@ export function generateOrthogonalRoundedPath(
       `Q ${corner.x} ${corner.y} ${exit.x} ${exit.y}`,
       `L ${endExtended.x} ${endExtended.y}`,
       `L ${end.x} ${end.y}`
-    ].join(' ')
+    ].join(' ');
   }
-
   // Double-bend legacy style (original implementation) ------------------
-  const originalSource = start
-  const originalTarget = end
-  dx = originalTarget.x - originalSource.x
-  dy = originalTarget.y - originalSource.y
-  // Fixed straight segments from start and end with clamping similar to single-bend
-  const axisSpan = horizontalFirst ? Math.abs(originalTarget.x - originalSource.x) : Math.abs(originalTarget.y - originalSource.y)
-  const straightSegmentLength = clampLeadLength(axisSpan, radius, fixedLead)
-  
-  // Calculate extended points with 50px straight segments
-  let startExtended: PortPosition
-  let endExtended: PortPosition
-  
-  if (horizontalFirst) {
-    startExtended = { x: originalSource.x + Math.sign(dx) * straightSegmentLength, y: originalSource.y }
-    endExtended = { x: originalTarget.x - Math.sign(dx) * straightSegmentLength, y: originalTarget.y }
-  } else {
-    startExtended = { x: originalSource.x, y: originalSource.y + Math.sign(dy) * straightSegmentLength }
-    endExtended = { x: originalTarget.x, y: originalTarget.y - Math.sign(dy) * straightSegmentLength }
-  }
-  
-  // Calculate midpoint between extended segments
-  const extendedDx = endExtended.x - startExtended.x
-  const extendedDy = endExtended.y - startExtended.y
-  const midPrimary = horizontalFirst ? startExtended.x + extendedDx / 2 : startExtended.y + extendedDy / 2
-  const p1 = horizontalFirst ? { x: midPrimary, y: startExtended.y } : { x: startExtended.x, y: midPrimary }
-  const p2 = horizontalFirst ? { x: midPrimary, y: endExtended.y } : { x: endExtended.x, y: midPrimary }
-
-  function cornerSegment(prev: PortPosition, corner: PortPosition, next: PortPosition): string {
-    const vxIn = Math.sign(corner.x - prev.x)
-    const vyIn = Math.sign(corner.y - prev.y)
-    const vxOut = Math.sign(next.x - corner.x)
-    const vyOut = Math.sign(next.y - corner.y)
-    const segInLen = Math.abs(corner.x - prev.x) + Math.abs(corner.y - prev.y)
-    const segOutLen = Math.abs(next.x - corner.x) + Math.abs(next.y - corner.y)
-    const effR = Math.min(radius, segInLen / 2, segOutLen / 2)
-    const entry: PortPosition = {
-      x: corner.x - vxIn * effR * (vxIn !== 0 ? 1 : 0),
-      y: corner.y - vyIn * effR * (vyIn !== 0 ? 1 : 0)
-    }
-    const exit: PortPosition = {
-      x: corner.x + vxOut * effR * (vxOut !== 0 ? 1 : 0),
-      y: corner.y + vyOut * effR * (vyOut !== 0 ? 1 : 0)
-    }
-    return `L ${entry.x} ${entry.y} Q ${corner.x} ${corner.y} ${exit.x} ${exit.y}`
-  }
-  return [
-    `M ${originalSource.x} ${originalSource.y}`,
-    `L ${startExtended.x} ${startExtended.y}`,
-    cornerSegment(startExtended, p1, p2),
-    cornerSegment(p1, p2, endExtended),
-    `L ${endExtended.x} ${endExtended.y}`,
-    `L ${originalTarget.x} ${originalTarget.y}`
-  ].join(' ')
+  // ...existing code...
+  return '';
 }
 
 // Adaptive multi-bend router -------------------------------------------------

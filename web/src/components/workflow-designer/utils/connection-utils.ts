@@ -108,7 +108,7 @@ export function calculateConnectionPreviewPath(
   
   // Architecture mode should preview orthogonal (right‑angle) path with radius to match final rendering
   if (modeId === 'architecture') {
-    return generateOrthogonalRoundedPath(sourcePos, previewPosition, 16)
+  return generateOrthogonalRoundedPath(sourcePos, previewPosition, 18, { strategy: 'auto', allowDoubleBend: false })
   }
 
   // Generate curved preview path (default)
@@ -206,7 +206,7 @@ export function generateModeAwareConnectionPath(
     const sourcePos = calculatePortPositionCore(sourceNode, connection.sourcePortId, sourceType, variant)
     const targetPos = calculatePortPositionCore(targetNode, connection.targetPortId, targetType, variant)
     if (!validatePathInputs(sourcePos, targetPos)) return ''
-    return generateOrthogonalRoundedPath(sourcePos, targetPos, 16)
+  return generateOrthogonalRoundedPath(sourcePos, targetPos, 18, { strategy: 'auto', allowDoubleBend: false })
   }
 
   // Fallback to existing bezier

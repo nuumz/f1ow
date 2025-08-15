@@ -31,6 +31,18 @@ type Orientation = 'horizontal' | 'vertical' | 'none'
 // Keep existing current visual of 50px leads for orthogonal styles to avoid regression.
 const FIXED_LEAD_LENGTH = 50
 
+/**
+ * Calculate adaptive lead length based on total available distance for nearby nodes
+ */
+function getAdaptiveLeadLength(totalDistance: number, requestedFixed: number): number {
+  // If total distance is less than 2 * FIXED_LEAD_LENGTH, distribute proportionally
+  if (totalDistance < requestedFixed * 2) {
+    // Use 25% of total distance for each lead, but minimum 10px
+    return Math.max(10, totalDistance * 0.25)
+  }
+  return requestedFixed
+}
+
 // ---------------------------------------------------------------------------
 // Shared internal helpers
 // ---------------------------------------------------------------------------
@@ -75,7 +87,7 @@ function buildSharpOrthogonalPath(points: PortPosition[]): string {
   return points.map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`)).join(' ')
 }
 
-/** Enforce fixed straight lead segments at start (always) and optionally at end (for multi-bend paths) */
+/** Enforce adaptive lead segments based on total available distance for nearby nodes */
 function enforceFixedSegments(
   pts: PortPosition[],
   fixed = FIXED_LEAD_LENGTH,
@@ -88,26 +100,36 @@ function enforceFixedSegments(
   const preEnd = cloned[cloned.length - 2]
   const end = cloned[cloned.length - 1]
 
+  // Use shared adaptive lead length calculation
+
   // Start segment normalization
   if (start.x === first.x) { // vertical
     const dir = Math.sign(first.y - start.y) || 1
+    const totalLen = Math.abs(end.y - start.y)
+    const adaptiveFixed = getAdaptiveLeadLength(totalLen, fixed)
     const len = Math.abs(first.y - start.y)
-    if (len > fixed) first.y = start.y + dir * fixed
+    if (len > adaptiveFixed) first.y = start.y + dir * adaptiveFixed
   } else if (start.y === first.y) { // horizontal
     const dir = Math.sign(first.x - start.x) || 1
+    const totalLen = Math.abs(end.x - start.x)
+    const adaptiveFixed = getAdaptiveLeadLength(totalLen, fixed)
     const len = Math.abs(first.x - start.x)
-    if (len > fixed) first.x = start.x + dir * fixed
+    if (len > adaptiveFixed) first.x = start.x + dir * adaptiveFixed
   }
 
   if (enforceEnd && cloned.length > 3) {
     if (preEnd.x === end.x) { // vertical end approach
       const dir = Math.sign(preEnd.y - end.y) || 1
+      const totalLen = Math.abs(end.y - start.y)
+      const adaptiveFixed = getAdaptiveLeadLength(totalLen, fixed)
       const len = Math.abs(end.y - preEnd.y)
-      if (len > fixed) preEnd.y = end.y + dir * fixed
+      if (len > adaptiveFixed) preEnd.y = end.y + dir * adaptiveFixed
     } else if (preEnd.y === end.y) { // horizontal end approach
       const dir = Math.sign(preEnd.x - end.x) || 1
+      const totalLen = Math.abs(end.x - start.x)
+      const adaptiveFixed = getAdaptiveLeadLength(totalLen, fixed)
       const len = Math.abs(end.x - preEnd.x)
-      if (len > fixed) preEnd.x = end.x + dir * fixed
+      if (len > adaptiveFixed) preEnd.x = end.x + dir * adaptiveFixed
     }
   }
   return cloned
@@ -723,14 +745,38 @@ function generateCandidatePoints(
       if (Math.abs(start.y - end.y) < 0.5) {
         return [start, end]
       } else {
-        const midX = (start.x + end.x) / 2
+        // For nearby nodes, use adaptive positioning instead of simple midpoint
+        const totalDistX = Math.abs(end.x - start.x)
+        let midX: number
+        
+        if (totalDistX < FIXED_LEAD_LENGTH * 2) {
+          // When nodes are close, position the dogleg to avoid overlapping
+          const minLead = Math.max(10, totalDistX * 0.25)
+          const dirX = Math.sign(end.x - start.x) || 1
+          midX = start.x + dirX * minLead
+        } else {
+          midX = (start.x + end.x) / 2
+        }
+        
         return [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end]
       }
     } else { // vertical orientation
       if (Math.abs(start.x - end.x) < 0.5) {
         return [start, end]
       } else {
-        const midY = (start.y + end.y) / 2
+        // For nearby nodes, use adaptive positioning instead of simple midpoint
+        const totalDistY = Math.abs(end.y - start.y)
+        let midY: number
+        
+        if (totalDistY < FIXED_LEAD_LENGTH * 2) {
+          // When nodes are close, position the dogleg to avoid overlapping
+          const minLead = Math.max(10, totalDistY * 0.25)
+          const dirY = Math.sign(end.y - start.y) || 1
+          midY = start.y + dirY * minLead
+        } else {
+          midY = (start.y + end.y) / 2
+        }
+        
         return [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end]
       }
     }
@@ -756,7 +802,7 @@ function hasObstacleIntersection(
   return false
 }
 
-/** Handle oriented routing with fixed leads */
+/** Handle oriented routing with adaptive leads for nearby nodes */
 function handleOrientedRouting(
   start: PortPosition,
   end: PortPosition,
@@ -764,37 +810,43 @@ function handleOrientedRouting(
   endOrientation: Orientation,
   FIXED: number
 ): PortPosition[] | null {
+  // Use shared adaptive lead length calculation
+
   if (startOrientation === 'horizontal') {
+    const totalDistX = Math.abs(end.x - start.x)
+    const adaptiveFixed = getAdaptiveLeadLength(totalDistX, FIXED)
     const dirX = Math.sign(end.x - start.x) || 1
-    const firstPoint: PortPosition = { x: start.x + dirX * FIXED, y: start.y }
+    const firstPoint: PortPosition = { x: start.x + dirX * adaptiveFixed, y: start.y }
     
     if (endOrientation === 'horizontal') {
       const dirEndX = Math.sign(end.x - start.x) || 1
-      const preEnd: PortPosition = { x: end.x - dirEndX * FIXED, y: end.y }
+      const preEnd: PortPosition = { x: end.x - dirEndX * adaptiveFixed, y: end.y }
       if (Math.abs(firstPoint.x - preEnd.x) < 1) {
         return [start, firstPoint, { x: firstPoint.x, y: end.y }, end]
       } else {
         return [start, firstPoint, { x: firstPoint.x, y: end.y }, preEnd, end]
       }
     } else if (endOrientation === 'vertical') {
-      return generateHorizontalToVertical3Bend(start, end, FIXED)
+      return generateHorizontalToVertical3Bend(start, end, adaptiveFixed)
     } else {
       return [start, firstPoint, { x: firstPoint.x, y: end.y }, end]
     }
   } else if (startOrientation === 'vertical') {
+    const totalDistY = Math.abs(end.y - start.y)
+    const adaptiveFixed = getAdaptiveLeadLength(totalDistY, FIXED)
     const dirY = Math.sign(end.y - start.y) || 1
-    const firstPoint: PortPosition = { x: start.x, y: start.y + dirY * FIXED }
+    const firstPoint: PortPosition = { x: start.x, y: start.y + dirY * adaptiveFixed }
     
     if (endOrientation === 'vertical') {
       const dirEndY = Math.sign(end.y - start.y) || 1
-      const preEnd: PortPosition = { x: end.x, y: end.y - dirEndY * FIXED }
+      const preEnd: PortPosition = { x: end.x, y: end.y - dirEndY * adaptiveFixed }
       if (Math.abs(firstPoint.y - preEnd.y) < 1) {
         return [start, firstPoint, { x: end.x, y: firstPoint.y }, end]
       } else {
         return [start, firstPoint, { x: end.x, y: firstPoint.y }, preEnd, end]
       }
     } else if (endOrientation === 'horizontal') {
-      return generateVerticalToHorizontal3Bend(start, end, FIXED)
+      return generateVerticalToHorizontal3Bend(start, end, adaptiveFixed)
     } else {
       return [start, firstPoint, { x: end.x, y: firstPoint.y }, end]
     }

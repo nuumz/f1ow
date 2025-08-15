@@ -29,7 +29,7 @@ type Orientation = 'horizontal' | 'vertical' | 'none'
 
 // Centralized fixed lead length (was previously duplicated as 30 / 50)
 // Keep existing current visual of 50px leads for orthogonal styles to avoid regression.
-const FIXED_LEAD_LENGTH = 50
+export const FIXED_LEAD_LENGTH = 50
 
 /**
  * Calculate adaptive lead length based on total available distance for nearby nodes

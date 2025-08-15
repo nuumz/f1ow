@@ -42,6 +42,7 @@ import {
   getConnectionFlow,
   validatePathInputs,
   generateAdaptiveOrthogonalRoundedPathSmart,
+  FIXED_LEAD_LENGTH,
   type PathConfig} from './path-generation'
 import {
   getConnectionGroupInfo as getConnectionGroupInfoCore,
@@ -220,7 +221,7 @@ export function calculateConnectionPreviewPath(
     const startOrientation = sideToOrientation(startSide)
     // When starting from a bottom port, snap to target's top/bottom edge center depending on proximity if a hover target box is known
     // Rule: if (topPortTargetY - sourceY) <= 50px => use target bottom port; else use target top port
-  const SNAP_THRESHOLD = 50
+  const SNAP_THRESHOLD = FIXED_LEAD_LENGTH * 2
     const previewEnd = (isSourceBottomPort && hoverTargetBox)
       ? (() => {
           const sourceY = sourcePos.y
@@ -233,13 +234,34 @@ export function calculateConnectionPreviewPath(
     const endOrientation = (isSourceBottomPort && hoverTargetBox)
       ? 'vertical'
       : chooseEndOrientationFromBox(sourcePos, hoverTargetBox)
+
+    // If snapping to bottom in close range, draw a U-shape to avoid overlapping nodes:
+    // Down from source, across under both nodes, then up into target bottom.
+    if (
+      isSourceBottomPort && hoverTargetBox && previewEnd.y === hoverTargetBox.y + hoverTargetBox.height
+    ) {
+      const srcBox = buildNodeBox(sourceNode)
+      const targetBottomY = hoverTargetBox.y + hoverTargetBox.height
+      const boxesBottom = Math.max(srcBox.y + srcBox.height, targetBottomY)
+      const safeClear = 50
+      // Enforce vertical leg min length of FIXED_LEAD_LENGTH for both sides
+      const minBelow = Math.max(sourcePos.y, targetBottomY) + FIXED_LEAD_LENGTH
+      const midY = Math.max(boxesBottom + safeClear, minBelow)
+      return [
+        `M ${sourcePos.x} ${sourcePos.y}`,
+        `L ${sourcePos.x} ${midY}`,
+        `L ${previewEnd.x} ${midY}`,
+        `L ${previewEnd.x} ${previewEnd.y}`
+      ].join(' ')
+    }
+
     const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, previewEnd, 16, {
       clearance: 10, // Minimal clearance for tight arrow positioning
       targetBox: hoverTargetBox,
       startOrientationOverride: startOrientation,
       endOrientationOverride: endOrientation
     })
-  return routed
+    return routed
   }
 
   // Generate curved preview path (default)
@@ -383,11 +405,11 @@ function generateArchitectureModeConnectionPath(
   if (isSourceBottom) {
     // Architecture rule: when starting from bottom port, choose target side based on vertical proximity
     // If target top is within 50px below the source Y, use target bottom; else use target top
-  const SNAP_THRESHOLD = 50
+  const SNAP_THRESHOLD = FIXED_LEAD_LENGTH * 2
     const tBox = buildNodeBox(targetNode)
     const sourceY = sourcePos.y
     const topY = tBox.y
-  const useBottom = (topY - sourceY) < SNAP_THRESHOLD
+    const useBottom = (topY - sourceY) < SNAP_THRESHOLD
     targetSidePortId = useBottom ? '__side-bottom' : '__side-top'
   } else if (isVirtualSidePortId(connection.targetPortId)) {
     const tp = connection.targetPortId
@@ -400,6 +422,24 @@ function generateArchitectureModeConnectionPath(
   }
   const autoTargetPos = getVirtualSidePortPosition(targetNode, targetSidePortId)
   const endOrientation = sideToOrientation(detectPortSide(targetNode, targetSidePortId, autoTargetPos))
+
+  // If we chose bottom due to close vertical proximity, draw a U-shape under both nodes to avoid overlap
+  if (isSourceBottom && targetSidePortId === '__side-bottom') {
+    const srcBox = buildNodeBox(sourceNode)
+    const tgtBox = buildNodeBox(targetNode)
+  const safeClear = 16
+  const boxesBottom = Math.max(srcBox.y + srcBox.height, tgtBox.y + tgtBox.height)
+  // Enforce vertical leg min length of FIXED_LEAD_LENGTH for both sides
+  const minBelow = Math.max(sourcePos.y, autoTargetPos.y) + FIXED_LEAD_LENGTH
+  const midY = Math.max(boxesBottom + safeClear, minBelow)
+    return [
+      `M ${sourcePos.x} ${sourcePos.y}`,
+      `L ${sourcePos.x} ${midY}`,
+      `L ${autoTargetPos.x} ${midY}`,
+      `L ${autoTargetPos.x} ${autoTargetPos.y}`
+    ].join(' ')
+  }
+
   const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, autoTargetPos, 16, {
     clearance: 10, // Minimal clearance for tight arrow positioning
     targetBox: buildNodeBox(targetNode),

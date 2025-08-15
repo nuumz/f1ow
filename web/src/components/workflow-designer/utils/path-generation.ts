@@ -413,6 +413,9 @@ export interface AdaptivePathOptions extends OrthogonalPathOptions {
   obstacles?: Array<{ x: number; y: number; width: number; height: number }>
   clearance?: number // extra spacing around obstacles
   maxBends?: number // safety cap
+  // Overrides to force initial/final segment orientation without projecting to box sides
+  startOrientationOverride?: Orientation
+  endOrientationOverride?: Orientation
 }
 
 function rectIntersectsSegment(
@@ -466,8 +469,8 @@ export function generateAdaptiveOrthogonalRoundedPath(
   // Determine which side of the boxes we exited/entered (if boxes provided) so we can decide bend count.
   const startSide = detectBoxSide(start, options?.sourceBox)
   const endSide = detectBoxSide(end, options?.targetBox)
-  const startOrientation = getOrientationFromSide(startSide)
-  const endOrientation = getOrientationFromSide(endSide)
+  let startOrientation = options?.startOrientationOverride ?? getOrientationFromSide(startSide)
+  let endOrientation = options?.endOrientationOverride ?? getOrientationFromSide(endSide)
 
   // Base attempt: single bend
   let candidatePoints = generateCandidatePoints(start, end, startOrientation, endOrientation)
@@ -533,6 +536,46 @@ export function generateAdaptiveOrthogonalRoundedPath(
     return buildSharpOrthogonalPath(enforceFixedSegments(doglegPoints, FIXED_LEAD_LENGTH, true))
   }
   return buildSharpOrthogonalPath(doglegPoints)
+}
+
+/**
+ * Smart wrapper: try with 2 bends, escalate to 3 when intersecting target box or obstacles.
+ * Preserves provided start/end orientation overrides and does not require projecting to box sides.
+ */
+export function generateAdaptiveOrthogonalRoundedPathSmart(
+  source: PortPosition,
+  target: PortPosition,
+  radius = 16,
+  options?: AdaptivePathOptions & { targetBox?: { x: number; y: number; width: number; height: number } }
+): string {
+  // Determine orientations based on overrides or boxes (only for orientation hints)
+  const startSide = detectBoxSide(source, options?.sourceBox)
+  const endSide = detectBoxSide(target, options?.targetBox)
+  const startOrientation = options?.startOrientationOverride ?? getOrientationFromSide(startSide)
+  const endOrientation = options?.endOrientationOverride ?? getOrientationFromSide(endSide)
+
+  // Build 2-bend candidate and check intersections
+  let candidatePoints = generateCandidatePoints(source, target, startOrientation, endOrientation)
+  let intersects = false
+  // Check intersection with explicit target box if provided
+  if (options?.targetBox) {
+    const tbox = options.clearance ? inflateRect(options.targetBox, options.clearance) : options.targetBox
+    for (let i = 0; i < candidatePoints.length - 1; i++) {
+      if (rectIntersectsSegment(tbox, candidatePoints[i], candidatePoints[i + 1])) {
+        intersects = true
+        break
+      }
+    }
+  }
+
+  const maxBends = intersects ? 3 : 2
+  // Avoid projecting to box sides in the inner call by nulling boxes
+  return generateAdaptiveOrthogonalRoundedPath(source, target, radius, {
+    ...options,
+    sourceBox: undefined,
+    targetBox: undefined,
+    maxBends
+  })
 }
 
 /**

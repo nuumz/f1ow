@@ -931,3 +931,24 @@ export const createRenderingStrategy = (mode: ModeDefinition): ModeRenderingStra
       throw new Error(`Unknown mode: ${mode.id}`)
   }
 }
+
+/**
+ * Debug Mode Strategy - High contrast, technical visuals
+ */
+// Simple factory to resolve strategy by mode ID using built-in mode definitions
+import { WORKFLOW_MODE, ARCHITECTURE_MODE, DEBUG_MODE } from './mode-definitions'
+
+export class RenderingStrategyFactory {
+  static createStrategy(modeId: string): ModeRenderingStrategy {
+    switch (modeId) {
+      case 'workflow':
+        return new WorkflowRenderingStrategy(WORKFLOW_MODE)
+      case 'architecture':
+        return new ArchitectureRenderingStrategy(ARCHITECTURE_MODE)
+      case 'debug':
+        return new DebugRenderingStrategy(DEBUG_MODE)
+      default:
+        return new WorkflowRenderingStrategy(WORKFLOW_MODE)
+    }
+  }
+}

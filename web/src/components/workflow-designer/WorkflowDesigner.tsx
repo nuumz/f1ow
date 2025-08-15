@@ -733,8 +733,6 @@ function WorkflowDesignerContent({
               zoomLevel={state.canvasTransform.k || 1}
               showGrid={state.uiState.showGrid}
               onToggleGrid={operations.toggleGrid}
-              nodeVariant={state.uiState.nodeVariant}
-              onVariantChange={operations.setNodeVariant}
               onZoomIn={canvas.zoomIn}
               onZoomOut={canvas.zoomOut}
               onFitToScreen={() => canvas.fitToScreen(state.nodes)}

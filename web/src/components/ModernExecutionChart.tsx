@@ -10,8 +10,7 @@ import {
   Tooltip,
   Legend,
   Filler,
-  ChartOptions,
-  ChartData
+  ChartOptions
 } from 'chart.js'
 import { Chart } from 'react-chartjs-2'
 
@@ -42,7 +41,7 @@ interface ModernExecutionChartProps {
 
 export default function ModernExecutionChart({ data, className = '' }: ModernExecutionChartProps) {
   const [isLoading, setIsLoading] = useState(true)
-  const [activeView, setActiveView] = useState<'failure' | 'response' | 'cpu'>('failure')
+  // view toggle reserved for future use
 
   // Simulate loading
   useEffect(() => {

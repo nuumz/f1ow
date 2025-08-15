@@ -22,12 +22,10 @@ import {
 } from "../utils/node-utils";
 // Removed unused import: getNodeDimensions
 import {
-  generateVariantAwareConnectionPath,
-  generateMultipleConnectionPath,
   calculateConnectionPreviewPath,
   calculatePortPosition, // Still needed for bottom ports
   getConnectionGroupInfo,
-  generateAdaptiveOrthogonalRoundedPath,
+  generateModeAwareConnectionPath,
 } from "../utils/connection-utils";
 // Grid performance utilities
 import {
@@ -1073,87 +1071,46 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const targetDragPos = currentDragPositionsRef.current.get(
           connection.targetNodeId
         );
-
+        
         if (sourceDragPos) {
           sourceNode = {
             ...sourceNode,
             x: sourceDragPos.x,
             y: sourceDragPos.y,
-          };
+          } as any;
         }
         if (targetDragPos) {
           targetNode = {
             ...targetNode,
             x: targetDragPos.x,
             y: targetDragPos.y,
-          };
+          } as any;
         }
       }
 
-      // Check if this is part of multiple connections between same nodes
-      const groupInfo = getConnectionGroupInfo(connection.id, connections);
+      // Always compute a single unified path using mode-aware generator (respects virtual side-ports)
+      // If using drag positions, create a transient nodes array with overrides for the two nodes
+      const nodesForPath = useDragPositions
+        ? nodes.map((n) =>
+            n.id === sourceNode!.id
+              ? (sourceNode as WorkflowNode)
+              : n.id === targetNode!.id
+              ? (targetNode as WorkflowNode)
+              : n
+          )
+        : nodes;
 
-      // Reduced connection debug logging - only log multiple connections occasionally
-      let path: string;
-      if (groupInfo.isMultiple) {
-        // For multiple connections, always use the working generateMultipleConnectionPath
-        // Skip production manager to avoid NaN issues with path smoothing
-        const currentMode =
-          workflowContextState.designerMode === "architecture"
-            ? "architecture"
-            : "workflow";
-        path = generateMultipleConnectionPath(
-          sourceNode,
-          connection.sourcePortId,
-          targetNode,
-          connection.targetPortId,
-          groupInfo.index,
-          groupInfo.total,
-          nodeVariant,
-          currentMode
-        );
-      } else {
-        // Single connection
-        if (workflowContextState.designerMode === "architecture") {
-          // Use node box based automatic side selection instead of port anchors
-          const srcDims = getShapeAwareDimensions(sourceNode);
-          const tgtDims = getShapeAwareDimensions(targetNode);
-          const sourceCenter = { x: sourceNode.x, y: sourceNode.y };
-          const targetCenter = { x: targetNode.x, y: targetNode.y };
-          const sourceBox = {
-            x: sourceNode.x - srcDims.width / 2,
-            y: sourceNode.y - srcDims.height / 2,
-            width: srcDims.width,
-            height: srcDims.height,
-          };
-          const targetBox = {
-            x: targetNode.x - tgtDims.width / 2,
-            y: targetNode.y - tgtDims.height / 2,
-            width: tgtDims.width,
-            height: tgtDims.height,
-          };
-          path = generateAdaptiveOrthogonalRoundedPath(
-            sourceCenter,
-            targetCenter,
-            16,
-            {
-              sourceBox,
-              targetBox,
-              strategy: "auto",
-              allowDoubleBend: false,
-              maxBends: 5,
-            }
-          );
-        } else {
-          path = generateVariantAwareConnectionPath(
-            sourceNode,
-            connection.sourcePortId,
-            targetNode,
-            connection.targetPortId,
-            nodeVariant
-          );
-        }
-      }
+      const path = generateModeAwareConnectionPath(
+        {
+          sourceNodeId: connection.sourceNodeId,
+          sourcePortId: connection.sourcePortId,
+          targetNodeId: connection.targetNodeId,
+          targetPortId: connection.targetPortId,
+        },
+        nodesForPath,
+        nodeVariant,
+        workflowContextState.designerMode || "workflow"
+      );
 
       if (!useDragPositions) {
         connectionPathCacheRef.current.set(cacheKey, path);
@@ -1168,9 +1125,9 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     [
       nodeMap,
       nodeVariant,
-      connections,
       cleanupConnectionCache,
       workflowContextState.designerMode,
+      nodes,
     ]
   );
 
@@ -2011,12 +1968,10 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .select(".connection-hitbox")
       .attr("d", (d: any) => getConnectionPath(d))
       .style("display", (d: any) => {
-        // In architecture mode, hide hitbox for secondary connections
-        if (workflowContextState.designerMode === "architecture") {
-          const groupInfo = getConnectionGroupInfo(d.id, connections);
-          if (groupInfo.isMultiple && groupInfo.index > 0) {
-            return "none"; // Hide secondary/tertiary connection hitboxes
-          }
+        // Hide hitbox for secondary connections in all modes (single visible path per A->B)
+        const groupInfo = getConnectionGroupInfo(d.id, connections);
+        if (groupInfo.isMultiple && groupInfo.index > 0) {
+          return "none";
         }
         return "block";
       });
@@ -2029,12 +1984,10 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr("stroke-width", 2) // Default width - CSS will override for selection/hover
       .attr("marker-end", (d: any) => getConnectionMarker(d, "default")) // Dynamic marker based on direction
       .style("display", (d: any) => {
-        // In architecture mode, hide secondary connections (show only primary)
-        if (workflowContextState.designerMode === "architecture") {
-          const groupInfo = getConnectionGroupInfo(d.id, connections);
-          if (groupInfo.isMultiple && groupInfo.index > 0) {
-            return "none"; // Hide secondary/tertiary connections
-          }
+        // Hide secondary connections (show only primary) in all modes
+        const groupInfo = getConnectionGroupInfo(d.id, connections);
+        if (groupInfo.isMultiple && groupInfo.index > 0) {
+          return "none";
         }
         return "block";
       })
@@ -2131,13 +2084,37 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           "to:",
           connectionPreview
         );
+        // Compute hover target box if mouse is over a node group
+        const hoveredNode = nodes.find((n) => {
+          const dims = getShapeAwareDimensions(n as any)
+          const w = (dims.width || 200)
+          const h = (dims.height || 80)
+          const left = n.x - w / 2
+          const top = n.y - h / 2
+          return (
+            connectionPreview.x >= left &&
+            connectionPreview.x <= left + w &&
+            connectionPreview.y >= top &&
+            connectionPreview.y <= top + h
+          )
+        })
+        const hoverTargetBox = hoveredNode
+          ? (() => {
+              const dims = getShapeAwareDimensions(hoveredNode as any)
+              const w = (dims.width || 200)
+              const h = (dims.height || 80)
+              return { x: hoveredNode.x - w / 2, y: hoveredNode.y - h / 2, width: w, height: h }
+            })()
+          : undefined
+
         const previewPath = calculateConnectionPreviewPath(
           sourceNode,
           connectionStart.portId,
           connectionPreview,
           nodeVariant,
           undefined,
-          workflowContextState.designerMode || "workflow"
+          workflowContextState.designerMode || "workflow",
+          hoverTargetBox
         );
 
         // Determine preview marker based on source port type and direction
@@ -4640,13 +4617,37 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           "to:",
           connectionPreview
         );
+        // Compute hover target box if mouse is over a node group
+        const hoveredNode = nodes.find((n) => {
+          const dims = getShapeAwareDimensions(n as any)
+          const w = (dims.width || 200)
+          const h = (dims.height || 80)
+          const left = n.x - w / 2
+          const top = n.y - h / 2
+          return (
+            connectionPreview.x >= left &&
+            connectionPreview.x <= left + w &&
+            connectionPreview.y >= top &&
+            connectionPreview.y <= top + h
+          )
+        })
+        const hoverTargetBox = hoveredNode
+          ? (() => {
+              const dims = getShapeAwareDimensions(hoveredNode as any)
+              const w = (dims.width || 200)
+              const h = (dims.height || 80)
+              return { x: hoveredNode.x - w / 2, y: hoveredNode.y - h / 2, width: w, height: h }
+            })()
+          : undefined
+
         const previewPath = calculateConnectionPreviewPath(
           sourceNode,
           connectionStart.portId,
           connectionPreview,
           nodeVariant,
           undefined,
-          workflowContextState.designerMode || "workflow"
+          workflowContextState.designerMode || "workflow",
+          hoverTargetBox
         );
 
         // Determine preview marker based on source port type and direction

@@ -2,7 +2,7 @@ import { ZoomIn, ZoomOut, Maximize2, Eye, EyeOff, RotateCcw, Play, Save, Trash2 
 import './CanvasToolbar.css'
 
 // Import types
-import type { NodeVariant } from '../types'
+// (node variant controls removed for now)
 
 export interface CanvasToolbarProps {
   // Zoom state
@@ -11,10 +11,6 @@ export interface CanvasToolbarProps {
   // Grid state
   showGrid: boolean
   onToggleGrid: () => void
-  
-  // Node rendering configuration
-  nodeVariant?: NodeVariant
-  onVariantChange?: (variant: NodeVariant) => void
   
   // Zoom operations
   onZoomIn: () => void
@@ -38,8 +34,6 @@ export default function CanvasToolbar({
   zoomLevel,
   showGrid,
   onToggleGrid,
-  nodeVariant = 'standard',
-  onVariantChange,
   onZoomIn,
   onZoomOut,
   onFitToScreen,
@@ -49,7 +43,7 @@ export default function CanvasToolbar({
   executionStatus = 'idle',
   selectedNodeCount = 0,
   onDeleteSelected
-}: CanvasToolbarProps) {
+}: Readonly<CanvasToolbarProps>) {
   return (
     <div className="canvas-toolbar">
       {/* Zoom Controls */}

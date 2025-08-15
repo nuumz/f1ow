@@ -13,16 +13,14 @@ import type {
   ModeIdentifier,
   ModeTheme,
   ModeBehavior,
-  ModeTransition
+  ModeTransition,
+  ModeMetadata
 } from '../types/mode-system'
 
 import { 
   WORKFLOW_MODE, 
   ARCHITECTURE_MODE, 
-  DEBUG_MODE, 
-  ALL_MODES,
-  getDefaultMode,
-  isValidModeId 
+  DEBUG_MODE
 } from './mode-definitions'
 
 import { RenderingStrategyFactory } from './rendering-strategies'
@@ -132,14 +130,14 @@ export class ModeFactory implements IModeFactory {
    * Creates a mode definition from partial configuration
    * Factory Method: Creates objects without specifying exact classes
    */
-  createMode(config: Partial<ModeDefinition>): ModeDefinition {
+  createMode(config: Partial<Omit<ModeDefinition, 'theme'>> & { theme?: Partial<ModeTheme> }): ModeDefinition {
     this.validateModeConfiguration(config)
 
     const modeId = config.id || this.generateModeId()
     const baseName = config.name || `Custom Mode ${modeId}`
 
     // Create complete theme by merging with defaults
-    const theme = this.createCompleteTheme(config.theme)
+  const theme = this.createCompleteTheme(config.theme)
     
     // Create complete behavior by merging with defaults
     const behavior = this.createCompleteBehavior(config.behavior)
@@ -152,13 +150,45 @@ export class ModeFactory implements IModeFactory {
       name: baseName,
       description: config.description || `Custom mode: ${baseName}`,
       theme,
+      connectionStyle: {
+        strokeWidth: 2,
+        strokeDashArray: undefined,
+        opacity: 1,
+        animationType: 'none',
+        markerType: 'arrow',
+        markerSize: 10,
+        hoverEffect: { strokeWidth: 3, opacity: 1, shadowBlur: 8, scaleTransform: 1.05 },
+        selectionEffect: { strokeWidth: 4, opacity: 1, shadowBlur: 12, glowColor: '#3b82f6', animationDuration: 1000 },
+        transitionDuration: 200
+      },
+      portStyle: {
+        shape: 'circle', size: 8, strokeWidth: 2, shadowBlur: 4,
+        connectedIndicator: { enabled: true, style: 'glow', intensity: 0.8 },
+        typeIndicators: { enabled: true, style: 'color', colorMapping: {} },
+        hoverEffect: { scaleTransform: 1.2, shadowBlur: 8, transitionDuration: 150 },
+        labelStyle: { enabled: false, fontSize: 11, fontWeight: 'normal', position: 'outside' }
+      },
+      canvasStyle: {
+        backgroundType: 'solid', backgroundValue: '#ffffff',
+        gridStyle: { enabled: true, type: 'dots', size: 20, color: '#e5e7eb', opacity: 0.5, style: 'solid' },
+        overlayEffects: [],
+        nodeStyle: { borderRadius: 6, shadowIntensity: 0.15, glowEffect: false, backgroundOpacity: 1 },
+        animations: { backgroundAnimation: false, gridAnimation: false, transitionDuration: 300, easingFunction: 'linear' }
+      },
+      interactions: {
+        doubleClickAction: 'edit',
+        dragBehavior: { snapToGrid: true, ghostEffect: true, collisionDetection: true, magneticPorts: true },
+        connectionBehavior: { autoRouting: true, smartConnections: true, previewStyle: 'dashed', validationFeedback: true },
+        selectionBehavior: { multiSelect: true, rectangularSelection: true, selectionIndicator: 'border' },
+        keyboardShortcuts: []
+      },
       behavior,
       transition,
-      category: config.category || 'custom',
-      priority: config.priority || 999,
-      isDefault: config.isDefault || false,
-      dependencies: config.dependencies || [],
-      metadata: config.metadata || {}
+      category: (config as Partial<ModeDefinition>).category || 'custom',
+      priority: (config as Partial<ModeDefinition>).priority || 999,
+      isDefault: (config as Partial<ModeDefinition>).isDefault || false,
+      dependencies: (config as Partial<ModeDefinition>).dependencies || [],
+      metadata: this.createCompleteMetadata((config as Partial<ModeDefinition>).metadata as Partial<ModeMetadata> | undefined)
     }
 
     // Register the created mode
@@ -179,7 +209,7 @@ export class ModeFactory implements IModeFactory {
       return RenderingStrategyFactory.createStrategy(modeId)
     } catch (error) {
       // Fallback to workflow strategy if specific strategy not found
-      console.warn(`No specific rendering strategy for mode '${modeId}', using workflow strategy`)
+      console.warn(`No specific rendering strategy for mode '${modeId}', using workflow strategy`, error)
       return RenderingStrategyFactory.createStrategy('workflow')
     }
   }
@@ -188,7 +218,7 @@ export class ModeFactory implements IModeFactory {
    * Validates mode configuration
    * Template Method: Defines validation algorithm structure
    */
-  validateModeConfiguration(config: Partial<ModeDefinition>): boolean {
+  validateModeConfiguration(config: Partial<Omit<ModeDefinition, 'theme'>> & { theme?: Partial<ModeTheme> }): boolean {
     const errors: string[] = []
 
     // ID validation
@@ -257,7 +287,7 @@ export class ModeFactory implements IModeFactory {
   /**
    * Clones an existing mode with modifications
    */
-  cloneMode(baseModeId: string, overrides: Partial<ModeDefinition>): ModeDefinition {
+  cloneMode(baseModeId: string, overrides: Partial<Omit<ModeDefinition, 'theme'>> & { theme?: Partial<ModeTheme> }): ModeDefinition {
     const baseMode = this.modeRegistry.get(baseModeId)
     if (!baseMode) {
       throw new Error(`Base mode '${baseModeId}' not found`)
@@ -267,7 +297,7 @@ export class ModeFactory implements IModeFactory {
       ...baseMode,
       ...overrides,
       id: overrides.id || `${baseModeId}-clone-${Date.now()}`,
-      theme: overrides.theme ? this.mergeThemes(baseMode.theme, overrides.theme) : baseMode.theme,
+  theme: overrides.theme ? this.mergeThemes(baseMode.theme, overrides.theme) : baseMode.theme,
       behavior: overrides.behavior ? { ...baseMode.behavior, ...overrides.behavior } : baseMode.behavior,
       transition: overrides.transition ? { ...baseMode.transition, ...overrides.transition } : baseMode.transition
     }
@@ -288,11 +318,16 @@ export class ModeFactory implements IModeFactory {
       theme: baseMode?.theme,
       behavior: baseMode?.behavior,
       transition: baseMode?.transition,
-      category: category as any,
+      category: category as unknown as ModeDefinition['category'],
       priority: 500,
       metadata: {
-        isCustom: true,
-        createdAt: Date.now()
+        version: '1.0.0',
+        author: 'system',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        tags: ['custom', category],
+        documentation: '',
+        examples: []
       }
     }
   }
@@ -368,7 +403,40 @@ export class ModeFactory implements IModeFactory {
   }
 
   private createCompleteTheme(partialTheme?: Partial<ModeTheme>): ModeTheme {
+    const DEFAULT_CORE_THEME: Omit<ModeTheme, 'connections' | 'ports' | 'canvas' | 'nodes' | 'cssClassName' | 'customProperties'> = {
+      primary: '#2563eb',
+      secondary: '#3b82f6',
+      accent: '#1d4ed8',
+      background: '#f8fafc',
+      foreground: '#1e293b',
+      success: '#10b981',
+      warning: '#f59e0b',
+      error: '#ef4444',
+      gradients: {
+        primary: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)',
+        secondary: 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)',
+        background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)'
+      },
+      shadows: {
+        small: '0 2px 4px rgba(37, 99, 235, 0.1)',
+        medium: '0 4px 12px rgba(37, 99, 235, 0.15)',
+        large: '0 8px 32px rgba(37, 99, 235, 0.2)',
+        connection: '0 2px 8px rgba(37, 99, 235, 0.25)',
+        port: '0 2px 6px rgba(37, 99, 235, 0.2)'
+      }
+    }
+
     return {
+      primary: partialTheme?.primary ?? DEFAULT_CORE_THEME.primary,
+      secondary: partialTheme?.secondary ?? DEFAULT_CORE_THEME.secondary,
+      accent: partialTheme?.accent ?? DEFAULT_CORE_THEME.accent,
+      background: partialTheme?.background ?? DEFAULT_CORE_THEME.background,
+      foreground: partialTheme?.foreground ?? DEFAULT_CORE_THEME.foreground,
+      success: partialTheme?.success ?? DEFAULT_CORE_THEME.success,
+      warning: partialTheme?.warning ?? DEFAULT_CORE_THEME.warning,
+      error: partialTheme?.error ?? DEFAULT_CORE_THEME.error,
+      gradients: partialTheme?.gradients ?? DEFAULT_CORE_THEME.gradients,
+      shadows: partialTheme?.shadows ?? DEFAULT_CORE_THEME.shadows,
       connections: { ...DEFAULT_THEME_VALUES.connections, ...partialTheme?.connections },
       ports: { ...DEFAULT_THEME_VALUES.ports, ...partialTheme?.ports },
       canvas: { ...DEFAULT_THEME_VALUES.canvas, ...partialTheme?.canvas },
@@ -388,13 +456,47 @@ export class ModeFactory implements IModeFactory {
 
   private mergeThemes(baseTheme: ModeTheme, overrideTheme: Partial<ModeTheme>): ModeTheme {
     return {
-      connections: { ...baseTheme.connections, ...overrideTheme.connections },
+      primary: overrideTheme.primary ?? baseTheme.primary,
+      secondary: overrideTheme.secondary ?? baseTheme.secondary,
+      accent: overrideTheme.accent ?? baseTheme.accent,
+      background: overrideTheme.background ?? baseTheme.background,
+      foreground: overrideTheme.foreground ?? baseTheme.foreground,
+      success: overrideTheme.success ?? baseTheme.success,
+      warning: overrideTheme.warning ?? baseTheme.warning,
+      error: overrideTheme.error ?? baseTheme.error,
+      gradients: overrideTheme.gradients ?? baseTheme.gradients,
+      shadows: overrideTheme.shadows ?? baseTheme.shadows,
+      connections: {
+        defaultColor: overrideTheme.connections?.defaultColor ?? baseTheme.connections!.defaultColor,
+        hoverColor: overrideTheme.connections?.hoverColor ?? baseTheme.connections!.hoverColor,
+        selectedColor: overrideTheme.connections?.selectedColor ?? baseTheme.connections!.selectedColor,
+        strokeWidth: overrideTheme.connections?.strokeWidth ?? baseTheme.connections!.strokeWidth,
+        hoverStrokeWidth: overrideTheme.connections?.hoverStrokeWidth ?? baseTheme.connections!.hoverStrokeWidth,
+        selectedStrokeWidth: overrideTheme.connections?.selectedStrokeWidth ?? baseTheme.connections!.selectedStrokeWidth,
+        opacity: overrideTheme.connections?.opacity ?? baseTheme.connections!.opacity,
+        hoverOpacity: overrideTheme.connections?.hoverOpacity ?? baseTheme.connections!.hoverOpacity,
+        selectedOpacity: overrideTheme.connections?.selectedOpacity ?? baseTheme.connections!.selectedOpacity,
+        markerType: overrideTheme.connections?.markerType ?? baseTheme.connections!.markerType
+      },
       ports: { ...baseTheme.ports, ...overrideTheme.ports },
       canvas: { ...baseTheme.canvas, ...overrideTheme.canvas },
       nodes: { ...baseTheme.nodes, ...overrideTheme.nodes },
       cssClassName: overrideTheme.cssClassName || baseTheme.cssClassName,
       customProperties: { ...baseTheme.customProperties, ...overrideTheme.customProperties }
     }
+  }
+
+  private createCompleteMetadata(partial?: Partial<ModeMetadata>): ModeMetadata {
+    const defaults: ModeMetadata = {
+      version: '1.0.0',
+      author: 'system',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      tags: [],
+      documentation: '',
+      examples: []
+    }
+    return { ...defaults, ...partial }
   }
 
   private getDefaultModeForCategory(category: string): ModeDefinition | null {
@@ -406,7 +508,7 @@ export class ModeFactory implements IModeFactory {
       case 'debug':
         return DEBUG_MODE
       default:
-        return getDefaultMode()
+        return WORKFLOW_MODE
     }
   }
 }

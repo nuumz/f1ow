@@ -111,7 +111,7 @@ export const useModeSystem = (config: UseModeSystemConfig = {}): UseModeSystemRe
     if (contextMode !== currentModeId) {
       // Sync context with mode system
       if (currentModeId && (currentModeId === 'workflow' || currentModeId === 'architecture')) {
-        dispatch({ type: 'SET_DESIGNER_MODE', payload: currentModeId as 'workflow' | 'architecture' })
+        dispatch({ type: 'SET_DESIGNER_MODE', payload: currentModeId })
       }
     }
   }, [currentMode, state.designerMode, dispatch])
@@ -145,7 +145,7 @@ export const useModeSystem = (config: UseModeSystemConfig = {}): UseModeSystemRe
                 const strategy = RenderingStrategyFactory.createStrategy(newMode.id)
                 setRenderingStrategy(strategy)
               } catch (error) {
-                console.warn(`[useModeSystem] No strategy for mode ${newMode.id}`)
+                console.warn(`[useModeSystem] No strategy for mode ${newMode.id}`, error)
                 setRenderingStrategy(null)
               }
             }
@@ -235,15 +235,15 @@ export const useModeSystem = (config: UseModeSystemConfig = {}): UseModeSystemRe
     const theme = currentMode.theme
     
     // Apply CSS custom properties
-    Object.entries(theme.customProperties).forEach(([property, value]) => {
+    Object.entries(theme.customProperties || {}).forEach(([property, value]) => {
       element.style.setProperty(property, value)
     })
 
     // Apply CSS class
-    element.classList.add(theme.cssClassName)
+    if (theme.cssClassName) element.classList.add(theme.cssClassName)
 
     // Apply canvas-specific styling if it's a canvas element
-    if (element instanceof SVGSVGElement && renderingStrategy) {
+    if (element instanceof SVGSVGElement && renderingStrategy?.applyCanvasTransformations) {
       renderingStrategy.applyCanvasTransformations(element, theme.canvas)
     }
   }, [currentMode, renderingStrategy])
@@ -326,7 +326,7 @@ const applyGlobalTheme = (mode: ModeDefinition): void => {
   const root = document.documentElement
   
   // Apply custom properties to root
-  Object.entries(mode.theme.customProperties).forEach(([property, value]) => {
+  Object.entries(mode.theme.customProperties || {}).forEach(([property, value]) => {
     root.style.setProperty(property, value)
   })
 
@@ -337,7 +337,7 @@ const applyGlobalTheme = (mode: ModeDefinition): void => {
     canvasContainer.classList.remove('workflow-mode', 'architecture-mode', 'debug-mode')
     
     // Add new mode class
-    canvasContainer.classList.add(mode.theme.cssClassName)
+    if (mode.theme.cssClassName) canvasContainer.classList.add(mode.theme.cssClassName)
   }
 }
 
@@ -372,17 +372,20 @@ export const useCurrentMode = (): ModeDefinition | null => {
 export const useModeBehavior = () => {
   const { currentMode } = useModeSystem()
   
-  return useMemo(() => ({
-    behavior: currentMode?.behavior || null,
-    canCreateNodes: currentMode?.behavior.allowNodeCreation ?? true,
-    canDeleteNodes: currentMode?.behavior.allowNodeDeletion ?? true,
-    canCreateConnections: currentMode?.behavior.allowConnectionCreation ?? true,
-    canDeleteConnections: currentMode?.behavior.allowConnectionDeletion ?? true,
-    enableDragAndDrop: currentMode?.behavior.enableDragAndDrop ?? true,
-    enableMultiSelection: currentMode?.behavior.enableMultiSelection ?? true,
-    autoLayout: currentMode?.behavior.autoLayout ?? false,
-    snapToGrid: currentMode?.behavior.snapToGrid ?? false,
-    showPortLabels: currentMode?.behavior.showPortLabels ?? false,
-    showConnectionLabels: currentMode?.behavior.showConnectionLabels ?? false
-  }), [currentMode])
+  return useMemo(() => {
+    const b = currentMode?.behavior
+    return {
+      behavior: b || null,
+      canCreateNodes: b?.allowNodeCreation ?? true,
+      canDeleteNodes: b?.allowNodeDeletion ?? true,
+      canCreateConnections: b?.allowConnectionCreation ?? true,
+      canDeleteConnections: b?.allowConnectionDeletion ?? true,
+      enableDragAndDrop: b?.enableDragAndDrop ?? true,
+      enableMultiSelection: b?.enableMultiSelection ?? true,
+      autoLayout: b?.autoLayout ?? false,
+      snapToGrid: b?.snapToGrid ?? false,
+      showPortLabels: b?.showPortLabels ?? false,
+      showConnectionLabels: b?.showConnectionLabels ?? false
+    }
+  }, [currentMode])
 }

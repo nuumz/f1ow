@@ -8,13 +8,19 @@ export interface ModeDefinition {
   readonly id: string
   readonly name: string
   readonly description: string
-  readonly category: 'execution' | 'design' | 'analysis'
+  readonly category: 'execution' | 'design' | 'analysis' | 'custom'
   readonly theme: ModeTheme
   readonly connectionStyle: ConnectionStyleConfig
   readonly portStyle: PortStyleConfig
   readonly canvasStyle: CanvasStyleConfig
   readonly interactions: InteractionConfig
   readonly metadata: ModeMetadata
+  // Optional advanced configuration used by the mode system
+  readonly behavior?: ModeBehavior
+  readonly transition?: ModeTransition
+  readonly priority?: number
+  readonly isDefault?: boolean
+  readonly dependencies?: string[]
 }
 
 // Visual Theme Configuration
@@ -244,6 +250,8 @@ export interface ModeRenderingStrategy {
   // Performance optimization
   shouldRerender(oldData: RenderData, newData: RenderData): boolean
   cleanup(): void
+  // Optional canvas transforms hook
+  applyCanvasTransformations?(element: SVGSVGElement, canvasTheme?: ModeTheme['canvas']): void
 }
 
 // Render Data Interfaces
@@ -254,7 +262,7 @@ export interface ConnectionRenderData {
   readonly selected: boolean
   readonly hovered: boolean
   readonly dataType: string
-  readonly metadata: Record<string, any>
+  readonly metadata: Record<string, unknown>
 }
 
 export interface PortRenderData {
@@ -265,7 +273,7 @@ export interface PortRenderData {
   readonly connected: boolean
   readonly hovered: boolean
   readonly selected: boolean
-  readonly metadata: Record<string, any>
+  readonly metadata: Record<string, unknown>
 }
 
 export interface CanvasRenderData {
@@ -273,7 +281,7 @@ export interface CanvasRenderData {
   readonly transform: Transform2D
   readonly zoom: number
   readonly pan: Point2D
-  readonly metadata: Record<string, any>
+  readonly metadata: Record<string, unknown>
 }
 
 export interface RenderData {
@@ -304,27 +312,29 @@ export interface Transform2D {
 
 // Mode Manager Interface
 export interface ModeManager {
-  readonly currentMode: ModeDefinition | null
-  readonly availableModes: ModeDefinition[]
-  
   registerMode(mode: ModeDefinition): void
   unregisterMode(modeId: string): void
-  switchMode(modeId: string): Promise<void>
   getMode(modeId: string): ModeDefinition | null
-  cloneMode(modeId: string, newId: string): ModeDefinition | null
-  
-  // Event handling
-  onModeChanged(callback: (mode: ModeDefinition) => void): () => void
-  onModeRegistered(callback: (mode: ModeDefinition) => void): () => void
-  onModeUnregistered(callback: (modeId: string) => void): () => void
+  getAllModes(): ModeDefinition[]
+  getCurrentMode(): ModeDefinition | null
+  switchMode(modeId: string): Promise<void>
+  canSwitchToMode(modeId: string): boolean
+  addObserver(observer: ModeSystemObserver): void
+  removeObserver(observer: ModeSystemObserver): void
+  createContext(): ModeSystemContext
+  getModeHistory(): Array<{ modeId: string; timestamp: number; duration?: number }>
+  bulkRegisterModes(modes: ModeDefinition[]): void
+  cleanup(): void
 }
 
 // Mode Factory Interface (Factory Pattern)  
 export interface ModeFactory {
-  createMode(type: string, config?: Partial<ModeDefinition>): ModeDefinition
-  createRenderingStrategy(mode: ModeDefinition): ModeRenderingStrategy
-  validateMode(mode: ModeDefinition): ValidationResult
-  cloneMode(source: ModeDefinition, overrides?: Partial<ModeDefinition>): ModeDefinition
+  createMode(config: Partial<Omit<ModeDefinition, 'theme'>> & { theme?: Partial<ModeTheme> }): ModeDefinition
+  createRenderingStrategy(modeId: string): ModeRenderingStrategy
+  validateModeConfiguration(config: Partial<Omit<ModeDefinition, 'theme'>> & { theme?: Partial<ModeTheme> }): boolean
+  cloneMode(baseModeId: string, overrides: Partial<Omit<ModeDefinition, 'theme'>> & { theme?: Partial<ModeTheme> }): ModeDefinition
+  getMode(modeId: string): ModeDefinition | null
+  getAvailableModes(): ModeIdentifier[]
 }
 
 export interface ValidationResult {
@@ -350,7 +360,7 @@ export interface ModeEvent {
   readonly type: string
   readonly mode: ModeDefinition
   readonly timestamp: number
-  readonly data?: any
+  readonly data?: unknown
 }
 
 export type ModeEventHandler = (event: ModeEvent) => void
@@ -363,5 +373,74 @@ export interface ModePerformanceMetrics {
   readonly cacheHitRate: number
   readonly lastUpdated: Date
 }
+
+// Extended Mode System Types
+export interface ModeBehavior {
+  readonly allowNodeCreation: boolean
+  readonly allowNodeDeletion: boolean
+  readonly allowConnectionCreation: boolean
+  readonly allowConnectionDeletion: boolean
+  readonly enableDragAndDrop: boolean
+  readonly enableMultiSelection: boolean
+  readonly enableContextMenu: boolean
+  readonly enableKeyboardShortcuts: boolean
+  readonly autoLayout: boolean
+  readonly snapToGrid: boolean
+  readonly showPortLabels: boolean
+  readonly showConnectionLabels: boolean
+  readonly enablePortTypeValidation: boolean
+  readonly enableExecutionVisualization: boolean
+}
+
+export interface ModeTransition {
+  readonly duration: number
+  readonly easing: string
+  readonly staggerDelay: number
+  readonly animateConnections: boolean
+  readonly animatePorts: boolean
+  readonly animateNodes: boolean
+  readonly animateCanvas: boolean
+}
+
+export interface ModeSystemConfig {
+  readonly enableTransitions: boolean
+  readonly transitionDuration: number
+  readonly enableValidation: boolean
+  readonly enableCaching: boolean
+  readonly maxCacheSize: number
+  readonly debugMode: boolean
+  readonly defaultModeId: string
+}
+
+export type ModeSystemEvent =
+  | { type: 'MODE_REGISTERED'; modeId: string }
+  | { type: 'MODE_UNREGISTERED'; modeId: string }
+  | { type: 'MODE_SWITCH_STARTED'; fromModeId?: string; toModeId: string }
+  | { type: 'MODE_SWITCH_COMPLETED'; modeId: string }
+  | { type: 'MODE_SWITCH_FAILED'; modeId: string; error: string }
+
+export interface ModeSystemObserver {
+  onModeSystemEvent(event: ModeSystemEvent): void
+}
+
+export interface ModeSystemContext {
+  readonly modeManager: ModeManager
+  readonly modeFactory: ModeFactory
+  readonly currentMode: ModeDefinition | null
+  readonly isTransitioning: boolean
+  readonly observers: ModeSystemObserver[]
+}
+
+export interface ModeIdentifier {
+  readonly id: string
+  readonly name: string
+  readonly description: string
+}
+
+// Helpful aliases for theme sections
+export type ConnectionTheme = NonNullable<ModeTheme['connections']>
+export type PortTheme = NonNullable<ModeTheme['ports']>
+export type CanvasTheme = NonNullable<ModeTheme['canvas']>
+export type NodeTheme = NonNullable<ModeTheme['nodes']>
 
 // Note: All interfaces are already exported individually above

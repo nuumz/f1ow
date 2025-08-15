@@ -27,11 +27,5 @@ export type { Connection } from './hooks/useConnections'
 export type { NodeVariant } from './components/nodes/NodeRenderer'
 
 // Export context types for backward compatibility
-export type { 
-  WorkflowState, 
-  WorkflowAction, 
-  ExecutionState, 
-  CanvasTransform, 
-  ConnectionState, 
-  UIState 
-} from './contexts/WorkflowContext'
+export type { WorkflowState, WorkflowAction } from './contexts/WorkflowContext'
+export type { ExecutionState, CanvasTransform, ConnectionState, UIState } from './contexts/WorkflowContextExports'

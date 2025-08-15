@@ -17,7 +17,7 @@ import type {
 
 import { modeFactory } from '../modes/mode-factory'
 import { RenderingStrategyFactory } from '../modes/rendering-strategies'
-import { ALL_MODES, getDefaultMode } from '../modes/mode-definitions'
+import { WORKFLOW_MODE, ARCHITECTURE_MODE, DEBUG_MODE } from '../modes/mode-definitions'
 
 /**
  * Mode transition state management
@@ -145,7 +145,7 @@ export class ModeManager implements IModeManager {
    * Lists all registered modes
    */
   getAllModes(): ModeDefinition[] {
-    return Array.from(this.modes.values()).sort((a, b) => a.priority - b.priority)
+  return Array.from(this.modes.values()).sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
   }
 
   /**
@@ -299,7 +299,7 @@ export class ModeManager implements IModeManager {
   // Private implementation methods
 
   private initializeBuiltInModes(): void {
-    ALL_MODES.forEach(mode => {
+    [WORKFLOW_MODE, ARCHITECTURE_MODE, DEBUG_MODE].forEach(mode => {
       this.modes.set(mode.id, mode)
     })
   }
@@ -308,9 +308,8 @@ export class ModeManager implements IModeManager {
     if (this.modes.has(modeId)) {
       this.currentModeId = modeId
     } else {
-      console.warn(`[ModeManager] Mode '${modeId}' not found, using default`)
-      const defaultMode = getDefaultMode()
-      this.currentModeId = defaultMode.id
+  console.warn(`[ModeManager] Mode '${modeId}' not found, using workflow`)
+  this.currentModeId = 'workflow'
     }
   }
 
@@ -325,7 +324,7 @@ export class ModeManager implements IModeManager {
       fromModeId,
       toModeId,
       startTime: Date.now(),
-      duration: this.config.enableTransitions ? toMode.transition.duration : 0
+  duration: this.config.enableTransitions ? (toMode.transition?.duration ?? 0) : 0
     }
 
     this.notifyObservers({
@@ -339,8 +338,8 @@ export class ModeManager implements IModeManager {
       await this.applyModeChanges(toMode)
       
       // Wait for transition if enabled
-      if (this.config.enableTransitions && toMode.transition.duration > 0) {
-        await this.waitForTransition(toMode.transition.duration)
+      if (this.config.enableTransitions && (toMode.transition?.duration ?? 0) > 0) {
+        await this.waitForTransition(toMode.transition!.duration)
       }
 
       // Complete switch
@@ -371,14 +370,14 @@ export class ModeManager implements IModeManager {
     try {
       RenderingStrategyFactory.createStrategy(mode.id)
     } catch (error) {
-      console.warn(`[ModeManager] No rendering strategy for mode ${mode.id}`)
+      console.warn(`[ModeManager] No rendering strategy for mode ${mode.id}` , error)
     }
   }
 
   private applyCSSCustomProperties(mode: ModeDefinition): void {
     const root = document.documentElement
     
-    Object.entries(mode.theme.customProperties).forEach(([property, value]) => {
+  Object.entries(mode.theme.customProperties || {}).forEach(([property, value]) => {
       root.style.setProperty(property, value)
     })
   }
@@ -391,7 +390,7 @@ export class ModeManager implements IModeManager {
       canvasContainer.classList.remove('workflow-mode', 'architecture-mode', 'debug-mode')
       
       // Add new mode class
-      canvasContainer.classList.add(mode.theme.cssClassName)
+  if (mode.theme.cssClassName) canvasContainer.classList.add(mode.theme.cssClassName)
     }
   }
 
@@ -446,9 +445,7 @@ let modeManagerInstance: ModeManager | null = null
  * Gets the singleton mode manager instance
  */
 export const getModeManager = (config?: Partial<ModeSystemConfig>): ModeManager => {
-  if (!modeManagerInstance) {
-    modeManagerInstance = new ModeManager(config)
-  }
+  modeManagerInstance ??= new ModeManager(config)
   return modeManagerInstance
 }
 

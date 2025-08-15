@@ -41,7 +41,7 @@ import {
   calculateConnectionOffset,
   getConnectionFlow,
   validatePathInputs,
-  generateOrthogonalRoundedPath,
+  generateAdaptiveOrthogonalRoundedPathSmart,
   type PathConfig} from './path-generation'
 import {
   getConnectionGroupInfo as getConnectionGroupInfoCore,
@@ -52,6 +52,86 @@ export type { PortPosition } from '../types'
 export type { PathConfig, ConnectionFlow } from './path-generation'
 export { generateOrthogonalRoundedPath, generateAdaptiveOrthogonalRoundedPath } from './path-generation'
 export type { AnalyzableConnection, GroupedConnection, ConnectionGroupInfo } from './connection-analysis'
+
+// Local helpers -------------------------------------------------------------
+function buildNodeBox(node: WorkflowNode) {
+  const dims = getShapeAwareDimensions(node)
+  const width = dims.width || 200
+  const height = dims.height || 80
+  return { x: node.x - width / 2, y: node.y - height / 2, width, height }
+}
+
+// Detect which side of the node a port position lies on to infer segment orientation
+function detectPortSide(
+  node: WorkflowNode,
+  portId: string,
+  pos: PortPosition
+): 'top' | 'bottom' | 'left' | 'right' | 'unknown' {
+  // Virtual side ports are explicit
+  if (portId === '__side-top') return 'top'
+  if (portId === '__side-right') return 'right'
+  if (portId === '__side-bottom') return 'bottom'
+  if (portId === '__side-left') return 'left'
+
+  const dims = getShapeAwareDimensions(node)
+  const halfW = (dims.width || 200) / 2
+  const halfH = (dims.height || 80) / 2
+  const leftX = node.x - halfW
+  const rightX = node.x + halfW
+  const topY = node.y - halfH
+  const bottomY = node.y + halfH
+  const eps = 0.5
+
+  if (Math.abs(pos.x - rightX) <= eps) return 'right'
+  if (Math.abs(pos.x - leftX) <= eps) return 'left'
+  if (Math.abs(pos.y - topY) <= eps) return 'top'
+  if (Math.abs(pos.y - bottomY) <= eps) return 'bottom'
+
+  // Fallback: choose nearest side
+  const dxLeft = Math.abs(pos.x - leftX)
+  const dxRight = Math.abs(pos.x - rightX)
+  const dyTop = Math.abs(pos.y - topY)
+  const dyBottom = Math.abs(pos.y - bottomY)
+  const minX = Math.min(dxLeft, dxRight)
+  const minY = Math.min(dyTop, dyBottom)
+  if (minX < minY) return dxLeft < dxRight ? 'left' : 'right'
+  return dyTop < dyBottom ? 'top' : 'bottom'
+}
+
+function sideToOrientation(side: 'top' | 'bottom' | 'left' | 'right' | 'unknown'): 'vertical' | 'horizontal' {
+  if (side === 'top' || side === 'bottom') return 'vertical'
+  return 'horizontal'
+}
+
+// Choose best target side based on approach vector (leadPoint -> target center)
+function chooseAutoTargetSide(
+  approachFrom: PortPosition,
+  targetNode: WorkflowNode
+): '__side-left' | '__side-right' | '__side-top' | '__side-bottom' {
+  const cx = targetNode.x
+  const cy = targetNode.y
+  const dx = cx - approachFrom.x
+  const dy = cy - approachFrom.y
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    // Horizontal approach dominates
+    return dx > 0 ? '__side-left' : '__side-right'
+  }
+  // Vertical approach dominates
+  return dy > 0 ? '__side-top' : '__side-bottom'
+}
+
+function chooseEndOrientationFromBox(
+  approachFrom: PortPosition,
+  box?: { x: number; y: number; width: number; height: number }
+): 'vertical' | 'horizontal' | undefined {
+  if (!box) return undefined
+  const cx = box.x + box.width / 2
+  const cy = box.y + box.height / 2
+  const dx = cx - approachFrom.x
+  const dy = cy - approachFrom.y
+  if (Math.abs(dx) >= Math.abs(dy)) return 'horizontal'
+  return 'vertical'
+}
 
 /**
  * Calculate port position - main API function
@@ -113,7 +193,8 @@ export function calculateConnectionPreviewPath(
   previewPosition: { x: number; y: number },
   variant: NodeVariant = 'standard',
   config?: PathConfig,
-  modeId: string = 'workflow'
+  modeId: string = 'workflow',
+  hoverTargetBox?: { x: number; y: number; width: number; height: number }
 ): string {
   // Determine if this is a bottom port (include side-bottom)
   const isSourceBottomPort = isBottomPort(sourceNode, sourcePortId) || sourcePortId === '__side-bottom'
@@ -134,7 +215,17 @@ export function calculateConnectionPreviewPath(
   
   // Architecture mode should preview orthogonal (right‑angle) path with radius to match final rendering
   if (modeId === 'architecture') {
-    return generateOrthogonalRoundedPath(sourcePos, previewPosition, 16)
+    // Prefer adaptive path to better match final routing around obstacles
+    const startSide = detectPortSide(sourceNode, sourcePortId, sourcePos)
+    const startOrientation = sideToOrientation(startSide)
+    const endOrientation = chooseEndOrientationFromBox(sourcePos, hoverTargetBox)
+    const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, previewPosition, 16, {
+      clearance: 12,
+      targetBox: hoverTargetBox,
+      startOrientationOverride: startOrientation,
+      endOrientationOverride: endOrientation
+    })
+  return routed
   }
 
   // Generate curved preview path (default)
@@ -150,16 +241,16 @@ export function generateModeAwarePreviewPath(
   previewPosition: { x: number; y: number },
   modeId: string,
   variant: NodeVariant = 'standard',
-  config?: PathConfig
+  config?: PathConfig,
+  hoverTargetBox?: { x: number; y: number; width: number; height: number }
 ): string {
-  return calculateConnectionPreviewPath(sourceNode, sourcePortId, previewPosition, variant, config, modeId)
+  return calculateConnectionPreviewPath(sourceNode, sourcePortId, previewPosition, variant, config, modeId, hoverTargetBox)
 }
 
 /**
  * Generate connection path with offset for multiple connections between same nodes
  * Architecture mode uses bundled representation while workflow mode shows individual lines
  */
-// eslint-disable-next-line max-params
 export function generateMultipleConnectionPath(
   sourceNode: WorkflowNode,
   sourcePortId: string,
@@ -237,7 +328,30 @@ export function generateModeAwareConnectionPath(
       ? getVirtualSidePortPosition(targetNode, connection.targetPortId)
       : calculatePortPositionCore(targetNode, connection.targetPortId, targetType, variant)
     if (!validatePathInputs(sourcePos, targetPos)) return ''
-    return generateOrthogonalRoundedPath(sourcePos, targetPos, 16)
+    // Build boxes and obstacles for adaptive routing
+    const startSide = detectPortSide(sourceNode, connection.sourcePortId, sourcePos)
+    const startOrientation = sideToOrientation(startSide)
+    // Auto-select target side if targetPortId is not an explicit virtual side
+    type SidePortId = '__side-left' | '__side-right' | '__side-top' | '__side-bottom'
+    let targetSidePortId: SidePortId
+    if (isVirtualSidePortId(connection.targetPortId)) {
+      const tp = connection.targetPortId
+      // Narrow to side-port union (fallback to auto if unexpected id)
+      targetSidePortId = (tp === '__side-left' || tp === '__side-right' || tp === '__side-top' || tp === '__side-bottom')
+        ? tp
+        : chooseAutoTargetSide(sourcePos, targetNode)
+    } else {
+      targetSidePortId = chooseAutoTargetSide(sourcePos, targetNode)
+    }
+    const autoTargetPos = getVirtualSidePortPosition(targetNode, targetSidePortId)
+    const endOrientation = sideToOrientation(detectPortSide(targetNode, targetSidePortId, autoTargetPos))
+  const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, autoTargetPos, 16, {
+      clearance: 12,
+      targetBox: buildNodeBox(targetNode),
+      startOrientationOverride: startOrientation,
+      endOrientationOverride: endOrientation
+    })
+  return routed
   }
 
   // Fallback to existing bezier

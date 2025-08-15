@@ -17,8 +17,8 @@ export type {
   ModeTransition,
   ModeDefinition,
   ModeRenderingStrategy,
-  ModeFactory,
-  ModeManager,
+  ModeFactory as ModeFactoryType,
+  ModeManager as ModeManagerType,
   ModeSystemEvent,
   ModeSystemObserver,
   ModeSystemContext,
@@ -26,27 +26,17 @@ export type {
 } from '../types/mode-system'
 
 // Pre-built mode definitions
-export {
+import {
   WORKFLOW_MODE,
   ARCHITECTURE_MODE,
-  DEBUG_MODE,
-  ALL_MODES,
-  MODES_BY_ID,
-  getDefaultMode,
-  isValidModeId,
-  getModesByCategory
+  DEBUG_MODE
 } from './mode-definitions'
 
 // Rendering strategies
-export {
-  WorkflowRenderingStrategy,
-  ArchitectureRenderingStrategy,
-  DebugRenderingStrategy,
-  RenderingStrategyFactory
-} from './rendering-strategies'
+import { RenderingStrategyFactory } from './rendering-strategies'
 
 // Factory implementation
-export {
+import {
   ModeFactory,
   modeFactory,
   createWorkflowMode,
@@ -54,13 +44,11 @@ export {
   createDebugMode,
   createCustomMode
 } from './mode-factory'
+export { ModeFactory, modeFactory, createWorkflowMode, createArchitectureMode, createDebugMode, createCustomMode }
 
 // Mode manager service
-export {
-  ModeManager,
-  getModeManager,
-  resetModeManager
-} from '../services/mode-manager'
+import { ModeManager, getModeManager, resetModeManager } from '../services/mode-manager'
+export { ModeManager, getModeManager, resetModeManager }
 
 // React hooks
 export {
@@ -81,7 +69,7 @@ export class ModeSystemUtils {
   /**
    * Initialize the mode system with default configuration
    */
-  static initialize(config?: Partial<ModeSystemConfig>) {
+  static initialize(config?: Partial<import('../types/mode-system').ModeSystemConfig>) {
     return getModeManager(config)
   }
 
@@ -91,12 +79,13 @@ export class ModeSystemUtils {
   static createSimpleCustomMode(
     baseModeId: string,
     customName: string,
-    themeOverrides?: Partial<ModeTheme>
-  ): ModeDefinition {
+    themeOverrides?: Partial<import('../types/mode-system').ModeTheme>
+  ): import('../types/mode-system').ModeDefinition {
     return modeFactory.cloneMode(baseModeId, {
       id: `custom-${baseModeId}-${Date.now()}`,
       name: customName,
-      theme: themeOverrides
+      // theme is merged by factory; pass only overrides (optional)
+      ...(themeOverrides ? { theme: themeOverrides } : {})
     })
   }
 
@@ -105,25 +94,26 @@ export class ModeSystemUtils {
    */
   static applyThemeToElement(
     element: HTMLElement | SVGElement,
-    mode: ModeDefinition
+    mode: import('../types/mode-system').ModeDefinition
   ): void {
-    Object.entries(mode.theme.customProperties).forEach(([property, value]) => {
-      element.style.setProperty(property, value)
+    const props = mode.theme.customProperties || {}
+    Object.entries(props).forEach(([property, value]) => {
+      element.style.setProperty(property, String(value))
     })
-    element.classList.add(mode.theme.cssClassName)
+    if (mode.theme.cssClassName) element.classList.add(mode.theme.cssClassName)
   }
 
   /**
    * Get theme colors for external use
    */
-  static getThemeColors(mode: ModeDefinition) {
+  static getThemeColors(mode: import('../types/mode-system').ModeDefinition) {
     const theme = mode.theme
     return {
-      primary: theme.customProperties['--mode-primary-color'] || '#2563eb',
-      secondary: theme.customProperties['--mode-secondary-color'] || '#059669',
-      background: theme.customProperties['--mode-background'] || '#ffffff',
-      text: theme.customProperties['--mode-text-color'] || '#1e293b',
-      border: theme.customProperties['--mode-border-color'] || '#e2e8f0'
+      primary: theme.customProperties?.['--mode-primary-color'] || '#2563eb',
+      secondary: theme.customProperties?.['--mode-secondary-color'] || '#059669',
+      background: theme.customProperties?.['--mode-background'] || '#ffffff',
+      text: theme.customProperties?.['--mode-text-color'] || '#1e293b',
+      border: theme.customProperties?.['--mode-border-color'] || '#e2e8f0'
     }
   }
 
@@ -131,18 +121,18 @@ export class ModeSystemUtils {
    * Validate mode compatibility with existing workflow
    */
   static validateModeCompatibility(
-    mode: ModeDefinition,
+  mode: import('../types/mode-system').ModeDefinition,
     workflowData: { nodes: unknown[]; connections: unknown[] }
   ): { compatible: boolean; warnings: string[] } {
     const warnings: string[] = []
     let compatible = true
 
     // Check if mode supports required features
-    if (workflowData.nodes.length > 0 && !mode.behavior.allowNodeCreation) {
+  if (workflowData.nodes.length > 0 && !(mode.behavior?.allowNodeCreation ?? true)) {
       warnings.push('Mode does not support node creation')
     }
 
-    if (workflowData.connections.length > 0 && !mode.behavior.allowConnectionCreation) {
+  if (workflowData.connections.length > 0 && !(mode.behavior?.allowConnectionCreation ?? true)) {
       warnings.push('Mode does not support connection creation')
     }
 
@@ -167,7 +157,7 @@ export class ModeSystemUtils {
  * Event emitter for mode system global events
  */
 export class ModeSystemEventBus {
-  private static listeners = new Map<string, Array<(data: unknown) => void>>()
+  private static readonly listeners = new Map<string, Array<(data: unknown) => void>>()
 
   static on(event: string, callback: (data: unknown) => void): () => void {
     if (!this.listeners.has(event)) {

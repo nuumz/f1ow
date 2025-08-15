@@ -44,7 +44,7 @@ export function useWorkflowOperations() {
 
   const updateNode = useCallback((nodeId: string, updates: Partial<WorkflowNode>) => {
     dispatch({ type: 'UPDATE_NODE', payload: { nodeId, updates } })
-  }, [dispatch])
+  }, [dispatch, state])
 
   const deleteNode = useCallback((nodeId: string) => {
     dispatch({ type: 'DELETE_NODE', payload: nodeId })
@@ -63,6 +63,10 @@ export function useWorkflowOperations() {
     targetNodeId: string,
     targetPortId: string
   ) => {
+    // Note: targetPortId kept for signature compatibility
+    if (!targetPortId) {
+      // no-op
+    }
     console.log('🏗️ Architecture mode: Creating connection with relaxed validation for multiple endpoints')
     
     // Count existing connections between these nodes

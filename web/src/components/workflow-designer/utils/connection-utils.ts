@@ -218,9 +218,15 @@ export function calculateConnectionPreviewPath(
     // Prefer adaptive path to better match final routing around obstacles
     const startSide = detectPortSide(sourceNode, sourcePortId, sourcePos)
     const startOrientation = sideToOrientation(startSide)
-    const endOrientation = chooseEndOrientationFromBox(sourcePos, hoverTargetBox)
-    const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, previewPosition, 16, {
-      clearance: 12,
+    // When starting from a bottom port, snap to target's top edge center if a hover target box is known
+    const previewEnd = (isSourceBottomPort && hoverTargetBox)
+      ? { x: hoverTargetBox.x + hoverTargetBox.width / 2, y: hoverTargetBox.y }
+      : previewPosition
+    const endOrientation = (isSourceBottomPort && hoverTargetBox)
+      ? 'vertical'
+      : chooseEndOrientationFromBox(sourcePos, hoverTargetBox)
+    const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, previewEnd, 16, {
+      clearance: 10, // Minimal clearance for tight arrow positioning
       targetBox: hoverTargetBox,
       startOrientationOverride: startOrientation,
       endOrientationOverride: endOrientation
@@ -251,17 +257,28 @@ export function generateModeAwarePreviewPath(
  * Generate connection path with offset for multiple connections between same nodes
  * Architecture mode uses bundled representation while workflow mode shows individual lines
  */
-export function generateMultipleConnectionPath(
-  sourceNode: WorkflowNode,
-  sourcePortId: string,
-  targetNode: WorkflowNode,
-  targetPortId: string,
-  connectionIndex: number = 0,
-  totalConnections: number = 1,
-  variant: NodeVariant = 'standard',
-  mode: 'workflow' | 'architecture' = 'workflow',
+export function generateMultipleConnectionPath(opts: {
+  sourceNode: WorkflowNode
+  sourcePortId: string
+  targetNode: WorkflowNode
+  targetPortId: string
+  connectionIndex?: number
+  totalConnections?: number
+  variant?: NodeVariant
+  mode?: 'workflow' | 'architecture'
   config?: PathConfig
-): string {
+}): string {
+  const {
+    sourceNode,
+    sourcePortId,
+    targetNode,
+    targetPortId,
+    connectionIndex = 0,
+    totalConnections = 1,
+    variant = 'standard',
+    mode = 'workflow',
+    config
+  } = opts
   // If only one connection, use base path
   if (totalConnections <= 1) {
     return generateVariantAwareConnectionPath(sourceNode, sourcePortId, targetNode, targetPortId, variant, config)
@@ -316,42 +333,7 @@ export function generateModeAwareConnectionPath(
   if (!sourceNode || !targetNode) return ''
 
   if (modeId === 'architecture') {
-  // Use port positioning (including virtual side-port anchors) for start/end, then orthogonal path
-    const isSourceBottom = isBottomPort(sourceNode, connection.sourcePortId) || connection.sourcePortId === '__side-bottom'
-    const isTargetBottom = isBottomPort(targetNode, connection.targetPortId) || connection.targetPortId === '__side-bottom'
-    const sourceType = isSourceBottom ? 'bottom' : 'output'
-    const targetType = isTargetBottom ? 'bottom' : 'input'
-    const sourcePos = isVirtualSidePortId(connection.sourcePortId)
-      ? getVirtualSidePortPosition(sourceNode, connection.sourcePortId)
-      : calculatePortPositionCore(sourceNode, connection.sourcePortId, sourceType, variant)
-    const targetPos = isVirtualSidePortId(connection.targetPortId)
-      ? getVirtualSidePortPosition(targetNode, connection.targetPortId)
-      : calculatePortPositionCore(targetNode, connection.targetPortId, targetType, variant)
-    if (!validatePathInputs(sourcePos, targetPos)) return ''
-    // Build boxes and obstacles for adaptive routing
-    const startSide = detectPortSide(sourceNode, connection.sourcePortId, sourcePos)
-    const startOrientation = sideToOrientation(startSide)
-    // Auto-select target side if targetPortId is not an explicit virtual side
-    type SidePortId = '__side-left' | '__side-right' | '__side-top' | '__side-bottom'
-    let targetSidePortId: SidePortId
-    if (isVirtualSidePortId(connection.targetPortId)) {
-      const tp = connection.targetPortId
-      // Narrow to side-port union (fallback to auto if unexpected id)
-      targetSidePortId = (tp === '__side-left' || tp === '__side-right' || tp === '__side-top' || tp === '__side-bottom')
-        ? tp
-        : chooseAutoTargetSide(sourcePos, targetNode)
-    } else {
-      targetSidePortId = chooseAutoTargetSide(sourcePos, targetNode)
-    }
-    const autoTargetPos = getVirtualSidePortPosition(targetNode, targetSidePortId)
-    const endOrientation = sideToOrientation(detectPortSide(targetNode, targetSidePortId, autoTargetPos))
-  const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, autoTargetPos, 16, {
-      clearance: 12,
-      targetBox: buildNodeBox(targetNode),
-      startOrientationOverride: startOrientation,
-      endOrientationOverride: endOrientation
-    })
-  return routed
+    return generateArchitectureModeConnectionPath(sourceNode, targetNode, connection, variant)
   }
 
   // Fallback to existing bezier
@@ -363,6 +345,54 @@ export function generateModeAwareConnectionPath(
     variant,
     config
   )
+}
+
+// Extracted to reduce cognitive complexity of generateModeAwareConnectionPath
+function generateArchitectureModeConnectionPath(
+  sourceNode: WorkflowNode,
+  targetNode: WorkflowNode,
+  connection: { sourceNodeId: string; sourcePortId: string; targetNodeId: string; targetPortId: string },
+  variant: NodeVariant
+): string {
+  // Use port positioning (including virtual side-port anchors) for start/end, then orthogonal path
+  const isSourceBottom = isBottomPort(sourceNode, connection.sourcePortId) || connection.sourcePortId === '__side-bottom'
+  const isTargetBottom = isBottomPort(targetNode, connection.targetPortId) || connection.targetPortId === '__side-bottom'
+  const sourceType = isSourceBottom ? 'bottom' : 'output'
+  const targetType = isTargetBottom ? 'bottom' : 'input'
+  const sourcePos = isVirtualSidePortId(connection.sourcePortId)
+    ? getVirtualSidePortPosition(sourceNode, connection.sourcePortId)
+    : calculatePortPositionCore(sourceNode, connection.sourcePortId, sourceType, variant)
+  const targetPos = isVirtualSidePortId(connection.targetPortId)
+    ? getVirtualSidePortPosition(targetNode, connection.targetPortId)
+    : calculatePortPositionCore(targetNode, connection.targetPortId, targetType, variant)
+  if (!validatePathInputs(sourcePos, targetPos)) return ''
+  // Build boxes and obstacles for adaptive routing
+  const startSide = detectPortSide(sourceNode, connection.sourcePortId, sourcePos)
+  const startOrientation = sideToOrientation(startSide)
+  // Auto-select target side if targetPortId is not an explicit virtual side
+  type SidePortId = '__side-left' | '__side-right' | '__side-top' | '__side-bottom'
+  let targetSidePortId: SidePortId
+  if (isSourceBottom) {
+    // Architecture rule: when starting from bottom port, always connect to target's top port
+    targetSidePortId = '__side-top'
+  } else if (isVirtualSidePortId(connection.targetPortId)) {
+    const tp = connection.targetPortId
+    // Narrow to side-port union (fallback to auto if unexpected id)
+    targetSidePortId = (tp === '__side-left' || tp === '__side-right' || tp === '__side-top' || tp === '__side-bottom')
+      ? tp
+      : chooseAutoTargetSide(sourcePos, targetNode)
+  } else {
+    targetSidePortId = chooseAutoTargetSide(sourcePos, targetNode)
+  }
+  const autoTargetPos = getVirtualSidePortPosition(targetNode, targetSidePortId)
+  const endOrientation = sideToOrientation(detectPortSide(targetNode, targetSidePortId, autoTargetPos))
+  const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, autoTargetPos, 16, {
+    clearance: 10, // Minimal clearance for tight arrow positioning
+    targetBox: buildNodeBox(targetNode),
+    startOrientationOverride: startOrientation,
+    endOrientationOverride: endOrientation
+  })
+  return routed
 }
 
 /**

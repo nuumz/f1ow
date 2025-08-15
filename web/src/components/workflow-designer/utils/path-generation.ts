@@ -53,16 +53,20 @@ function projectPointToBoxSide(
   const absDx = Math.abs(dx)
   const absDy = Math.abs(dy)
   const pad = Math.min(Math.max(radius, 4), Math.min(box.width, box.height) / 2)
+  
+  // Add extra clearance for arrow markers to prevent overlap
+  const arrowClearance = 8; // Minimal space for arrow marker
+  
   if (absDx >= absDy) {
     if (dx >= 0) {
-      return { x: box.x + box.width, y: Math.min(box.y + box.height - pad, Math.max(box.y + pad, point.y)) }
+      return { x: box.x + box.width + arrowClearance, y: Math.min(box.y + box.height - pad, Math.max(box.y + pad, point.y)) }
     }
-    return { x: box.x, y: Math.min(box.y + box.height - pad, Math.max(box.y + pad, point.y)) }
+    return { x: box.x - arrowClearance, y: Math.min(box.y + box.height - pad, Math.max(box.y + pad, point.y)) }
   }
   if (dy >= 0) {
-    return { y: box.y + box.height, x: Math.min(box.x + box.width - pad, Math.max(box.x + pad, point.x)) }
+    return { y: box.y + box.height + arrowClearance, x: Math.min(box.x + box.width - pad, Math.max(box.x + pad, point.x)) }
   }
-  return { y: box.y, x: Math.min(box.x + box.width - pad, Math.max(box.x + pad, point.x)) }
+  return { y: box.y - arrowClearance, x: Math.min(box.x + box.width - pad, Math.max(box.x + pad, point.x)) }
 }
 
 /** Build a sharp orthogonal (Manhattan) SVG path from ordered waypoints */

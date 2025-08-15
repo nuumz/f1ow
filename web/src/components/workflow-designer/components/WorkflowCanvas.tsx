@@ -1044,6 +1044,167 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     }
   }, [MAX_CACHE_SIZE, CACHE_CLEANUP_THRESHOLD]);
 
+
+  // Helper function to create a filled polygon from a path with thickness
+  const createFilledPolygonFromPath = useCallback((pathString: string, thickness: number = 6): string => {
+    if (!pathString) return '';
+    
+    try {
+      // Create a temporary SVG path element in memory to get path data
+      const tempSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      tempSvg.style.position = 'absolute';
+      tempSvg.style.visibility = 'hidden';
+      tempSvg.style.width = '1px';
+      tempSvg.style.height = '1px';
+      
+      const tempPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      tempPath.setAttribute('d', pathString);
+      tempSvg.appendChild(tempPath);
+      
+      // Add to SVG container temporarily (not body)
+      const svgContainer = svgRef.current;
+      if (!svgContainer) return pathString;
+      svgContainer.appendChild(tempSvg);
+      
+      // Get total length and sample points along the path
+      const pathLength = tempPath.getTotalLength();
+      const numSamples = Math.max(20, Math.floor(pathLength / 10)); // Sample every 10 pixels
+      const points: Array<{x: number, y: number}> = [];
+      
+      for (let i = 0; i <= numSamples; i++) {
+        const distance = (i / numSamples) * pathLength;
+        const point = tempPath.getPointAtLength(distance);
+        points.push({ x: point.x, y: point.y });
+      }
+      
+      // Remove temporary SVG
+      svgContainer.removeChild(tempSvg);
+      
+      if (points.length < 2) return pathString;
+      
+      // Calculate perpendicular offsets for each point
+      const leftPoints: Array<{x: number, y: number}> = [];
+      const rightPoints: Array<{x: number, y: number}> = [];
+      
+      for (let i = 0; i < points.length; i++) {
+        const curr = points[i];
+        let dx = 0, dy = 0;
+        
+        if (i === 0) {
+          // First point - use direction to next point
+          const next = points[i + 1];
+          dx = next.x - curr.x;
+          dy = next.y - curr.y;
+        } else if (i === points.length - 1) {
+          // Last point - use direction from previous point
+          const prev = points[i - 1];
+          dx = curr.x - prev.x;
+          dy = curr.y - prev.y;
+        } else {
+          // Middle points - use average of directions
+          const prev = points[i - 1];
+          const next = points[i + 1];
+          dx = next.x - prev.x;
+          dy = next.y - prev.y;
+        }
+        
+        // Normalize direction vector
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len > 0) {
+          dx /= len;
+          dy /= len;
+        } else {
+          dx = 0;
+          dy = 1;
+        }
+        
+        // Calculate perpendicular vector (rotate 90 degrees)
+        const perpX = -dy * thickness;
+        const perpY = dx * thickness;
+        
+        // Add offset points on both sides
+        leftPoints.push({ x: curr.x + perpX, y: curr.y + perpY });
+        rightPoints.push({ x: curr.x - perpX, y: curr.y - perpY });
+      }
+      
+      // Build the polygon path
+      let polygonPath = `M ${leftPoints[0].x} ${leftPoints[0].y}`;
+      
+      // Trace left side
+      for (let i = 1; i < leftPoints.length; i++) {
+        polygonPath += ` L ${leftPoints[i].x} ${leftPoints[i].y}`;
+      }
+      
+      // Add arc at the end
+      const endRadius = thickness;
+      polygonPath += ` A ${endRadius} ${endRadius} 0 0 1 ${rightPoints[rightPoints.length - 1].x} ${rightPoints[rightPoints.length - 1].y}`;
+      
+      // Trace right side (in reverse)
+      for (let i = rightPoints.length - 2; i >= 0; i--) {
+        polygonPath += ` L ${rightPoints[i].x} ${rightPoints[i].y}`;
+      }
+      
+      // Add arc at the start and close path
+      polygonPath += ` A ${endRadius} ${endRadius} 0 0 1 ${leftPoints[0].x} ${leftPoints[0].y}`;
+      polygonPath += ' Z';
+      
+      return polygonPath;
+    } catch (error) {
+      console.warn('Error creating filled polygon:', error);
+      return pathString;
+    }
+  }, [svgRef]);
+
+  // Helper function to trim connection path to prevent arrow overlap
+  const trimPathForArrow = useCallback((pathString: string, trimLength: number = 4): string => {
+    if (!pathString || trimLength <= 0) return pathString;
+    
+    try {
+      // Create a temporary SVG path element to get path data
+      const tempSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      tempSvg.style.position = 'absolute';
+      tempSvg.style.visibility = 'hidden';
+      tempSvg.style.width = '1px';
+      tempSvg.style.height = '1px';
+      
+      const tempPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      tempPath.setAttribute('d', pathString);
+      tempSvg.appendChild(tempPath);
+      
+      // Add to SVG container temporarily
+      const svgContainer = svgRef.current;
+      if (!svgContainer) return pathString;
+      svgContainer.appendChild(tempSvg);
+      
+      // Get total length and calculate new end point
+      const pathLength = tempPath.getTotalLength();
+      if (pathLength <= trimLength * 2) {
+        svgContainer.removeChild(tempSvg);
+        return pathString;
+      }
+      
+      // Get the point that is trimLength away from the end
+      const newEndLength = pathLength - trimLength;
+      const newEndPoint = tempPath.getPointAtLength(newEndLength);
+      
+      // Remove temporary SVG
+      svgContainer.removeChild(tempSvg);
+      
+      // Parse the original path and modify the end point
+      const pathCommands = pathString.match(/[MLCQSATHVZmlcqsathvz][^MLCQSATHVZmlcqsathvz]*/g);
+      if (!pathCommands || pathCommands.length < 2) return pathString;
+      
+      // Replace the last command with a line to the new end point
+      const modifiedCommands = pathCommands.slice(0, -1);
+      modifiedCommands.push(`L ${newEndPoint.x} ${newEndPoint.y}`);
+      
+      return modifiedCommands.join(' ');
+    } catch (error) {
+      console.warn('Error trimming path for arrow:', error);
+      return pathString;
+    }
+  }, [svgRef]);
+
   // Memoized connection path calculation with drag position support and memory management
   const getConnectionPath = useCallback(
     (connection: Connection, useDragPositions = false) => {
@@ -1100,7 +1261,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           )
         : nodes;
 
-      const path = generateModeAwareConnectionPath(
+      const rawPath = generateModeAwareConnectionPath(
         {
           sourceNodeId: connection.sourceNodeId,
           sourcePortId: connection.sourcePortId,
@@ -1111,6 +1272,9 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         nodeVariant,
         workflowContextState.designerMode || "workflow"
       );
+
+      // Trim path to prevent arrow marker from overlapping with target node
+      const path = trimPathForArrow(rawPath, 8);
 
       if (!useDragPositions) {
         connectionPathCacheRef.current.set(cacheKey, path);
@@ -1128,6 +1292,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       cleanupConnectionCache,
       workflowContextState.designerMode,
       nodes,
+      trimPathForArrow,
     ]
   );
 
@@ -1574,7 +1739,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     bg.attr("width", "100%").attr("height", "100%").attr("fill", "#f7f7f7");
 
     // Arrow markers with direction-aware positioning and optimized refX
-    const createArrowMarker = (
+  const createArrowMarker = (
       id: string,
       color: string,
       size = 14,
@@ -1588,23 +1753,28 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         .attr("orient", "auto")
         .attr("markerUnits", "userSpaceOnUse");
 
+  // Pad to keep arrow tip clearly before the path end to avoid overlaying port shapes
+  // Use a larger proportional pad so even bigger markers won't overlap ports
+  const pad = Math.max(5, Math.round(size * 0.5));
+
       if (direction === "right") {
         // Right-pointing arrow (default)
-        // refX positioned at center of arrow tip for better alignment
+        // Align the TIP slightly before the endpoint using padding
         marker
-          .attr("refX", size / 2)
+          .attr("refX", size - pad)
           .attr("refY", size / 2)
           .append("polygon")
-          .attr("points", `0,0 ${size - 1},${size / 2} 0,${size}`)
+          .attr("points", `0,0 ${size},${size / 2} 0,${size}`)
           .attr("fill", color)
           .attr("stroke", "none");
       } else {
-        // Left-pointing arrow for connections entering from left
+        // Left-pointing arrow
+        // Align the TIP slightly before the endpoint using padding
         marker
-          .attr("refX", size / 2)
+          .attr("refX", pad)
           .attr("refY", size / 2)
           .append("polygon")
-          .attr("points", `${size - 1},0 0,${size / 2} ${size - 1},${size}`)
+          .attr("points", `${size},0 0,${size / 2} ${size},${size}`)
           .attr("fill", color)
           .attr("stroke", "none");
       }
@@ -1883,31 +2053,54 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .append("g")
       .attr("class", "connection")
       .attr("data-connection-id", (d: any) => d.id)
-      .attr("class", "connection");
+      // Guardrail: prevent the group from capturing events; only hitbox should be interactive
+      .style("pointer-events", "none");
 
     // Add invisible hitbox for better hover detection (especially for dashed lines)
     connectionEnter
       .append("path")
       .attr("class", "connection-hitbox")
-      .attr("fill", "none")
+      .attr("d", (d: any) => {
+        const path = getConnectionPath(d);
+        return createFilledPolygonFromPath(path, 8);
+      })
+      // Use filled shape for hover detection
+      .attr("fill", "rgba(0, 0, 0, 0.01)")
+      .attr("stroke", "none")
+      .style("pointer-events", "all")
+      .style("cursor", "pointer")
+      // Let hitbox scale with zoom to match visible path width exactly
       .on("click", (event: any, d: any) => {
         event.stopPropagation();
         onConnectionClick(d);
       })
-      .on("mouseenter", function (this: any, _event: any, d: Connection) {
-        const connectionGroup = d3.select(this.parentNode);
+      .on("mouseenter", function (this: any, event: any, d: Connection) {
+        // Get the connection group (parent g element)
+        const connectionGroup = d3.select(this.parentNode as SVGGElement);
         const connectionPath = connectionGroup.select(".connection-path");
         const isSelected = selectedConnection?.id === d.id;
+
+        // Debug logging
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🎯 Connection hover enter:', {
+            connectionId: d.id,
+            isSelected,
+            element: this,
+            parentNode: this.parentNode,
+            connectionGroup: connectionGroup.node(),
+            connectionPath: connectionPath.node(),
+            event: event.type
+          });
+        }
 
         // Clear any pending timeout
         if (hoverTimeoutRef.current) {
           clearTimeout(hoverTimeoutRef.current);
+          hoverTimeoutRef.current = null;
         }
 
-        // Production hover effects removed - simplified styling
-
         // Apply hover immediately for non-selected connections
-        if (!isSelected) {
+        if (!isSelected && !connectionPath.empty()) {
           connectionGroup.classed("connection-hover", true);
           // Force immediate visual update on the visible path
           connectionPath
@@ -1915,28 +2108,39 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
             .attr("stroke", "#1976D2")
             .attr("stroke-width", 3)
             .attr("marker-end", getConnectionMarker(d, "hover"));
+          // Keep hitbox at fixed width for consistent hover area
         }
       })
-      .on("mouseleave", function (this: any, _event: any, d: Connection) {
-        const connectionGroup = d3.select(this.parentNode);
+      .on("mouseleave", function (this: any, event: any, d: Connection) {
+        const connectionGroup = d3.select(this.parentNode as SVGGElement);
         const connectionPath = connectionGroup.select(".connection-path");
         const isSelected = selectedConnection?.id === d.id;
 
-        // Production effects removed - using CSS-based styling
+        // Debug logging
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🎯 Connection hover leave:', {
+            connectionId: d.id,
+            isSelected,
+            event: event.type
+          });
+        }
 
         // Remove hover class
         connectionGroup.classed("connection-hover", false);
 
         // Delay the visual reset to prevent flickering
-        hoverTimeoutRef.current = setTimeout(() => {
-          if (!isSelected && !connectionGroup.classed("connection-hover")) {
-            connectionPath
-              .interrupt() // Stop any ongoing transitions
-              .attr("stroke", "white")
-              .attr("stroke-width", 2)
-              .attr("marker-end", getConnectionMarker(d, "default"));
-          }
-        }, 50); // Small delay to prevent flicker on quick mouse movements
+        if (!isSelected && !connectionPath.empty()) {
+          hoverTimeoutRef.current = setTimeout(() => {
+            if (!connectionGroup.classed("connection-hover")) {
+              connectionPath
+                .interrupt() // Stop any ongoing transitions
+                .attr("stroke", "white")
+                .attr("stroke-width", 2)
+                .attr("marker-end", getConnectionMarker(d, "default"));
+              // Keep hitbox at fixed width for consistent hover area
+            }
+          }, 50); // Small delay to prevent flicker on quick mouse movements
+        }
       });
 
     // Add visible connection path (no interaction events, use hitbox instead)
@@ -1963,10 +2167,21 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
     const connectionUpdate = connectionEnter.merge(connectionPaths as any);
 
+  // Guardrail on update as well to ensure only hitbox captures events
+  connectionUpdate.style("pointer-events", "none");
+
     // Update hitbox path (invisible but wide for better hover detection)
     connectionUpdate
       .select(".connection-hitbox")
-      .attr("d", (d: any) => getConnectionPath(d))
+      .attr("d", (d: any) => {
+        const path = getConnectionPath(d);
+        return createFilledPolygonFromPath(path, 8);
+      })
+      .attr("fill", "rgba(0, 0, 0, 0.01)")
+      .attr("stroke", "none")
+      .style("pointer-events", "all")
+      .style("cursor", "pointer")
+      // Let hitbox scale with zoom to match visible path width exactly
       .style("display", (d: any) => {
         // Hide hitbox for secondary connections in all modes (single visible path per A->B)
         const groupInfo = getConnectionGroupInfo(d.id, connections);
@@ -1983,6 +2198,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       .attr("stroke", "white") // Default stroke - CSS will override for selection/hover
       .attr("stroke-width", 2) // Default width - CSS will override for selection/hover
       .attr("marker-end", (d: any) => getConnectionMarker(d, "default")) // Dynamic marker based on direction
+  // Ensure only the hitbox receives pointer events
+  .style("pointer-events", "none")
       .style("display", (d: any) => {
         // Hide secondary connections (show only primary) in all modes
         const groupInfo = getConnectionGroupInfo(d.id, connections);
@@ -4693,11 +4910,14 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         ? canDropOnPort(d.nodeId, d.id, "input")
         : false;
 
+      // Architecture mode with side ports: do not show green validation highlights
+      const archNoValidation = workflowContextState.designerMode === "architecture";
+
       // Add/remove can-dropped class based on validation with debouncing
       if (portGroup) {
         const portKey = `${d.nodeId}-${d.id}`;
 
-        if (isConnectionActive) {
+        if (isConnectionActive && !archNoValidation) {
           // Use debounced highlighting to prevent flickering
           updatePortHighlighting(portKey, canDrop, portGroup);
 
@@ -4717,7 +4937,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       }
 
       // Calculate target values using inline logic (performance optimized)
-      const safeCanDrop = Boolean(canDrop);
+      const safeCanDrop = archNoValidation ? false : Boolean(canDrop);
       const baseDimensions = getConfigurableDimensions(d.nodeData);
 
       // Extract nested ternary operations for better readability
@@ -4726,7 +4946,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       let targetStrokeWidth: number;
       let targetRadius: number;
 
-      if (isConnectionActive) {
+  if (isConnectionActive && !archNoValidation) {
         targetFill = safeCanDrop ? "#4CAF50" : "#ccc";
         targetStroke = safeCanDrop ? "#4CAF50" : "#ff5722";
         targetStrokeWidth = safeCanDrop ? 3 : 2;
@@ -4773,9 +4993,12 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         ? canDropOnPort(d.nodeId, d.id, "output")
         : false;
 
+      // Architecture mode with side ports: do not show green validation highlights
+      const archNoValidation = workflowContextState.designerMode === "architecture";
+
       // Add/remove can-dropped class based on validation
       if (portGroup) {
-        if (isConnectionActive) {
+        if (isConnectionActive && !archNoValidation) {
           portGroup.classed("can-dropped", canDrop);
         } else {
           portGroup.classed("can-dropped", false);
@@ -4783,21 +5006,20 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       }
 
       // Calculate target values using inline logic (performance optimized)
-      const safeCanDrop = Boolean(canDrop);
+      const safeCanDrop = archNoValidation ? false : Boolean(canDrop);
       const baseDimensions = getConfigurableDimensions(d.nodeData);
-
-      const targetFill = isConnectionActive
+      const targetFill = isConnectionActive && !archNoValidation
         ? safeCanDrop
           ? "#4CAF50"
           : "#ccc"
         : getPortColor("any");
-      const targetStroke = isConnectionActive
+      const targetStroke = isConnectionActive && !archNoValidation
         ? safeCanDrop
           ? "#4CAF50"
           : "#ff5722"
         : "#8d8d8d";
-      const targetStrokeWidth = isConnectionActive ? (safeCanDrop ? 3 : 2) : 2;
-      const targetRadius = isConnectionActive
+      const targetStrokeWidth = isConnectionActive && !archNoValidation ? (safeCanDrop ? 3 : 2) : 2;
+      const targetRadius = isConnectionActive && !archNoValidation
         ? safeCanDrop
           ? baseDimensions.portRadius * 1.5
           : baseDimensions.portRadius

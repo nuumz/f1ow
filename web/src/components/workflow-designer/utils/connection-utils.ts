@@ -75,10 +75,12 @@ import {
   validatePathInputs,
   generateAdaptiveOrthogonalRoundedPathSmart,
   FIXED_LEAD_LENGTH,
-  type PathConfig} from './path-generation'
+  type PathConfig
+} from './path-generation'
 import {
   getConnectionGroupInfo as getConnectionGroupInfoCore,
-  analyzeConnectionGroups as analyzeConnectionGroupsCore} from './connection-analysis'
+  analyzeConnectionGroups as analyzeConnectionGroupsCore
+} from './connection-analysis'
 
 // Re-export types for backward compatibility
 export type { PortPosition } from '../types'
@@ -205,7 +207,7 @@ export function generateVariantAwareConnectionPath(
   const isTargetBottomPort = isBottomPort(targetNode, targetPortId) || targetPortId === '__side-bottom'
   const sourcePortType = isSourceBottomPort ? 'bottom' : 'output'
   const targetPortType = isTargetBottomPort ? 'bottom' : 'input'
-  
+
   // Calculate port positions (use side-port anchors when applicable)
   const sourcePos = isVirtualSidePortId(sourcePortId)
     ? getVirtualSidePortPosition(sourceNode, sourcePortId)
@@ -222,7 +224,7 @@ export function generateVariantAwareConnectionPath(
 
   // Determine connection flow
   const flow = getConnectionFlow(isSourceBottomPort)
-  
+
   // Generate optimized path
   return generateConnectionPath(sourcePos, targetPos, flow, config)
 }
@@ -242,7 +244,7 @@ export function calculateConnectionPreviewPath(
   // Determine if this is a bottom port (include side-bottom)
   const isSourceBottomPort = isBottomPort(sourceNode, sourcePortId) || sourcePortId === '__side-bottom'
   const portType = isSourceBottomPort ? 'bottom' : 'output'
-  
+
   // Mode-aware port position for accurate endpoint alignment
   let sourcePos: PortPosition
   if (modeId === 'architecture') {
@@ -269,7 +271,7 @@ export function calculateConnectionPreviewPath(
         } else if (portCount >= 4) {
           const spacing = usableWidth / (portCount - 1)
           x = -usableWidth / 2 + spacing * idx
-  }
+        }
         sourcePos = { x: sourceNode.x + x, y: sourceNode.y + dims.height / 2 }
       } else {
         // Non-bottom preview always originates from an output port in this flow
@@ -287,7 +289,7 @@ export function calculateConnectionPreviewPath(
       ? getVirtualSidePortPosition(sourceNode, sourcePortId)
       : calculatePortPositionCore(sourceNode, sourcePortId, portType, variant)
   }
-  
+
   // Validate positions
   if (!validatePathInputs(sourcePos, previewPosition)) {
     console.warn('Invalid preview positions detected, using fallback')
@@ -296,16 +298,16 @@ export function calculateConnectionPreviewPath(
 
   // Determine connection flow
   const flow = getConnectionFlow(isSourceBottomPort) // Preview is never to a bottom port
-  
+
   // Architecture mode should preview orthogonal (right‑angle) path with radius to match final rendering
   if (modeId === 'architecture') {
     // Prefer adaptive path to better match final routing around obstacles
-  const startSide = detectPortSideModeAware(sourceNode, sourcePortId, sourcePos, modeId)
+    const startSide = detectPortSideModeAware(sourceNode, sourcePortId, sourcePos, modeId)
     const startOrientation = sideToOrientation(startSide)
     // Snap rules in architecture mode preview
     // - Bottom start: snap to top/bottom edge center (existing)
     // - Left/Right start: snap to nearest left/right edge center
-  const SNAP_THRESHOLD = FIXED_LEAD_LENGTH * 2
+    const SNAP_THRESHOLD = FIXED_LEAD_LENGTH * 2
     let previewEnd = previewPosition
     let endOrientation: 'vertical' | 'horizontal' | undefined = chooseEndOrientationFromBox(sourcePos, hoverTargetBox)
     if (hoverTargetBox) {
@@ -360,46 +362,47 @@ export function calculateConnectionPreviewPath(
 
     // Horizontal U-shape during preview: only when targetX - sourceX < FIXED_LEAD_LENGTH
     if (hoverTargetBox) {
-        const startSidePrev = detectPortSideModeAware(sourceNode, sourcePortId, sourcePos, modeId)
-        const tgtCenterX = hoverTargetBox.x + hoverTargetBox.width / 2
-        // memoized source box for preview (shape-aware)
-        const srcBox = buildNodeBox(sourceNode)
+      const startSidePrev = detectPortSideModeAware(sourceNode, sourcePortId, sourcePos, modeId)
+      const tgtCenterX = hoverTargetBox.x + hoverTargetBox.width / 2
+      // memoized source box for preview (shape-aware)
+      const srcBox = buildNodeBox(sourceNode)
       if (startSidePrev === 'right') {
-          const rightEdgeCenter = { x: hoverTargetBox.x + hoverTargetBox.width, y: hoverTargetBox.y + hoverTargetBox.height / 2 }
-          const isCloseHorizontally = (tgtCenterX - sourcePos.x) < FIXED_LEAD_LENGTH
-          if (isCloseHorizontally) {
-            const boxesRight = Math.max(srcBox.x + srcBox.width, hoverTargetBox.x + hoverTargetBox.width)
-            const safeClear = 50
-            const minRight = Math.max(sourcePos.x, rightEdgeCenter.x) + FIXED_LEAD_LENGTH
-            const midX = Math.max(boxesRight + safeClear, minRight)
-            return [
-              `M ${sourcePos.x} ${sourcePos.y}`,
-              `L ${midX} ${sourcePos.y}`,
-              `L ${midX} ${rightEdgeCenter.y}`,
-              `L ${rightEdgeCenter.x} ${rightEdgeCenter.y}`
-            ].join(' ')
-          }
+        const rightEdgeCenter = { x: hoverTargetBox.x + hoverTargetBox.width, y: hoverTargetBox.y + hoverTargetBox.height / 2 }
+        const isCloseHorizontally = (tgtCenterX - sourcePos.x) < FIXED_LEAD_LENGTH
+        if (isCloseHorizontally) {
+          const boxesRight = Math.max(srcBox.x + srcBox.width, hoverTargetBox.x + hoverTargetBox.width)
+          const safeClear = 50
+          const minRight = Math.max(sourcePos.x, rightEdgeCenter.x) + FIXED_LEAD_LENGTH
+          const midX = Math.max(boxesRight + safeClear, minRight)
+          return [
+            `M ${sourcePos.x} ${sourcePos.y}`,
+            `L ${midX} ${sourcePos.y}`,
+            `L ${midX} ${rightEdgeCenter.y}`,
+            `L ${rightEdgeCenter.x} ${rightEdgeCenter.y}`
+          ].join(' ')
+        }
       }
       // Symmetric case: start from LEFT → RIGHT; only when sourceX - targetX < FIXED_LEAD_LENGTH
       if (startSidePrev === 'left') {
-          const leftEdgeCenter = { x: hoverTargetBox.x, y: hoverTargetBox.y + hoverTargetBox.height / 2 }
-          const isCloseHorizontally = (sourcePos.x - tgtCenterX) < FIXED_LEAD_LENGTH
-          if (isCloseHorizontally) {
-            const boxesLeft = Math.min(srcBox.x, hoverTargetBox.x)
-            const safeClear = 16
-            const minLeft = Math.min(sourcePos.x, leftEdgeCenter.x) - FIXED_LEAD_LENGTH
-            const midX = Math.min(boxesLeft - safeClear, minLeft)
-            return [
-              `M ${sourcePos.x} ${sourcePos.y}`,
-              `L ${midX} ${sourcePos.y}`,
-              `L ${midX} ${leftEdgeCenter.y}`,
-              `L ${leftEdgeCenter.x} ${leftEdgeCenter.y}`
-            ].join(' ')
-          }
+        const leftEdgeCenter = { x: hoverTargetBox.x, y: hoverTargetBox.y + hoverTargetBox.height / 2 }
+        const isCloseHorizontally = (sourcePos.x - tgtCenterX) < FIXED_LEAD_LENGTH
+        if (isCloseHorizontally) {
+          const boxesLeft = Math.min(srcBox.x, hoverTargetBox.x)
+          const safeClear = 16
+          const minLeft = Math.min(sourcePos.x, leftEdgeCenter.x) - FIXED_LEAD_LENGTH
+          const midX = Math.min(boxesLeft - safeClear, minLeft)
+          return [
+            `M ${sourcePos.x} ${sourcePos.y}`,
+            `L ${midX} ${sourcePos.y}`,
+            `L ${midX} ${leftEdgeCenter.y}`,
+            `L ${leftEdgeCenter.x} ${leftEdgeCenter.y}`
+          ].join(' ')
+        }
       }
     }
 
-  const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, previewEnd, 16, {
+    // Do NOT trim the end in architecture mode. Markers are configured so the tip sits at the path end.
+    const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, previewEnd, 16, {
       clearance: 10, // Minimal clearance for tight arrow positioning
       targetBox: hoverTargetBox,
       startOrientationOverride: startOrientation,
@@ -457,38 +460,38 @@ export function generateMultipleConnectionPath(opts: {
   if (totalConnections <= 1) {
     return generateVariantAwareConnectionPath(sourceNode, sourcePortId, targetNode, targetPortId, variant, config)
   }
-  
+
   // Validate node positions
-  if (!isFinite(sourceNode.x) || !isFinite(sourceNode.y) || 
-      !isFinite(targetNode.x) || !isFinite(targetNode.y)) {
+  if (!isFinite(sourceNode.x) || !isFinite(sourceNode.y) ||
+    !isFinite(targetNode.x) || !isFinite(targetNode.y)) {
     console.warn('Invalid node positions, using fallback')
     return generateVariantAwareConnectionPath(sourceNode, sourcePortId, targetNode, targetPortId, variant, config)
   }
-  
+
   // Architecture mode: Use bundled connection approach
   if (mode === 'architecture') {
     // For architecture mode, use the orthogonal path generator with fixed sizing so endpoints align with ports
     return generateArchitectureModeConnectionPath(
       sourceNode,
       targetNode,
-  { sourceNodeId: sourceNode.id, sourcePortId, targetNodeId: targetNode.id, targetPortId }
+      { sourceNodeId: sourceNode.id, sourcePortId, targetNodeId: targetNode.id, targetPortId }
     )
   }
-  
+
   // Workflow mode: Show individual offset lines
   // Use simplified node-edge positioning for multiple connections
   const sourcePos: PortPosition = { x: sourceNode.x + 100, y: sourceNode.y }
   const targetPos: PortPosition = { x: targetNode.x - 100, y: targetNode.y }
-  
+
   // Calculate Y offset for this connection
   const yOffset = calculateConnectionOffset(connectionIndex, totalConnections)
-  
+
   // Validate positions
   if (!validatePathInputs(sourcePos, targetPos)) {
     console.warn('Invalid connection positions, using fallback')
     return `M ${sourcePos.x} ${sourcePos.y} L ${targetPos.x} ${targetPos.y}`
   }
-  
+
   // Generate offset path
   return generateOffsetPath(sourcePos, targetPos, yOffset, config)
 }
@@ -590,12 +593,12 @@ function generateArchitectureModeConnectionPath(
       }
       return { x: sourceNode.x + relX, y: sourceNode.y + sourceDims.height / 2 }
     }
-  const ports = sourceNode.outputs
-  const idx = Math.max(0, ports.findIndex(p => p.id === connection.sourcePortId))
+    const ports = sourceNode.outputs
+    const idx = Math.max(0, ports.findIndex(p => p.id === connection.sourcePortId))
     const count = ports.length || 1
     const spacing = sourceDims.height / (count + 1)
     const y = -sourceDims.height / 2 + spacing * (idx + 1)
-  const x = sourceDims.width / 2
+    const x = sourceDims.width / 2
     return { x: sourceNode.x + x, y: sourceNode.y + y }
   })()
   const targetPos: PortPosition = (() => {
@@ -640,7 +643,7 @@ function generateArchitectureModeConnectionPath(
   if (isSourceBottom) {
     // Architecture rule: when starting from bottom port, choose target side based on vertical proximity
     // If target top is within 50px below the source Y, use target bottom; else use target top
-  const SNAP_THRESHOLD = FIXED_LEAD_LENGTH * 2
+    const SNAP_THRESHOLD = FIXED_LEAD_LENGTH * 2
     const tBox = buildNodeBoxModeAware(targetNode, 'architecture')
     const sourceY = sourcePos.y
     const topY = tBox.y
@@ -658,20 +661,23 @@ function generateArchitectureModeConnectionPath(
   const autoTargetPos = getVirtualSidePortPositionForMode(targetNode, targetSidePortId, 'architecture')
   const endOrientation = sideToOrientation(detectPortSideModeAware(targetNode, targetSidePortId, autoTargetPos, 'architecture'))
 
+  // Do NOT trim the end in architecture mode. Markers are configured so the tip sits at the path end.
+  const trimmedEnd = autoTargetPos
+
   // If we chose bottom due to close vertical proximity, draw a U-shape under both nodes to avoid overlap
   if (isSourceBottom && targetSidePortId === '__side-bottom') {
     const srcBox = buildNodeBoxModeAware(sourceNode, 'architecture')
     const tgtBox = buildNodeBoxModeAware(targetNode, 'architecture')
-  const safeClear = 16
-  const boxesBottom = Math.max(srcBox.y + srcBox.height, tgtBox.y + tgtBox.height)
-  // Enforce vertical leg min length of FIXED_LEAD_LENGTH for both sides
-  const minBelow = Math.max(sourcePos.y, autoTargetPos.y) + FIXED_LEAD_LENGTH
-  const midY = Math.max(boxesBottom + safeClear, minBelow)
+    const safeClear = 16
+    const boxesBottom = Math.max(srcBox.y + srcBox.height, tgtBox.y + tgtBox.height)
+    // Enforce vertical leg min length of FIXED_LEAD_LENGTH for both sides
+    const minBelow = Math.max(sourcePos.y, autoTargetPos.y) + FIXED_LEAD_LENGTH
+    const midY = Math.max(boxesBottom + safeClear, minBelow)
     return [
       `M ${sourcePos.x} ${sourcePos.y}`,
       `L ${sourcePos.x} ${midY}`,
-      `L ${autoTargetPos.x} ${midY}`,
-      `L ${autoTargetPos.x} ${autoTargetPos.y}`
+      `L ${trimmedEnd.x} ${midY}`,
+      `L ${trimmedEnd.x} ${trimmedEnd.y}`
     ].join(' ')
   }
 
@@ -691,8 +697,8 @@ function generateArchitectureModeConnectionPath(
       return [
         `M ${sourcePos.x} ${sourcePos.y}`,
         `L ${midX} ${sourcePos.y}`,
-        `L ${midX} ${forcedRightPos.y}`,
-        `L ${forcedRightPos.x} ${forcedRightPos.y}`
+        `L ${midX} ${trimmedEnd.y}`,
+        `L ${trimmedEnd.x} ${trimmedEnd.y}`
       ].join(' ')
     }
   }
@@ -713,13 +719,13 @@ function generateArchitectureModeConnectionPath(
       return [
         `M ${sourcePos.x} ${sourcePos.y}`,
         `L ${midX} ${sourcePos.y}`,
-        `L ${midX} ${forcedLeftPos.y}`,
-        `L ${forcedLeftPos.x} ${forcedLeftPos.y}`
+        `L ${midX} ${trimmedEnd.y}`,
+        `L ${trimmedEnd.x} ${trimmedEnd.y}`
       ].join(' ')
     }
   }
 
-  const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, autoTargetPos, 16, {
+  const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, trimmedEnd, 16, {
     clearance: 10, // Minimal clearance for tight arrow positioning
     targetBox: buildNodeBoxModeAware(targetNode, 'architecture'),
     startOrientationOverride: startOrientation,
@@ -799,19 +805,19 @@ export function validateConnectionParameters(
   if (!sourceNode || !targetNode) {
     return { valid: false, reason: 'Missing source or target node' }
   }
-  
+
   if (!sourcePortId || !targetPortId) {
     return { valid: false, reason: 'Missing port IDs' }
   }
-  
+
   if (!validatePortExists(sourceNode, sourcePortId, getPortType(sourceNode, sourcePortId) || 'output')) {
     return { valid: false, reason: `Source port ${sourcePortId} not found` }
   }
-  
+
   if (!validatePortExists(targetNode, targetPortId, getPortType(targetNode, targetPortId) || 'input')) {
     return { valid: false, reason: `Target port ${targetPortId} not found` }
   }
-  
+
   return { valid: true }
 }
 
@@ -820,7 +826,7 @@ export function validateConnectionParameters(
  */
 export function createOptimizedPathGenerator(config?: PathConfig) {
   const cache = new Map<string, string>()
-  
+
   return {
     generatePath(
       sourceNode: WorkflowNode,
@@ -830,23 +836,23 @@ export function createOptimizedPathGenerator(config?: PathConfig) {
       variant: NodeVariant = 'standard'
     ): string {
       const cacheKey = `${sourceNode.id}:${sourcePortId}->${targetNode.id}:${targetPortId}:${variant}`
-      
+
       if (cache.has(cacheKey)) {
         return cache.get(cacheKey)!
       }
-      
+
       const path = generateVariantAwareConnectionPath(
         sourceNode, sourcePortId, targetNode, targetPortId, variant, config
       )
-      
+
       cache.set(cacheKey, path)
       return path
     },
-    
+
     clearCache() {
       cache.clear()
     },
-    
+
     getCacheSize() {
       return cache.size
     }

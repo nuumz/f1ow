@@ -85,7 +85,7 @@ export function useConnectionPaths(
 
   const getConnectionPath = useCallback(
     (connection: Connection, useDragPositions = false): string => {
-      const cacheKey = `${connection.id}-${connection.sourceNodeId}-${connection.sourcePortId}-${connection.targetNodeId}-${connection.targetPortId}-${nodeVariant}${useDragPositions ? '-drag' : ''}`
+      const cacheKey = `${connection.id}-${connection.sourceNodeId}-${connection.sourcePortId}-${connection.targetNodeId}-${connection.targetPortId}-${nodeVariant}-${modeId || 'workflow'}${useDragPositions ? '-drag' : ''}`
 
       if (!useDragPositions) {
         const cached = pathCacheRef.current.get(cacheKey)
@@ -113,6 +113,7 @@ export function useConnectionPaths(
         }
       }
 
+      // Slightly increase arrow offset for workflow mode to add end clearance on curves.
       const path = generateModeAwareConnectionPath(
         {
           sourceNodeId: connection.sourceNodeId,
@@ -121,15 +122,19 @@ export function useConnectionPaths(
           targetPortId: connection.targetPortId,
         },
         nodesForPath,
-  nodeVariant,
-  modeId || 'workflow'
+        nodeVariant,
+        modeId || 'workflow',
+        // Config is used by workflow (bezier) generator only.
+        modeId === 'workflow' ? { arrowOffset: 9 } : undefined
       )
 
+      const finalPath = path
+
       if (!useDragPositions) {
-        pathCacheRef.current.set(cacheKey, path)
+        pathCacheRef.current.set(cacheKey, finalPath)
         cleanupCacheIfNeeded()
       }
-      return path
+      return finalPath
     },
     [nodeMap, nodeVariant, modeId, nodes, cleanupCacheIfNeeded]
   )

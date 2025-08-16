@@ -1657,39 +1657,39 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
       bg.attr("width", "100%").attr("height", "100%").attr("fill", "#f7f7f7");
 
       // Arrow markers with direction-aware positioning and optimized refX
-      const createArrowMarker = (
+  const createArrowMarker = (
         id: string,
         color: string,
-        size = 14,
-        direction: "right" | "left" = "right"
+        size = 10,
+        direction: 'right' | 'left' = 'right'
       ) => {
         const marker = defs
           .append("marker")
           .attr("id", id)
           .attr("markerWidth", size)
           .attr("markerHeight", size)
+          .attr("viewBox", `0 0 ${size} ${size}`)
           .attr("orient", "auto")
           .attr("markerUnits", "userSpaceOnUse");
 
-        // Pad to keep arrow tip clearly before the path end to avoid overlaying port shapes
-        // Use a larger proportional pad so even bigger markers won't overlap ports
-        const pad = Math.max(5, Math.round(size * 0.5));
-
+        // Pad so the arrow tip stays BEFORE the path end to avoid overlapping into nodes
+        // Padding/backoff: for architecture markers we want the tip to touch the node edge exactly.
+        // Therefore pad = 0 for architecture*, otherwise keep a small backoff for workflow/general.
+  const isArchitectureMarker = id.includes('architecture');
+  const pad = isArchitectureMarker ? 4 : Math.max(2, Math.round(size * 0.2));
         if (direction === "right") {
-          // Right-pointing arrow (default)
-          // Align the TIP slightly before the endpoint using padding
+          // Right-pointing arrow (tip at x=size). For architecture: refX=size (touch edge). Others: size+pad.
           marker
-            .attr("refX", size - pad)
+  .attr("refX", isArchitectureMarker ? size : size + pad)
             .attr("refY", size / 2)
             .append("polygon")
             .attr("points", `0,0 ${size},${size / 2} 0,${size}`)
             .attr("fill", color)
             .attr("stroke", "none");
         } else {
-          // Left-pointing arrow
-          // Align the TIP slightly before the endpoint using padding
+          // Left-pointing arrow (tip at x=0). For architecture: refX=0 (touch). Others: -pad.
           marker
-            .attr("refX", pad)
+  .attr("refX", isArchitectureMarker ? 0 : -pad)
             .attr("refY", size / 2)
             .append("polygon")
             .attr("points", `${size},0 0,${size / 2} ${size},${size}`)
@@ -1703,20 +1703,20 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
       if (!markersInitialized) {
         createArrowMarker("arrowhead", "#666");
         createArrowMarker("arrowhead-selected", "#2196F3");
-        createArrowMarker("arrowhead-hover", "#1976D2", 18);
-        createArrowMarker("arrowhead-left", "#666", 14, "left");
-        createArrowMarker("arrowhead-left-selected", "#2196F3", 14, "left");
-        createArrowMarker("arrowhead-left-hover", "#1976D2", 18, "left");
+        createArrowMarker("arrowhead-hover", "#1976D2", 12);
+        createArrowMarker("arrowhead-left", "#666", 10, "left");
+        createArrowMarker("arrowhead-left-selected", "#2196F3", 10, "left");
+        createArrowMarker("arrowhead-left-hover", "#1976D2", 12, "left");
 
         // Mode-specific arrow markers for workflow mode
-        createArrowMarker("arrowhead-workflow", "#2563eb", 14);
-        createArrowMarker("arrowhead-workflow-selected", "#059669", 16);
-        createArrowMarker("arrowhead-workflow-hover", "#1d4ed8", 18);
+        createArrowMarker("arrowhead-workflow", "#2563eb", 10);
+        createArrowMarker("arrowhead-workflow-selected", "#059669", 12);
+        createArrowMarker("arrowhead-workflow-hover", "#1d4ed8", 12);
 
         // Mode-specific arrow markers for architecture mode
-        createArrowMarker("arrowhead-architecture", "#7c3aed", 15);
-        createArrowMarker("arrowhead-architecture-selected", "#dc2626", 18);
-        createArrowMarker("arrowhead-architecture-hover", "#6d28d9", 20);
+        createArrowMarker("arrowhead-architecture", "#7c3aed", 10);
+        createArrowMarker("arrowhead-architecture-selected", "#dc2626", 12);
+        createArrowMarker("arrowhead-architecture-hover", "#6d28d9", 12);
       }
 
       // Layer hierarchy (ensure single instances)
@@ -4464,9 +4464,13 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
         draggedElementRef.current = null;
         draggedNodeElementRef.current = null;
 
-        // Clear DOM and caches
+        // Selective cleanup: preserve canvas structure (defs, canvas-root, zoom/pan)
         if (currentSvgRef) {
-          d3.select(currentSvgRef).selectAll("*").remove();
+          const svgSel = d3.select(currentSvgRef);
+          // Clear only node-layer contents for nodes-focused effect
+          svgSel.select("g.node-layer").selectAll("*").remove();
+          // Do NOT clear connection-layer or previews here; other effects own those updates
+          // Note: Keep <defs> and <g.canvas-root> to avoid losing markers and zoom/pan state
         }
         // Clear connection path cache managed by hook
         clearConnCache();

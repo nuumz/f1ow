@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import * as d3 from 'd3'
 import { useWorkflowContext } from '../contexts/WorkflowContext'
-import { getNodeHeight } from '../utils/node-utils'
+import { getNodeHeight, NODE_WIDTH } from '../utils/node-utils'
 import type { WorkflowNode } from './useNodeSelection'
 
 export interface CanvasTransform {
@@ -167,10 +167,11 @@ export function useWorkflowCanvas() {
     // Calculate bounding box of all nodes
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
 
+  const ARCH_SIZE = 56
+    const isArchitecture = state.designerMode === 'architecture'
     nodesToUse.forEach(node => {
-      const nodeHeight = getNodeHeightFn(node)
-      const nodeWidth = 200 // Default node width
-      
+      const nodeWidth = isArchitecture ? ARCH_SIZE : NODE_WIDTH
+      const nodeHeight = isArchitecture ? ARCH_SIZE : getNodeHeightFn(node)
       const left = node.x - nodeWidth / 2
       const right = node.x + nodeWidth / 2
       const top = node.y - nodeHeight / 2
@@ -217,7 +218,7 @@ export function useWorkflowCanvas() {
     transition.call(zoomBehaviorRef.current.transform, d3.zoomIdentity
       .translate(translateX, translateY)
       .scale(scale))
-  }, [state.nodes, state.canvasTransform, svgRef, dispatch])
+  }, [state.nodes, state.canvasTransform, state.designerMode, svgRef, dispatch])
 
   const zoomIn = useCallback(() => {
     if (!svgRef.current || !zoomBehaviorRef.current) {

@@ -18,8 +18,16 @@ import {
   getShapeAwareDimensions,
   getNodeShapePath,
   getPortPositions,
+  NODE_WIDTH,
+  NODE_MIN_HEIGHT,
   NodeTypes,
 } from "../utils/node-utils";
+import { renderToStaticMarkup } from "react-dom/server";
+import { 
+  Server, Database, Globe, Shield, Monitor, Cloud,
+  GitBranch, Package, Users, FileText, Box, Layers,
+  Cpu, HardDrive, Network, Lock, Smartphone, Tablet
+} from 'lucide-react';
 import { getShapePath } from "../utils/shape-utils";
 // Removed unused import: getNodeDimensions
 import {
@@ -29,10 +37,53 @@ import {
   generateModeAwareConnectionPath,
 } from "../utils/connection-utils";
 // Grid performance utilities
-import {
-  GridPerformanceMonitor,
-  GridOptimizer,
-} from "../utils/grid-performance";
+import { GridPerformanceMonitor, GridOptimizer } from "../utils/grid-performance";
+
+// Architecture-mode lucide icon mapping (mirror of ArchitectureNodePalette)
+const ARCH_ICON_MAP: Record<string, React.FC<{ size?: number | string; color?: string }>> = {
+  server: Server,
+  database: Database,
+  loadbalancer: Network,
+  cdn: Globe,
+  cache: HardDrive,
+  microservice: Box,
+  api: Globe,
+  queue: Package,
+  storage: Database,
+  cloudfunction: Cloud,
+  container: Box,
+  kubernetes: Layers,
+  firewall: Shield,
+  auth: Lock,
+  external: Globe,
+  thirdparty: Package,
+  webapp: Monitor,
+  mobile: Smartphone,
+  tablet: Tablet,
+  processor: Cpu,
+  pipeline: GitBranch,
+  documentation: FileText,
+  team: Users,
+};
+
+// Helper: determine if an architecture node belongs to Services group/category
+const ARCH_SERVICES_TYPES = new Set(['microservice', 'api', 'queue', 'storage']);
+function isServicesArchitectureNode(node: any): boolean {
+  // Prefer explicit group or metadata category if available
+  const group: string | undefined = node?.group || node?.metadata?.category;
+  if (group && /services/i.test(group)) return true;
+  // Fallback by known service-oriented types
+  return ARCH_SERVICES_TYPES.has(node?.type);
+}
+
+function getArchitectureIconSvg(nodeType: string, size: number, color = '#8d8d8d'): string | null {
+  const IconComp = ARCH_ICON_MAP[nodeType];
+  if (!IconComp) return null;
+  let svg = renderToStaticMarkup(<IconComp size={size} color={color} />);
+  // Force consistent thinner stroke width for lucide icons
+  svg = svg.replace(/stroke-width="[^"]+"/g, 'stroke-width="1.8"');
+  return svg;
+}
 
 // Path measurement helpers (used for accurate connection label placement in architecture mode)
 let __wfMeasurePathEl: SVGPathElement | null = null;
@@ -1411,7 +1462,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
       // Architecture mode: fixed rounded-square sizing + right-side labels
       if (workflowContextState.designerMode === "architecture") {
-        const ARCH_SIZE = 64; // square size (visual like the screenshot)
+        const ARCH_SIZE = 56; // square size (reduced from 64)
         const result = {
           ...shapeDimensions,
           width: ARCH_SIZE,
@@ -1500,8 +1551,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   const calculateBottomPortLayout = useCallback(
     (nodeData: WorkflowNode, portIndex: number) => {
       const dimensions = getConfigurableDimensions(nodeData);
-      const nodeWidth = dimensions.width || 200;
-      const nodeHeight = dimensions.height || 80;
+      const nodeWidth = dimensions.width || NODE_WIDTH;
+      const nodeHeight = dimensions.height || NODE_MIN_HEIGHT;
       const portCount = nodeData.bottomPorts?.length || 0;
 
       if (portCount === 0) return { x: 0, y: nodeHeight / 2 };
@@ -2490,8 +2541,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           // Compute hover target box if mouse is over a node group
           const hoveredNode = nodes.find((n) => {
             const dims = getShapeAwareDimensions(n as any);
-            const w = dims.width || 200;
-            const h = dims.height || 80;
+            const w = dims.width || NODE_WIDTH;
+            const h = dims.height || NODE_MIN_HEIGHT;
             const left = n.x - w / 2;
             const top = n.y - h / 2;
             return (
@@ -2504,8 +2555,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           const hoverTargetBox = hoveredNode
             ? (() => {
                 const dims = getShapeAwareDimensions(hoveredNode as any);
-                const w = dims.width || 200;
-                const h = dims.height || 80;
+                const w = dims.width || NODE_WIDTH;
+                const h = dims.height || NODE_MIN_HEIGHT;
                 return {
                   x: hoveredNode.x - w / 2,
                   y: hoveredNode.y - h / 2,
@@ -2734,8 +2785,10 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         .style("stroke-width", 2)
         .style("stroke-dasharray", "6,6")
         .style("opacity", 0.8)
-        .style("display", () =>
-          workflowContextState.designerMode === "architecture" ? null : "none"
+        .style("display", (d: any) =>
+          workflowContextState.designerMode === "architecture" && isServicesArchitectureNode(d)
+            ? null
+            : "none"
         );
 
       // Update node background attributes (shape-aware)
@@ -2822,7 +2875,9 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           .attr("height", dims.height + pad * 2)
           .attr("rx", 16)
           .style("display", () =>
-            workflowContextState.designerMode === "architecture" ? null : "none"
+            workflowContextState.designerMode === "architecture" && isServicesArchitectureNode(d)
+              ? null
+              : "none"
           );
       });
 
@@ -2931,8 +2986,19 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         .attr("class", "node-icon")
         .style("pointer-events", "none");
 
+      // Architecture-mode SVG icon container
+      nodeEnter
+        .append("g")
+        .attr("class", "node-icon-svg")
+  .style("pointer-events", "none")
+  .style("stroke-width", 1.8 as unknown as string);
+
       nodeGroups
         .select(".node-icon")
+        // Hide text icon in architecture mode
+        .style("display", () =>
+          workflowContextState.designerMode === "architecture" ? "none" : null
+        )
         .attr("x", (d: any) => {
           const dimensions = getConfigurableDimensions(d);
           return dimensions.iconOffset?.x ?? 0;
@@ -2953,6 +3019,37 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         )
         .attr("fill", "#8d8d8d")
         .text((d: any) => getNodeIcon(d.type));
+
+      // Update SVG icon group for architecture mode
+      nodeGroups
+        .select(".node-icon-svg")
+        .style("display", () =>
+          workflowContextState.designerMode === "architecture" ? null : "none"
+        )
+  // Ensure icon stroke width looks balanced in architecture mode
+  .style("stroke-width", 1.8 as unknown as string)
+        .each(function (d: any) {
+          const g = d3.select(this as SVGGElement);
+          if (workflowContextState.designerMode !== "architecture") {
+            // Clear when not in architecture mode
+            g.html("");
+            return;
+          }
+          const dimensions = getConfigurableDimensions(d);
+          const size = dimensions.iconSize || 24;
+          const color = "#8d8d8d";
+          const svgStr = getArchitectureIconSvg(d.type, size, color);
+          const key = `${d.type}:${size}`;
+          const nodeEl = g.node() as any;
+          if (nodeEl && nodeEl.__iconKey !== key) {
+            // Center icon at (0,0) of the node group by translating top-left
+            const tx = (dimensions.iconOffset?.x ?? 0) - size / 2;
+            const ty = (dimensions.iconOffset?.y ?? 0) - size / 2;
+            g.attr("transform", `translate(${tx}, ${ty})`);
+            g.html(svgStr || "");
+            nodeEl.__iconKey = key;
+          }
+        });
 
       // Node label
       nodeEnter
@@ -3934,8 +4031,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         .data((d: any) => {
           if (!isArchitectureMode) return [];
           const dim = getConfigurableDimensions(d);
-          const halfW = (dim.width || 200) / 2;
-          const halfH = (dim.height || 80) / 2;
+          const halfW = (dim.width || NODE_WIDTH) / 2;
+          const halfH = (dim.height || NODE_MIN_HEIGHT) / 2;
           // Define side ports with local positions (relative to node center)
           const sides = [
             { id: "__side-top", x: 0, y: -halfH, kind: "input" },
@@ -5169,8 +5266,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         // Compute hover target box if mouse is over a node group
         const hoveredNode = nodes.find((n) => {
           const dims = getConfigurableDimensions(n as any);
-          const w = dims.width || 200;
-          const h = dims.height || 80;
+          const w = dims.width || NODE_WIDTH;
+          const h = dims.height || NODE_MIN_HEIGHT;
           const left = n.x - w / 2;
           const top = n.y - h / 2;
           return (
@@ -5183,8 +5280,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         const hoverTargetBox = hoveredNode
           ? (() => {
               const dims = getConfigurableDimensions(hoveredNode as any);
-              const w = dims.width || 200;
-              const h = dims.height || 80;
+              const w = dims.width || NODE_WIDTH;
+              const h = dims.height || NODE_MIN_HEIGHT;
               return {
                 x: hoveredNode.x - w / 2,
                 y: hoveredNode.y - h / 2,

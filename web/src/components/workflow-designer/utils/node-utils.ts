@@ -21,7 +21,7 @@ import {
 
 // Constants
 export const NODE_WIDTH = 200
-export const NODE_MIN_HEIGHT = 80
+export const NODE_MIN_HEIGHT = 60
 export const PORT_RADIUS = 6
 
 // Re-export centralized functions with same names for backward compatibility

@@ -11,7 +11,7 @@ import { getShapeAwareDimensions } from './node-utils'
 const isVirtualSidePortId = (id: string) => id.startsWith('__side-')
 
 // Architecture mode fixed sizing (must match WorkflowCanvas getConfigurableDimensions)
-const ARCH_SIZE = 64
+const ARCH_SIZE = 56
 
 // Mode-aware dimensions helper
 function getModeAwareDimensions(node: WorkflowNode, modeId?: string) {

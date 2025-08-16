@@ -1535,6 +1535,22 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           const y = Math.sin(angle) * radius;
           positions.push({ x, y });
         }
+      } else if (shape === "diamond") {
+        // Match diamond geometry used in shape-utils: vertical scale factor of 0.75
+        const halfWidth = dimensions.width / 2;
+        const effectiveHalfHeight = (dimensions.height / 2) * 0.75;
+        const effectiveHeight = effectiveHalfHeight * 2;
+        const spacing = Math.min(25, effectiveHeight / (portCount + 1));
+        const startY = -((portCount - 1) * spacing) / 2;
+        for (let i = 0; i < portCount; i++) {
+          const y = startY + i * spacing;
+          const widthAtY = Math.max(
+            0,
+            halfWidth * (1 - Math.min(1, Math.abs(y) / Math.max(1e-6, effectiveHalfHeight)))
+          );
+          const x = (portType === "input" ? -1 : 1) * widthAtY;
+          positions.push({ x, y });
+        }
       }
 
       positionsCache.set(cacheKey, positions);
@@ -1555,7 +1571,10 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       const nodeHeight = dimensions.height || NODE_MIN_HEIGHT;
       const portCount = nodeData.bottomPorts?.length || 0;
 
-      if (portCount === 0) return { x: 0, y: nodeHeight / 2 };
+  const shape = getNodeShape(nodeData.type);
+  const halfH = nodeHeight / 2;
+  const bottomY = shape === "diamond" ? halfH * 0.75 : halfH;
+  if (portCount === 0) return { x: 0, y: bottomY };
 
       // Use the smaller of: 80% width OR (width - 40px)
       // This ensures proper spacing for both narrow and wide nodes
@@ -1563,26 +1582,17 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
       if (portCount === 1) {
         // Single port: center it
-        return {
-          x: 0,
-          y: nodeHeight / 2,
-        };
+  return { x: 0, y: bottomY };
       } else if (portCount === 2) {
         // Two ports: optimized positioning for visual balance
         const spacing = usableWidth / 3; // Divide available space into thirds
         const positions = [-spacing, spacing]; // Place at 1/3 and 2/3 positions
-        return {
-          x: positions[portIndex] || 0,
-          y: nodeHeight / 2,
-        };
+  return { x: positions[portIndex] || 0, y: bottomY };
       } else if (portCount === 3) {
         // Three ports: center one, balance others
         const halfWidth = usableWidth / 2;
         const positions = [-halfWidth, 0, halfWidth];
-        return {
-          x: positions[portIndex] || 0,
-          y: nodeHeight / 2,
-        };
+  return { x: positions[portIndex] || 0, y: bottomY };
       } else {
         // Multiple ports (4+): distribute evenly with optimal spacing
         const spacing = usableWidth / (portCount - 1);

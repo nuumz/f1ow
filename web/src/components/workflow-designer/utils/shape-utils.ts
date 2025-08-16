@@ -228,15 +228,27 @@ export function getPortPositions(
       break
 
     case 'diamond':
-      // For diamonds, place ports on the left/right sides
-      const diamondVerticalSpacing = Math.min(25, dimensions.height / (portCount + 1))
-      const diamondStartY = -(portCount - 1) * diamondVerticalSpacing / 2
-      
-      for (let i = 0; i < portCount; i++) {
-        positions.push({
-          x: baseOffset.x,
-          y: diamondStartY + i * diamondVerticalSpacing
-        })
+      // For diamonds, place ports along the slanted left/right edges
+      // NOTE: The diamond path uses a vertical scale of 0.75 (see getShapePath),
+      // so we must use the same effective height here to avoid visual mismatch.
+      {
+        const halfWidth = dimensions.width / 2
+        const halfHeight = dimensions.height / 2
+        const effectiveHalfHeight = halfHeight * 0.75
+
+        // Distribute ports vertically, capped at 25px spacing, within the visible diamond height
+        const effectiveHeight = effectiveHalfHeight * 2
+        const spacing = Math.min(25, effectiveHeight / (portCount + 1))
+        const startY = -(portCount - 1) * spacing / 2
+
+        for (let i = 0; i < portCount; i++) {
+          const y = startY + i * spacing
+          // Edge X at vertical offset y for a diamond defined by |x|/halfWidth + |y|/effectiveHalfHeight = 1
+          const widthAtY = Math.max(0, halfWidth * (1 - Math.min(1, Math.abs(y) / Math.max(1e-6, effectiveHalfHeight))))
+          const xOnEdge = (portType === 'input' ? -1 : 1) * widthAtY
+
+          positions.push({ x: xOnEdge, y })
+        }
       }
       break
 
@@ -277,9 +289,11 @@ export function isPointInShape(
       return Math.sqrt(relativeX * relativeX + relativeY * relativeY) <= radius
 
     case 'diamond':
-      const halfWidth = dimensions.width / 2
-      const halfHeight = dimensions.height / 2
-      return Math.abs(relativeX / halfWidth) + Math.abs(relativeY / halfHeight) <= 1
+  const halfWidth = dimensions.width / 2
+  const halfHeight = dimensions.height / 2
+  // Match getShapePath vertical scale (0.75) so hit-test equals visual diamond
+  const effectiveHalfHeight = halfHeight * 0.75
+  return Math.abs(relativeX / halfWidth) + Math.abs(relativeY / effectiveHalfHeight) <= 1
 
     case 'square':
     case 'rectangle':

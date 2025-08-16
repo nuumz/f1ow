@@ -4,7 +4,11 @@
  */
 
 import type { WorkflowNode, PortPosition, NodeVariant } from '../types'
-import { getPortPositions, getShapeAwareDimensions } from './node-utils'
+
+// Shared type alias for port kind literals (lint rule: avoid repeating unions)
+type PortKind = 'input' | 'output' | 'bottom'
+type RegularPortKind = 'input' | 'output'
+import { getPortPositions, getShapeAwareDimensions, getNodeShape } from './node-utils'
 
 /**
  * Port calculation configuration
@@ -122,7 +126,11 @@ export function calculateBottomPortPosition(
   const layout = calculateBottomPortLayout(node, bottomPortIndex, variant)
   
   const portX = node.x + (layout.relativeX * layout.scale)
-  const portY = node.y + ((nodeHeight / 2) * layout.scale) // Position at diamond location (bottom edge of node)
+  // If the node is a diamond, its rendered bottom tip is at 0.75 * halfHeight
+  const shape = getNodeShape(node.type)
+  const halfH = (nodeHeight / 2)
+  const bottomOffset = shape === 'diamond' ? halfH * 0.75 : halfH
+  const portY = node.y + (bottomOffset * layout.scale)
   
   return { x: portX, y: portY }
 }
@@ -133,7 +141,7 @@ export function calculateBottomPortPosition(
 export function calculateRegularPortPosition(
   node: WorkflowNode,
   portId: string,
-  portType: 'input' | 'output',
+  portType: RegularPortKind,
   variant: NodeVariant = 'standard'
 ): PortPosition {
   // Find port index in regular ports
@@ -161,7 +169,7 @@ export function calculateRegularPortPosition(
 export function calculatePortPosition(
   node: WorkflowNode,
   portId: string,
-  portType: 'input' | 'output' | 'bottom',
+  portType: PortKind,
   variant: NodeVariant = 'standard'
 ): PortPosition {
   // Handle bottom ports
@@ -173,7 +181,7 @@ export function calculatePortPosition(
   }
   
   // Handle regular input/output ports
-  const normalizedPortType = portType === 'bottom' ? 'output' : portType
+  const normalizedPortType: RegularPortKind = portType === 'bottom' ? 'output' : portType
   return calculateRegularPortPosition(node, portId, normalizedPortType, variant)
 }
 
@@ -182,7 +190,7 @@ export function calculatePortPosition(
  */
 export function calculateMultiplePortPositions(
   node: WorkflowNode,
-  portConfigs: Array<{ portId: string; portType: 'input' | 'output' | 'bottom' }>,
+  portConfigs: Array<{ portId: string; portType: PortKind }>,
   variant: NodeVariant = 'standard'
 ): PortPosition[] {
   return portConfigs.map(config =>
@@ -222,7 +230,7 @@ export function getAllNodePortPositions(
 export function validatePortExists(
   node: WorkflowNode,
   portId: string,
-  portType: 'input' | 'output' | 'bottom'
+  portType: PortKind
 ): boolean {
   switch (portType) {
     case 'input':
@@ -246,7 +254,7 @@ export function isBottomPort(node: WorkflowNode, portId: string): boolean {
 /**
  * Gets the appropriate port type for a given port ID
  */
-export function getPortType(node: WorkflowNode, portId: string): 'input' | 'output' | 'bottom' | null {
+export function getPortType(node: WorkflowNode, portId: string): PortKind | null {
   if (node.inputs.some(p => p.id === portId)) {
     return 'input'
   }

@@ -338,6 +338,47 @@ export function calculateConnectionPreviewPath(
       ].join(' ')
     }
 
+    // Horizontal U-shape during preview: only when targetX - sourceX < FIXED_LEAD_LENGTH
+    if (hoverTargetBox) {
+        const startSidePrev = detectPortSideModeAware(sourceNode, sourcePortId, sourcePos, modeId)
+        const tgtCenterX = hoverTargetBox.x + hoverTargetBox.width / 2;
+      if (startSidePrev === 'right') {
+          const rightEdgeCenter = { x: hoverTargetBox.x + hoverTargetBox.width, y: hoverTargetBox.y + hoverTargetBox.height / 2 }
+          const isCloseHorizontally = (tgtCenterX - sourcePos.x) < FIXED_LEAD_LENGTH
+          if (isCloseHorizontally) {
+            const srcBox = buildNodeBox(sourceNode)
+            const boxesRight = Math.max(srcBox.x + srcBox.width, hoverTargetBox.x + hoverTargetBox.width)
+            const safeClear = 50
+            const minRight = Math.max(sourcePos.x, rightEdgeCenter.x) + FIXED_LEAD_LENGTH
+            const midX = Math.max(boxesRight + safeClear, minRight)
+            return [
+              `M ${sourcePos.x} ${sourcePos.y}`,
+              `L ${midX} ${sourcePos.y}`,
+              `L ${midX} ${rightEdgeCenter.y}`,
+              `L ${rightEdgeCenter.x} ${rightEdgeCenter.y}`
+            ].join(' ')
+          }
+      }
+      // Symmetric case: start from LEFT → RIGHT; only when sourceX - targetX < FIXED_LEAD_LENGTH
+      if (startSidePrev === 'left') {
+          const leftEdgeCenter = { x: hoverTargetBox.x, y: hoverTargetBox.y + hoverTargetBox.height / 2 }
+          const isCloseHorizontally = (sourcePos.x - tgtCenterX) < FIXED_LEAD_LENGTH
+          if (isCloseHorizontally) {
+            const srcBox = buildNodeBox(sourceNode)
+            const boxesLeft = Math.min(srcBox.x, hoverTargetBox.x)
+            const safeClear = 16
+            const minLeft = Math.min(sourcePos.x, leftEdgeCenter.x) - FIXED_LEAD_LENGTH
+            const midX = Math.min(boxesLeft - safeClear, minLeft)
+            return [
+              `M ${sourcePos.x} ${sourcePos.y}`,
+              `L ${midX} ${sourcePos.y}`,
+              `L ${midX} ${leftEdgeCenter.y}`,
+              `L ${leftEdgeCenter.x} ${leftEdgeCenter.y}`
+            ].join(' ')
+          }
+      }
+    }
+
   const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, previewEnd, 16, {
       clearance: 10, // Minimal clearance for tight arrow positioning
       targetBox: hoverTargetBox,
@@ -585,6 +626,50 @@ function generateArchitectureModeConnectionPath(
       `L ${autoTargetPos.x} ${midY}`,
       `L ${autoTargetPos.x} ${autoTargetPos.y}`
     ].join(' ')
+  }
+
+  // Horizontal U-shape: when starting from RIGHT and target is horizontally very close,
+  // route around the outer right side and terminate at the RIGHT port (same side as source).
+  if (startSide === 'right') {
+    const forcedRightPos = getVirtualSidePortPositionForMode(targetNode, '__side-right', 'architecture')
+    const isCloseHorizontally = (targetNode.x - sourcePos.x) < FIXED_LEAD_LENGTH
+    if (isCloseHorizontally) {
+      const srcBox = buildNodeBoxModeAware(sourceNode, 'architecture')
+      const tgtBox = buildNodeBoxModeAware(targetNode, 'architecture')
+      const safeClear = 16
+      const boxesRight = Math.max(srcBox.x + srcBox.width, tgtBox.x + tgtBox.width)
+      // Enforce horizontal leg min length of FIXED_LEAD_LENGTH for both sides
+      const minRight = Math.max(sourcePos.x, forcedRightPos.x) + FIXED_LEAD_LENGTH
+      const midX = Math.max(boxesRight + safeClear, minRight)
+      return [
+        `M ${sourcePos.x} ${sourcePos.y}`,
+        `L ${midX} ${sourcePos.y}`,
+        `L ${midX} ${forcedRightPos.y}`,
+        `L ${forcedRightPos.x} ${forcedRightPos.y}`
+      ].join(' ')
+    }
+  }
+
+  // Symmetric Horizontal U-shape: when starting from LEFT and target is horizontally very close,
+  // route around the outer left side and terminate at the LEFT port (same side as source).
+  if (startSide === 'left') {
+    const forcedLeftPos = getVirtualSidePortPositionForMode(targetNode, '__side-left', 'architecture')
+    const isCloseHorizontally = (sourcePos.x - targetNode.x) < FIXED_LEAD_LENGTH
+    if (isCloseHorizontally) {
+      const srcBox = buildNodeBoxModeAware(sourceNode, 'architecture')
+      const tgtBox = buildNodeBoxModeAware(targetNode, 'architecture')
+      const safeClear = 16
+      const boxesLeft = Math.min(srcBox.x, tgtBox.x)
+      // Enforce horizontal leg min length of FIXED_LEAD_LENGTH for both sides (to the left)
+      const minLeft = Math.min(sourcePos.x, forcedLeftPos.x) - FIXED_LEAD_LENGTH
+      const midX = Math.min(boxesLeft - safeClear, minLeft)
+      return [
+        `M ${sourcePos.x} ${sourcePos.y}`,
+        `L ${midX} ${sourcePos.y}`,
+        `L ${midX} ${forcedLeftPos.y}`,
+        `L ${forcedLeftPos.x} ${forcedLeftPos.y}`
+      ].join(' ')
+    }
   }
 
   const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, autoTargetPos, 16, {

@@ -23,24 +23,50 @@ import {
   NodeTypes,
 } from "../utils/node-utils";
 import { renderToStaticMarkup } from "react-dom/server";
-import { 
-  Server, Database, Globe, Shield, Monitor, Cloud,
-  GitBranch, Package, Users, FileText, Box, Layers,
-  Cpu, HardDrive, Network, Lock, Smartphone, Tablet
-} from 'lucide-react';
+import {
+  Server,
+  Database,
+  Globe,
+  Shield,
+  Monitor,
+  Cloud,
+  GitBranch,
+  Package,
+  Users,
+  FileText,
+  Box,
+  Layers,
+  Cpu,
+  HardDrive,
+  Network,
+  Lock,
+  Smartphone,
+  Tablet,
+} from "lucide-react";
 import { getShapePath } from "../utils/shape-utils";
 // Removed unused import: getNodeDimensions
 import {
   calculateConnectionPreviewPath,
-  calculatePortPosition, // Still needed for bottom ports
   getConnectionGroupInfo,
-  generateModeAwareConnectionPath,
 } from "../utils/connection-utils";
+// Use core port-positioning API (wrapper in connection-utils is deprecated)
+import { calculatePortPosition } from "../utils/port-positioning";
 // Grid performance utilities
-import { GridPerformanceMonitor, GridOptimizer } from "../utils/grid-performance";
+import {
+  GridPerformanceMonitor,
+  GridOptimizer,
+} from "../utils/grid-performance";
+import {
+  getArrowMarkerForMode as getArrowMarkerForModeUtil,
+  getLeftArrowMarker as getLeftArrowMarkerUtil,
+} from "../utils/marker-utils";
+import { useConnectionPaths } from "../hooks/useConnectionPaths";
 
 // Architecture-mode lucide icon mapping (mirror of ArchitectureNodePalette)
-const ARCH_ICON_MAP: Record<string, React.FC<{ size?: number | string; color?: string }>> = {
+const ARCH_ICON_MAP: Record<
+  string,
+  React.FC<{ size?: number | string; color?: string }>
+> = {
   server: Server,
   database: Database,
   loadbalancer: Network,
@@ -67,7 +93,12 @@ const ARCH_ICON_MAP: Record<string, React.FC<{ size?: number | string; color?: s
 };
 
 // Helper: determine if an architecture node belongs to Services group/category
-const ARCH_SERVICES_TYPES = new Set(['microservice', 'api', 'queue', 'storage']);
+const ARCH_SERVICES_TYPES = new Set([
+  "microservice",
+  "api",
+  "queue",
+  "storage",
+]);
 function isServicesArchitectureNode(node: any): boolean {
   // Prefer explicit group or metadata category if available
   const group: string | undefined = node?.group || node?.metadata?.category;
@@ -76,7 +107,11 @@ function isServicesArchitectureNode(node: any): boolean {
   return ARCH_SERVICES_TYPES.has(node?.type);
 }
 
-function getArchitectureIconSvg(nodeType: string, size: number, color = '#8d8d8d'): string | null {
+function getArchitectureIconSvg(
+  nodeType: string,
+  size: number,
+  color = "#8d8d8d"
+): string | null {
   const IconComp = ARCH_ICON_MAP[nodeType];
   if (!IconComp) return null;
   let svg = renderToStaticMarkup(<IconComp size={size} color={color} />);
@@ -86,42 +121,10 @@ function getArchitectureIconSvg(nodeType: string, size: number, color = '#8d8d8d
 }
 
 // Path measurement helpers (used for accurate connection label placement in architecture mode)
-let __wfMeasurePathEl: SVGPathElement | null = null;
-function getPathMidpointWithOrientation(
-  pathD: string
-): { x: number; y: number; orientation: "horizontal" | "vertical" } | null {
-  try {
-    if (!__wfMeasurePathEl) {
-      __wfMeasurePathEl = document.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "path"
-      );
-    }
-    const el = __wfMeasurePathEl;
-    el.setAttribute("d", pathD || "");
-    const total = el.getTotalLength();
-    if (!isFinite(total) || total <= 0) return null;
-    const mid = total / 2;
-    const p = el.getPointAtLength(mid);
-    const prev = el.getPointAtLength(Math.max(0, mid - 0.5));
-    const next = el.getPointAtLength(Math.min(total, mid + 0.5));
-    const dx = next.x - prev.x;
-    const dy = next.y - prev.y;
-    const orientation =
-      Math.abs(dx) >= Math.abs(dy) ? "horizontal" : "vertical";
-    return { x: p.x, y: p.y, orientation };
-  } catch {
-    return null;
-  }
-}
-
-function getLabelOffsetForOrientation(orientation: "horizontal" | "vertical"): {
-  x: number;
-  y: number;
-} {
-  if (orientation === "horizontal") return { x: 0, y: -10 };
-  return { x: 10, y: 0 };
-}
+import {
+  getPathMidpointWithOrientation,
+  getLabelOffsetForOrientation,
+} from "../utils/svg-path-utils";
 // Extracted utility imports
 import {
   PERFORMANCE_CONSTANTS,
@@ -429,43 +432,34 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   // Track current transform with ref for immediate access
   const currentTransformRef = useRef(canvasTransform);
 
+  // Centralized connection path generator + drag overrides
+  const {
+    getConnectionPath: getConnectionPathFromHook,
+    updateDragPosition: updateConnDragPos,
+    clearAllDragPositions,
+    clearCache: clearConnCache,
+  } = useConnectionPaths(
+    nodes,
+    nodeVariant,
+    workflowContextState.designerMode as "workflow" | "architecture" | undefined
+  );
+
+  // Stable alias for downstream usage
+  const getConnectionPath = useCallback(
+    (connection: Connection, useDragPositions = false) =>
+      getConnectionPathFromHook(connection, useDragPositions),
+    [getConnectionPathFromHook]
+  );
+
   // Helper functions to reduce cognitive complexity
   const getArrowMarkerForMode = useCallback(
-    (isWorkflowMode: boolean, state: "default" | "selected" | "hover") => {
-      if (isWorkflowMode) {
-        switch (state) {
-          case "selected":
-            return "url(#arrowhead-workflow-selected)";
-          case "hover":
-            return "url(#arrowhead-workflow-hover)";
-          default:
-            return "url(#arrowhead-workflow)";
-        }
-      } else {
-        switch (state) {
-          case "selected":
-            return "url(#arrowhead-architecture-selected)";
-          case "hover":
-            return "url(#arrowhead-architecture-hover)";
-          default:
-            return "url(#arrowhead-architecture)";
-        }
-      }
-    },
+    (isWorkflowMode: boolean, state: "default" | "selected" | "hover") =>
+      getArrowMarkerForModeUtil(isWorkflowMode, state),
     []
   );
 
   const getLeftArrowMarker = useCallback(
-    (state: "default" | "selected" | "hover") => {
-      switch (state) {
-        case "selected":
-          return "url(#arrowhead-left-selected)";
-        case "hover":
-          return "url(#arrowhead-left-hover)";
-        default:
-          return "url(#arrowhead-left)";
-      }
-    },
+    (state: "default" | "selected" | "hover") => getLeftArrowMarkerUtil(state),
     []
   );
 
@@ -509,7 +503,6 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   const draggedNodeId = getDraggedNodeId();
 
   // Cache refs for performance with size limits to prevent memory leaks
-  const connectionPathCacheRef = useRef<Map<string, string>>(new Map());
   const gridCacheRef = useRef<{
     transform: string;
     pattern: string;
@@ -788,21 +781,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     [showGrid] // GRID_CACHE_DURATION is const and doesn't need to be included
   );
 
-  // Enhanced cache and memory management utilities
+  // Enhanced cache and memory management utilities (connection path cache handled by hook)
   const cleanupCaches = useCallback(() => {
-    // Clean connection path cache if too large (reduced logging)
-    if (connectionPathCacheRef.current.size > CACHE_CLEANUP_THRESHOLD) {
-      const keysToDelete = Array.from(
-        connectionPathCacheRef.current.keys()
-      ).slice(0, connectionPathCacheRef.current.size - MAX_CACHE_SIZE);
-      keysToDelete.forEach((key) => connectionPathCacheRef.current.delete(key));
-      if (process.env.NODE_ENV === "development") {
-        console.log(
-          `🧹 Cleaned connection cache: ${keysToDelete.length} entries`
-        );
-      }
-    }
-
     // Clean node position cache if too large (reduced logging)
     if (nodePositionCacheRef.current.size > CACHE_CLEANUP_THRESHOLD) {
       const keysToDelete = Array.from(
@@ -999,8 +979,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   const lastDragUpdateRef = useRef(0);
   const dragUpdateThrottle = 16; // ~60fps for better performance balance
 
-  // Track last updated paths to prevent unnecessary redraws
-  const lastConnectionPathsRef = useRef<Map<string, string>>(new Map());
+  // Track last updated paths removed; hook handles caching
 
   // Track current drag positions to prevent position conflicts
   const currentDragPositionsRef = useRef<Map<string, { x: number; y: number }>>(
@@ -1130,48 +1109,6 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     [workflowContextState.designerMode, hasMultipleConnections]
   );
 
-  // Cache cleanup utility to prevent memory leaks
-  const cleanupConnectionCache = useCallback(() => {
-    const cache = connectionPathCacheRef.current;
-    const size = cache.size;
-    if (size <= MAX_CACHE_SIZE) return;
-
-    // Probabilistic trimming: mild over target triggers lightweight random pruning
-    const overBy = size - MAX_CACHE_SIZE;
-    const pressureRatio = Math.min(1, overBy / (MAX_CACHE_SIZE * 0.5)); // 0..1 scaling
-    const baseSample = 0.02 + pressureRatio * 0.08; // 2%-10% sample each cleanup
-
-    let removed = 0;
-    // Iterate insertion order; randomly delete entries based on probability until under soft cap (MAX_CACHE_SIZE * 0.95)
-    const softTarget = Math.floor(MAX_CACHE_SIZE * 0.95);
-    for (const key of cache.keys()) {
-      if (cache.size <= softTarget) break;
-      if (Math.random() < baseSample) {
-        cache.delete(key);
-        removed++;
-      }
-    }
-
-    // Hard emergency trim if still far above (safety net) - remove oldest directly
-    if (cache.size > CACHE_CLEANUP_THRESHOLD) {
-      const emergencyTarget = MAX_CACHE_SIZE;
-      for (const key of cache.keys()) {
-        if (cache.size <= emergencyTarget) break;
-        cache.delete(key);
-        removed++;
-      }
-    }
-
-    if (removed > 0 && process.env.NODE_ENV === "development") {
-      // Lightweight dev log (gated)
-      console.log(
-        `🧹 Probabilistic cache trim removed=${removed} size=${
-          cache.size
-        } pressure=${pressureRatio.toFixed(2)}`
-      );
-    }
-  }, [MAX_CACHE_SIZE, CACHE_CLEANUP_THRESHOLD]);
-
   // Helper function to create a filled polygon from a path with thickness
   const createFilledPolygonFromPath = useCallback(
     (pathString: string, thickness: number = 6): string => {
@@ -1294,158 +1231,10 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     [svgRef]
   );
 
-  // Helper function to trim connection path to prevent arrow overlap
-  const trimPathForArrow = useCallback(
-    (pathString: string, trimLength: number = 4): string => {
-      if (!pathString || trimLength <= 0) return pathString;
+  // Removed manual trimPathForArrow. Arrow clearance is now handled in utils
+  // via calculateArrowAdjustedPosition and box projections.
 
-      try {
-        // Create a temporary SVG path element to get path data
-        const tempSvg = document.createElementNS(
-          "http://www.w3.org/2000/svg",
-          "svg"
-        );
-        tempSvg.style.position = "absolute";
-        tempSvg.style.visibility = "hidden";
-        tempSvg.style.width = "1px";
-        tempSvg.style.height = "1px";
-
-        const tempPath = document.createElementNS(
-          "http://www.w3.org/2000/svg",
-          "path"
-        );
-        tempPath.setAttribute("d", pathString);
-        tempSvg.appendChild(tempPath);
-
-        // Add to SVG container temporarily
-        const svgContainer = svgRef.current;
-        if (!svgContainer) return pathString;
-        svgContainer.appendChild(tempSvg);
-
-        // Get total length and calculate new end point
-        const pathLength = tempPath.getTotalLength();
-        if (pathLength <= trimLength * 2) {
-          svgContainer.removeChild(tempSvg);
-          return pathString;
-        }
-
-        // Get the point that is trimLength away from the end
-        const newEndLength = pathLength - trimLength;
-        const newEndPoint = tempPath.getPointAtLength(newEndLength);
-
-        // Remove temporary SVG
-        svgContainer.removeChild(tempSvg);
-
-        // Parse the original path and modify the end point
-        const pathCommands = pathString.match(
-          /[MLCQSATHVZmlcqsathvz][^MLCQSATHVZmlcqsathvz]*/g
-        );
-        if (!pathCommands || pathCommands.length < 2) return pathString;
-
-        // Replace the last command with a line to the new end point
-        const modifiedCommands = pathCommands.slice(0, -1);
-        modifiedCommands.push(`L ${newEndPoint.x} ${newEndPoint.y}`);
-
-        return modifiedCommands.join(" ");
-      } catch (error) {
-        console.warn("Error trimming path for arrow:", error);
-        return pathString;
-      }
-    },
-    [svgRef]
-  );
-
-  // Memoized connection path calculation with drag position support and memory management
-  const getConnectionPath = useCallback(
-    (connection: Connection, useDragPositions = false) => {
-      const cacheKey = `${connection.id}-${connection.sourceNodeId}-${
-        connection.sourcePortId
-      }-${connection.targetNodeId}-${connection.targetPortId}-${nodeVariant}${
-        useDragPositions ? "-drag" : ""
-      }`;
-
-      // Skip cache for drag positions to ensure real-time updates
-      if (!useDragPositions) {
-        const cached = connectionPathCacheRef.current.get(cacheKey);
-        if (cached) return cached;
-      }
-
-      let sourceNode = nodeMap.get(connection.sourceNodeId);
-      let targetNode = nodeMap.get(connection.targetNodeId);
-      if (!sourceNode || !targetNode) return "";
-
-      // Use current drag positions if available
-      if (useDragPositions) {
-        const sourceDragPos = currentDragPositionsRef.current.get(
-          connection.sourceNodeId
-        );
-        const targetDragPos = currentDragPositionsRef.current.get(
-          connection.targetNodeId
-        );
-
-        if (sourceDragPos) {
-          sourceNode = {
-            ...sourceNode,
-            x: sourceDragPos.x,
-            y: sourceDragPos.y,
-          } as any;
-        }
-        if (targetDragPos) {
-          targetNode = {
-            ...targetNode,
-            x: targetDragPos.x,
-            y: targetDragPos.y,
-          } as any;
-        }
-      }
-
-      // Always compute a single unified path using mode-aware generator (respects virtual side-ports)
-      // If using drag positions, create a transient nodes array with overrides for the two nodes
-      const nodesForPath = useDragPositions
-        ? nodes.map((n) =>
-            n.id === sourceNode!.id
-              ? (sourceNode as WorkflowNode)
-              : n.id === targetNode!.id
-              ? (targetNode as WorkflowNode)
-              : n
-          )
-        : nodes;
-
-      const rawPath = generateModeAwareConnectionPath(
-        {
-          sourceNodeId: connection.sourceNodeId,
-          sourcePortId: connection.sourcePortId,
-          targetNodeId: connection.targetNodeId,
-          targetPortId: connection.targetPortId,
-        },
-        nodesForPath,
-        nodeVariant,
-        workflowContextState.designerMode || "workflow"
-      );
-
-      // Trim path to prevent arrow marker from overlapping with target node
-      const path = trimPathForArrow(rawPath, 8);
-
-      if (!useDragPositions) {
-        connectionPathCacheRef.current.set(cacheKey, path);
-
-        // Periodic cache cleanup to prevent memory leaks
-        if (connectionPathCacheRef.current.size > CACHE_CLEANUP_THRESHOLD) {
-          cleanupConnectionCache();
-        }
-      }
-      return path;
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      nodeMap,
-      nodeVariant,
-      cleanupConnectionCache,
-      workflowContextState.designerMode,
-      nodes,
-      trimPathForArrow,
-    ] // CACHE_CLEANUP_THRESHOLD is const and doesn't need to be included
-  );
+  // Connection path is provided by useConnectionPaths hook (see alias above)
 
   // Memoized configurable dimensions calculation (shape-aware)
   const getConfigurableDimensions = useMemo(() => {
@@ -1546,7 +1335,9 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           const y = startY + i * spacing;
           const widthAtY = Math.max(
             0,
-            halfWidth * (1 - Math.min(1, Math.abs(y) / Math.max(1e-6, effectiveHalfHeight)))
+            halfWidth *
+              (1 -
+                Math.min(1, Math.abs(y) / Math.max(1e-6, effectiveHalfHeight)))
           );
           const x = (portType === "input" ? -1 : 1) * widthAtY;
           positions.push({ x, y });
@@ -1562,49 +1353,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     getConfigurableDimensions,
   ]);
 
-  // Helper function to calculate optimal bottom port positioning
-  // Uses either 80% of node width OR node width minus 40px (whichever is smaller)
-  const calculateBottomPortLayout = useCallback(
-    (nodeData: WorkflowNode, portIndex: number) => {
-      const dimensions = getConfigurableDimensions(nodeData);
-      const nodeWidth = dimensions.width || NODE_WIDTH;
-      const nodeHeight = dimensions.height || NODE_MIN_HEIGHT;
-      const portCount = nodeData.bottomPorts?.length || 0;
-
-  const shape = getNodeShape(nodeData.type);
-  const halfH = nodeHeight / 2;
-  const bottomY = shape === "diamond" ? halfH * 0.75 : halfH;
-  if (portCount === 0) return { x: 0, y: bottomY };
-
-      // Use the smaller of: 80% width OR (width - 40px)
-      // This ensures proper spacing for both narrow and wide nodes
-      const usableWidth = Math.min(nodeWidth * 0.8, nodeWidth - 70);
-
-      if (portCount === 1) {
-        // Single port: center it
-  return { x: 0, y: bottomY };
-      } else if (portCount === 2) {
-        // Two ports: optimized positioning for visual balance
-        const spacing = usableWidth / 3; // Divide available space into thirds
-        const positions = [-spacing, spacing]; // Place at 1/3 and 2/3 positions
-  return { x: positions[portIndex] || 0, y: bottomY };
-      } else if (portCount === 3) {
-        // Three ports: center one, balance others
-        const halfWidth = usableWidth / 2;
-        const positions = [-halfWidth, 0, halfWidth];
-  return { x: positions[portIndex] || 0, y: bottomY };
-      } else {
-        // Multiple ports (4+): distribute evenly with optimal spacing
-        const spacing = usableWidth / (portCount - 1);
-        const x = -usableWidth / 2 + spacing * portIndex;
-        return {
-          x: x,
-          y: nodeHeight / 2,
-        };
-      }
-    },
-    [getConfigurableDimensions]
-  );
+  // Removed local bottom port layout; use calculatePortPosition for accuracy across modes/variants
 
   // Enhanced visual feedback system with batching and caching
   const processBatchedVisualUpdates = useCallback(() => {
@@ -1807,6 +1556,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
       // Store current drag position
       currentDragPositionsRef.current.set(nodeId, { x: newX, y: newY });
+      // Sync with connection paths hook for live path updates during drag
+      updateConnDragPos(nodeId, { x: newX, y: newY });
 
       // Throttle connection updates to improve performance
       const now = Date.now();
@@ -1828,7 +1579,12 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         }
       }
     },
-    [nodeConnectionsMap, processBatchedConnectionUpdates, dragUpdateThrottle]
+    [
+      nodeConnectionsMap,
+      processBatchedConnectionUpdates,
+      dragUpdateThrottle,
+      updateConnDragPos,
+    ]
   );
 
   const resetNodeVisualStyle = useCallback(
@@ -1856,10 +1612,12 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
   // Enhanced cache management with memory optimization
   const clearAllCaches = useCallback(() => {
-    connectionPathCacheRef.current.clear();
+    // Clear connection path cache in hook
+    clearConnCache();
     nodePositionCacheRef.current.clear();
-    lastConnectionPathsRef.current.clear();
+    // Removed: lastConnectionPathsRef (replaced by hook cache)
     currentDragPositionsRef.current.clear();
+    clearAllDragPositions();
     connectionUpdateQueueRef.current.clear();
     visualUpdateQueueRef.current.clear();
     lastZIndexStateRef.current.clear();
@@ -1877,7 +1635,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       rafIdRef.current = null;
     }
     rafScheduledRef.current = false;
-  }, []);
+  }, [clearConnCache, clearAllDragPositions]);
 
   // Clear caches when nodes change
   useEffect(() => {
@@ -1886,8 +1644,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
   // Clear connection paths when connections change
   useEffect(() => {
-    lastConnectionPathsRef.current.clear();
-  }, [connections]);
+    clearConnCache();
+  }, [connections, clearConnCache]);
 
   // Immediate z-index organization for selection changes
   useEffect(() => {
@@ -1953,7 +1711,6 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     try {
       // Copy refs at the start of the effect for cleanup
       const currentSvgRef = svgRef.current;
-      const connectionPathCache = connectionPathCacheRef.current;
       const allNodeElements = allNodeElementsRef.current;
 
       const svg = d3.select(currentSvgRef);
@@ -2586,8 +2343,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
             hoverTargetBox
           );
 
-          // Align arrowhead position with final connection by trimming equally
-          previewPath = trimPathForArrow(previewPath, 8);
+          // Arrow clearance handled by preview path utilities; no manual trim needed
 
           // Determine preview marker consistent with final connection markers
           const isWorkflowMode =
@@ -2796,7 +2552,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         .style("stroke-dasharray", "6,6")
         .style("opacity", 0.8)
         .style("display", (d: any) =>
-          workflowContextState.designerMode === "architecture" && isServicesArchitectureNode(d)
+          workflowContextState.designerMode === "architecture" &&
+          isServicesArchitectureNode(d)
             ? null
             : "none"
         );
@@ -2885,7 +2642,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           .attr("height", dims.height + pad * 2)
           .attr("rx", 16)
           .style("display", () =>
-            workflowContextState.designerMode === "architecture" && isServicesArchitectureNode(d)
+            workflowContextState.designerMode === "architecture" &&
+            isServicesArchitectureNode(d)
               ? null
               : "none"
           );
@@ -3000,8 +2758,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       nodeEnter
         .append("g")
         .attr("class", "node-icon-svg")
-  .style("pointer-events", "none")
-  .style("stroke-width", 1.8 as unknown as string);
+        .style("pointer-events", "none")
+        .style("stroke-width", 1.8 as unknown as string);
 
       nodeGroups
         .select(".node-icon")
@@ -3036,8 +2794,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         .style("display", () =>
           workflowContextState.designerMode === "architecture" ? null : "none"
         )
-  // Ensure icon stroke width looks balanced in architecture mode
-  .style("stroke-width", 1.8 as unknown as string)
+        // Ensure icon stroke width looks balanced in architecture mode
+        .style("stroke-width", 1.8 as unknown as string)
         .each(function (d: any) {
           const g = d3.select(this as SVGGElement);
           if (workflowContextState.designerMode !== "architecture") {
@@ -4668,12 +4426,16 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           return `M 0,${-size} L ${size},0 L 0,${size} L ${-size},0 Z`;
         })
         .attr("transform", (d: any) => {
-          // Find the correct index of this port in the bottomPorts array
-          const portIndex = d.nodeData.bottomPorts.findIndex(
-            (p: any) => p.id === d.id
+          // Use shared util to get absolute bottom port position, then convert to node-relative
+          const abs = calculatePortPosition(
+            d.nodeData,
+            d.id,
+            "bottom",
+            nodeVariant
           );
-          const position = calculateBottomPortLayout(d.nodeData, portIndex);
-          return `translate(${position.x}, ${position.y})`;
+          const relX = abs.x - d.nodeData.x;
+          const relY = abs.y - d.nodeData.y;
+          return `translate(${relX}, ${relY})`;
         })
         .attr("fill", (d: any) => {
           if (
@@ -4694,35 +4456,40 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         .append("line")
         .attr("class", "bottom-port-connector")
         .attr("x1", (d: any) => {
-          // Find the correct index of this port in the bottomPorts array
-          const portIndex = d.nodeData.bottomPorts.findIndex(
-            (p: any) => p.id === d.id
+          const abs = calculatePortPosition(
+            d.nodeData,
+            d.id,
+            "bottom",
+            nodeVariant
           );
-          const position = calculateBottomPortLayout(d.nodeData, portIndex);
-          return position.x;
+          return abs.x - d.nodeData.x;
         })
         .attr("y1", (d: any) => {
-          // Find the correct index of this port in the bottomPorts array
-          const portIndex = d.nodeData.bottomPorts.findIndex(
-            (p: any) => p.id === d.id
+          const abs = calculatePortPosition(
+            d.nodeData,
+            d.id,
+            "bottom",
+            nodeVariant
           );
-          const position = calculateBottomPortLayout(d.nodeData, portIndex);
-          return position.y;
+          return abs.y - d.nodeData.y;
         })
         .attr("x2", (d: any) => {
-          // Find the correct index of this port in the bottomPorts array
-          const portIndex = d.nodeData.bottomPorts.findIndex(
-            (p: any) => p.id === d.id
+          const abs = calculatePortPosition(
+            d.nodeData,
+            d.id,
+            "bottom",
+            nodeVariant
           );
-          const position = calculateBottomPortLayout(d.nodeData, portIndex);
-          return position.x;
+          return abs.x - d.nodeData.x;
         })
         .attr("y2", (d: any) => {
-          // Find the correct index of this port in the bottomPorts array
-          const portIndex = d.nodeData.bottomPorts.findIndex(
-            (p: any) => p.id === d.id
+          const abs = calculatePortPosition(
+            d.nodeData,
+            d.id,
+            "bottom",
+            nodeVariant
           );
-          const position = calculateBottomPortLayout(d.nodeData, portIndex);
+          const position = { x: abs.x - d.nodeData.x, y: abs.y - d.nodeData.y };
           // Check if this bottom port has a connection
           const hasConnection = connections.some(
             (conn) =>
@@ -4825,12 +4592,14 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         if (shouldShowButton) {
           const node = nodes.find((n) => n.id === d.nodeId);
           if (node) {
-            const portIndex = d.nodeData.bottomPorts.findIndex(
-              (p: any) => p.id === d.id
+            const abs = calculatePortPosition(
+              d.nodeData,
+              d.id,
+              "bottom",
+              nodeVariant
             );
-            const position = calculateBottomPortLayout(d.nodeData, portIndex);
-            const x = position.x;
-            const y = position.y + 36; // Beyond the connector line
+            const x = abs.x - d.nodeData.x;
+            const y = abs.y - d.nodeData.y + 36; // Beyond the connector line
 
             const plusButtonContainer = group
               .append("g")
@@ -5020,12 +4789,14 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         }
 
         // Add label for this bottom port
-        const portIndex = d.nodeData.bottomPorts.findIndex(
-          (p: any) => p.id === d.id
+        const abs = calculatePortPosition(
+          d.nodeData,
+          d.id,
+          "bottom",
+          nodeVariant
         );
-        const position = calculateBottomPortLayout(d.nodeData, portIndex);
-        const labelX = position.x;
-        const labelY = position.y + 15; // Below the diamond
+        const labelX = abs.x - d.nodeData.x;
+        const labelY = abs.y - d.nodeData.y + 15; // Below the diamond
 
         const labelContainer = group
           .append("g")
@@ -5108,16 +4879,15 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         if (currentSvgRef) {
           d3.select(currentSvgRef).selectAll("*").remove();
         }
-        connectionPathCache?.clear();
+        // Clear connection path cache managed by hook
+        clearConnCache();
         gridCacheRef.current = null;
         allNodeElements?.clear();
       };
     } catch (error) {
       console.error("Error in main D3 rendering effect:", error);
       // Reset caches on error to prevent further issues
-      if (connectionPathCacheRef.current) {
-        connectionPathCacheRef.current.clear();
-      }
+      clearConnCache();
       if (gridCacheRef.current) {
         gridCacheRef.current = null;
       }
@@ -5311,8 +5081,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
           hoverTargetBox
         );
 
-        // Align arrowhead position with final connection by trimming equally
-        previewPath = trimPathForArrow(previewPath, 8);
+        // Arrow clearance handled by preview path utilities; no manual trim needed
 
         // Determine preview marker consistent with final connection markers
         const isWorkflowMode = workflowContextState.designerMode === "workflow";
@@ -5511,9 +5280,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     getConfigurableDimensions,
     getArrowMarkerForMode,
     getLeftArrowMarker,
-    ,
     // Note: getConfigurableDimensions is a stable function but used internally
-    trimPathForArrow,
+    ,
   ]);
 
   // REMOVED: Architecture mode port visibility JavaScript management
@@ -5554,16 +5322,16 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
   // Cleanup effect
   useEffect(() => {
-    const connectionCache = connectionPathCacheRef.current;
     return () => {
       if (rafIdRef.current) {
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
       }
-      connectionCache.clear();
+      // Clear connection path cache managed by hook
+      clearConnCache();
       gridCacheRef.current = null;
     };
-  }, []);
+  }, [clearConnCache]);
 
   return null; // This component only manages D3 rendering
 });

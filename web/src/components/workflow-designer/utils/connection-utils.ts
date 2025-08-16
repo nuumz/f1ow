@@ -302,21 +302,40 @@ export function calculateConnectionPreviewPath(
     // Prefer adaptive path to better match final routing around obstacles
   const startSide = detectPortSideModeAware(sourceNode, sourcePortId, sourcePos, modeId)
     const startOrientation = sideToOrientation(startSide)
-    // When starting from a bottom port, snap to target's top/bottom edge center depending on proximity if a hover target box is known
-    // Rule: if (topPortTargetY - sourceY) <= 50px => use target bottom port; else use target top port
+    // Snap rules in architecture mode preview
+    // - Bottom start: snap to top/bottom edge center (existing)
+    // - Left/Right start: snap to nearest left/right edge center
   const SNAP_THRESHOLD = FIXED_LEAD_LENGTH * 2
-    const previewEnd = (isSourceBottomPort && hoverTargetBox)
-      ? (() => {
-          const sourceY = sourcePos.y
-          const topY = hoverTargetBox.y
-          const bottomY = hoverTargetBox.y + hoverTargetBox.height
-      const useBottom = (topY - sourceY) < SNAP_THRESHOLD
-          return { x: hoverTargetBox.x + hoverTargetBox.width / 2, y: useBottom ? bottomY : topY }
-        })()
-      : previewPosition
-    const endOrientation = (isSourceBottomPort && hoverTargetBox)
-      ? 'vertical'
-      : chooseEndOrientationFromBox(sourcePos, hoverTargetBox)
+    let previewEnd = previewPosition
+    let endOrientation: 'vertical' | 'horizontal' | undefined = chooseEndOrientationFromBox(sourcePos, hoverTargetBox)
+    if (hoverTargetBox) {
+      const centerX = hoverTargetBox.x + hoverTargetBox.width / 2
+      const centerY = hoverTargetBox.y + hoverTargetBox.height / 2
+      if (isSourceBottomPort) {
+        const sourceY = sourcePos.y
+        const topY = hoverTargetBox.y
+        const bottomY = hoverTargetBox.y + hoverTargetBox.height
+        const useBottom = (topY - sourceY) < SNAP_THRESHOLD
+        previewEnd = { x: centerX, y: useBottom ? bottomY : topY }
+        endOrientation = 'vertical'
+      } else if (startSide === 'left' || startSide === 'right') {
+        // Conditional same-side snap: only when U-shape (close horizontal) condition is met
+        const leftEdgeCenter = { x: hoverTargetBox.x, y: centerY }
+        const rightEdgeCenter = { x: hoverTargetBox.x + hoverTargetBox.width, y: centerY }
+        const tgtCenterX = centerX
+        const isCloseHorizontally = startSide === 'right'
+          ? (tgtCenterX - sourcePos.x) < FIXED_LEAD_LENGTH
+          : (sourcePos.x - tgtCenterX) < FIXED_LEAD_LENGTH
+        if (isCloseHorizontally) {
+          // Same-side only for U-shape scenario
+          previewEnd = (startSide === 'right') ? rightEdgeCenter : leftEdgeCenter
+        } else {
+          // Otherwise, snap to the opposite side of startSide for clean orthogonal routing
+          previewEnd = (startSide === 'right') ? leftEdgeCenter : rightEdgeCenter
+        }
+        endOrientation = 'horizontal'
+      }
+    }
 
     // If snapping to bottom in close range, draw a U-shape to avoid overlapping nodes:
     // Down from source, across under both nodes, then up into target bottom.

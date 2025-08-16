@@ -56,16 +56,18 @@ function getPathMidpointWithOrientation(
     const next = el.getPointAtLength(Math.min(total, mid + 0.5));
     const dx = next.x - prev.x;
     const dy = next.y - prev.y;
-    const orientation = Math.abs(dx) >= Math.abs(dy) ? "horizontal" : "vertical";
+    const orientation =
+      Math.abs(dx) >= Math.abs(dy) ? "horizontal" : "vertical";
     return { x: p.x, y: p.y, orientation };
   } catch {
     return null;
   }
 }
 
-function getLabelOffsetForOrientation(
-  orientation: "horizontal" | "vertical"
-): { x: number; y: number } {
+function getLabelOffsetForOrientation(orientation: "horizontal" | "vertical"): {
+  x: number;
+  y: number;
+} {
   if (orientation === "horizontal") return { x: 0, y: -10 };
   return { x: 10, y: 0 };
 }
@@ -1399,14 +1401,16 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     const dimensionsCache = new Map<string, any>();
 
     return (node: WorkflowNode) => {
-      const cacheKey = `${node.id}-${nodeVariant}-${workflowContextState.designerMode || 'workflow'}`;
+      const cacheKey = `${node.id}-${nodeVariant}-${
+        workflowContextState.designerMode || "workflow"
+      }`;
       const cached = dimensionsCache.get(cacheKey);
       if (cached) return cached;
 
       const shapeDimensions = getShapeAwareDimensions(node);
 
       // Architecture mode: fixed rounded-square sizing + right-side labels
-      if (workflowContextState.designerMode === 'architecture') {
+      if (workflowContextState.designerMode === "architecture") {
         const ARCH_SIZE = 64; // square size (visual like the screenshot)
         const result = {
           ...shapeDimensions,
@@ -1445,8 +1449,10 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   const getConfigurablePortPositions = useMemo(() => {
     const positionsCache = new Map<string, any>();
 
-    return (node: WorkflowNode, portType: 'input' | 'output') => {
-      const cacheKey = `${node.id}-${portType}-${nodeVariant}-${workflowContextState.designerMode || 'workflow'}`;
+    return (node: WorkflowNode, portType: "input" | "output") => {
+      const cacheKey = `${node.id}-${portType}-${nodeVariant}-${
+        workflowContextState.designerMode || "workflow"
+      }`;
 
       if (positionsCache.has(cacheKey)) {
         return positionsCache.get(cacheKey);
@@ -1454,20 +1460,22 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
 
       const shape = getNodeShape(node.type);
       const dimensions = getConfigurableDimensions(node);
-      const portCount = portType === 'input' ? node.inputs.length : node.outputs.length;
-      
+      const portCount =
+        portType === "input" ? node.inputs.length : node.outputs.length;
+
       // Import getPortPositions from shape-utils directly since we need to pass custom dimensions
       // Fallback: calculate positions directly here to avoid async issues
-      const positions: Array<{x: number, y: number}> = [];
-      
-      if (shape === 'rectangle' || shape === 'square') {
+      const positions: Array<{ x: number; y: number }> = [];
+
+      if (shape === "rectangle" || shape === "square") {
         const spacing = dimensions.height / (portCount + 1);
         for (let i = 0; i < portCount; i++) {
           const y = -dimensions.height / 2 + spacing * (i + 1);
-          const x = portType === 'input' ? -dimensions.width / 2 : dimensions.width / 2;
+          const x =
+            portType === "input" ? -dimensions.width / 2 : dimensions.width / 2;
           positions.push({ x, y });
         }
-      } else if (shape === 'circle') {
+      } else if (shape === "circle") {
         const angleStep = (Math.PI * 2) / portCount;
         const radius = Math.min(dimensions.width, dimensions.height) / 2;
         for (let i = 0; i < portCount; i++) {
@@ -1481,7 +1489,11 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
       positionsCache.set(cacheKey, positions);
       return positions;
     };
-  }, [nodeVariant, workflowContextState.designerMode, getConfigurableDimensions]);
+  }, [
+    nodeVariant,
+    workflowContextState.designerMode,
+    getConfigurableDimensions,
+  ]);
 
   // Helper function to calculate optimal bottom port positioning
   // Uses either 80% of node width OR node width minus 40px (whichever is smaller)
@@ -2741,17 +2753,23 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
               } = 0;
 
           // Architecture mode: rounded square visual with fixed size
-          if (workflowContextState.designerMode === 'architecture') {
+          if (workflowContextState.designerMode === "architecture") {
             const dims = getConfigurableDimensions(d);
             const radius = 14; // stronger roundness like screenshot
-            const pathData = getShapePath('rectangle', dims.width, dims.height, radius);
+            const pathData = getShapePath(
+              "rectangle",
+              dims.width,
+              dims.height,
+              radius
+            );
             return pathData.d;
           }
 
           // Workflow mode: existing rounded rules
           if (d.type === "start") {
             const dimensions = getShapeAwareDimensions(d);
-            const leftRadius = Math.min(dimensions.width, dimensions.height) * 0.3;
+            const leftRadius =
+              Math.min(dimensions.width, dimensions.height) * 0.3;
             const rightRadius = 8;
             borderRadius = {
               topLeft: leftRadius,
@@ -2917,12 +2935,16 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         .select(".node-icon")
         .attr("x", (d: any) => {
           const dimensions = getConfigurableDimensions(d);
-          return dimensions.iconOffset?.x || 0;
+          return dimensions.iconOffset?.x ?? 0;
         })
         .attr("y", (d: any) => {
           const dimensions = getConfigurableDimensions(d);
-          return dimensions.iconOffset?.y || -8;
+          return dimensions.iconOffset?.y ?? -8;
         })
+        // Nudge vertical alignment to true optical center in architecture mode
+        .attr("dy", () =>
+          workflowContextState.designerMode === "architecture" ? "0.1em" : "0"
+        )
         .attr("text-anchor", "middle")
         .attr("dominant-baseline", "middle")
         .attr(
@@ -5146,7 +5168,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         );
         // Compute hover target box if mouse is over a node group
         const hoveredNode = nodes.find((n) => {
-          const dims = getConfigurableDimensions(n as any)
+          const dims = getConfigurableDimensions(n as any);
           const w = dims.width || 200;
           const h = dims.height || 80;
           const left = n.x - w / 2;
@@ -5160,7 +5182,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
         });
         const hoverTargetBox = hoveredNode
           ? (() => {
-              const dims = getConfigurableDimensions(hoveredNode as any)
+              const dims = getConfigurableDimensions(hoveredNode as any);
               const w = dims.width || 200;
               const h = dims.height || 80;
               return {

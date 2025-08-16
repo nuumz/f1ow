@@ -21,6 +21,7 @@ import NodeEditor from '../NodeEditor'
 // Import Architecture Components
 import ArchitectureNodePalette from './components/ArchitectureNodePalette'
 import { ArchitectureNodeDefinitions } from './types/architecture'
+import { suggestNextNodeType } from './utils/node-suggestions'
 
 // Import types
 import type { WorkflowNode, Connection } from './types'
@@ -688,7 +689,7 @@ function WorkflowDesignerContent({
               onPlusButtonClick={(nodeId: string, portId: string) => {
                 console.log('Plus button clicked:', { nodeId, portId })
                 
-                if (state.designerMode === 'workflow') {
+        if (state.designerMode === 'workflow') {
                   // Workflow mode: Create automation nodes
                   const sourceNode = state.nodes.find(n => n.id === nodeId)
                   if (sourceNode) {
@@ -696,8 +697,8 @@ function WorkflowDesignerContent({
                       x: sourceNode.x + (Math.random() - 0.5) * 100,
                       y: sourceNode.y + 150
                     }
-                    
-                    const newNode = operations.addNode('set', newNodePosition)
+          const nextType = suggestNextNodeType(sourceNode.type, state.designerMode)
+          const newNode = operations.addNode(nextType, newNodePosition)
                     
                     if (newNode && newNode.inputs.length > 0) {
                       operations.createConnection(
@@ -718,7 +719,8 @@ function WorkflowDesignerContent({
                     }
                     
                     // Create a generic service node
-                    handleAddArchitectureNode('internal-service', newNodePosition)
+                    const nextType = suggestNextNodeType('microservice', state.designerMode)
+                    handleAddArchitectureNode(nextType, newNodePosition)
                   }
                 }
               }}

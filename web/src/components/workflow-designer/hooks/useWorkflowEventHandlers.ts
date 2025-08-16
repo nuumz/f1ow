@@ -3,6 +3,9 @@ import * as d3 from 'd3'
 import { useWorkflowContext } from '../contexts/WorkflowContext'
 import { useWorkflowOperations } from './useWorkflowOperations'
 import { useWorkflowCanvas } from './useWorkflowCanvas'
+import { suggestNextNodeType } from '../utils/node-suggestions'
+import { ArchitectureNodeDefinitions } from '../types/architecture'
+import type { NodeDefinition } from '../types'
 import type { WorkflowNode } from './useNodeSelection'
 import type { Connection } from './useConnections'
 
@@ -10,10 +13,10 @@ export function useWorkflowEventHandlers() {
   const { state, svgRef, dispatch } = useWorkflowContext()
   const operations = useWorkflowOperations()
   const canvas = useWorkflowCanvas()
-  
+
   // Use ref to store current connection state to avoid stale closure
   const connectionStateRef = useRef(state.connectionState)
-  
+
   // Update ref when state changes
   useEffect(() => {
     connectionStateRef.current = state.connectionState
@@ -31,7 +34,7 @@ export function useWorkflowEventHandlers() {
       dispatch({ type: 'CLEAR_SELECTION' })
       dispatch({ type: 'SELECT_CONNECTION', payload: null })
     }
-    
+
     dispatch({ type: 'SET_SHOW_NODE_EDITOR', payload: false })
   }, [state.connectionState.isConnecting, dispatch])
 
@@ -49,27 +52,117 @@ export function useWorkflowEventHandlers() {
   const handleCanvasDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault()
     dispatch({ type: 'SET_DRAG_OVER', payload: false })
-    
+
     const nodeType = event.dataTransfer.getData('application/node-type')
     if (nodeType && svgRef.current) {
       const rect = svgRef.current.getBoundingClientRect()
       const clientX = event.clientX - rect.left
       const clientY = event.clientY - rect.top
-      
+
       // Convert screen coordinates to canvas coordinates
       const currentTransform = state.canvasTransform
       if (currentTransform) {
         const canvasX = (clientX - currentTransform.x) / currentTransform.k
         const canvasY = (clientY - currentTransform.y) / currentTransform.k
-        
-        // Use operations for node creation as it includes proper node setup
-        operations.addNode(nodeType, { x: canvasX, y: canvasY })
+
+        // Route by mode: architecture nodes use ArchitectureNodeDefinitions
+        if (state.designerMode === 'architecture') {
+          // Common aliases from palette → definition keys
+          const alias: Record<string, string> = {
+            api: 'rest-api',
+            queue: 'message-queue',
+            storage: 'database',
+            loadbalancer: 'load-balancer'
+          }
+          const defKey = ArchitectureNodeDefinitions[nodeType]
+            ? nodeType
+            : (alias[nodeType] ?? nodeType)
+
+          const def: NodeDefinition | undefined = ArchitectureNodeDefinitions[defKey]
+
+          if (def) {
+            const cfg = (def.defaultConfig ?? {}) as Record<string, unknown>
+            let label: string | undefined
+            if ('serviceName' in cfg) {
+              const v = cfg['serviceName']
+              if (typeof v === 'string' && v.trim()) {
+                label = v
+              }
+            }
+            const resolvedLabel =
+              label || defKey.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+
+            const newNode = {
+              id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+              type: defKey,
+              label: resolvedLabel,
+              x: canvasX,
+              y: canvasY,
+              config: def.defaultConfig || {},
+              inputs: def.inputs || [],
+              outputs: def.outputs || [],
+              bottomPorts: def.bottomPorts || [],
+              category: def.category || 'Services',
+              status: 'idle' as const
+            }
+            dispatch({ type: 'ADD_NODE', payload: newNode })
+          } else {
+            // Fallback to generic workflow node creation so the action still succeeds
+            operations.addNode(nodeType, { x: canvasX, y: canvasY })
+          }
+        } else {
+          // Workflow mode: use standard operations
+          operations.addNode(nodeType, { x: canvasX, y: canvasY })
+        }
       } else {
         // Fallback to screen coordinates if transform not available
-        operations.addNode(nodeType, { x: clientX, y: clientY })
+        if (state.designerMode === 'architecture') {
+          const alias: Record<string, string> = {
+            api: 'rest-api',
+            queue: 'message-queue',
+            storage: 'database',
+            loadbalancer: 'load-balancer'
+          }
+          const defKey = ArchitectureNodeDefinitions[nodeType]
+            ? nodeType
+            : (alias[nodeType] ?? nodeType)
+
+          const def: NodeDefinition | undefined = ArchitectureNodeDefinitions[defKey]
+          if (def) {
+            const cfg = (def.defaultConfig ?? {}) as Record<string, unknown>
+            let label: string | undefined
+            if ('serviceName' in cfg) {
+              const v = cfg['serviceName']
+              if (typeof v === 'string' && v.trim()) {
+                label = v
+              }
+            }
+            const resolvedLabel =
+              label || defKey.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+
+            const newNode = {
+              id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+              type: defKey,
+              label: resolvedLabel,
+              x: clientX,
+              y: clientY,
+              config: def.defaultConfig || {},
+              inputs: def.inputs || [],
+              outputs: def.outputs || [],
+              bottomPorts: def.bottomPorts || [],
+              category: def.category || 'Services',
+              status: 'idle' as const
+            }
+            dispatch({ type: 'ADD_NODE', payload: newNode })
+          } else {
+            operations.addNode(nodeType, { x: clientX, y: clientY })
+          }
+        } else {
+          operations.addNode(nodeType, { x: clientX, y: clientY })
+        }
       }
     }
-  }, [dispatch, svgRef, state.canvasTransform, operations])
+  }, [dispatch, svgRef, state.canvasTransform, state.designerMode, operations])
 
   // Node event handlers
   const handleNodeClick = useCallback((nodeData: WorkflowNode, ctrlKey: boolean = false) => {
@@ -137,14 +230,14 @@ export function useWorkflowEventHandlers() {
   // Drag & Drop handlers for connections
   const handlePortDragStart = useCallback((nodeId: string, portId: string, portType: 'input' | 'output') => {
     console.log('🔥 handlePortDragStart called:', { nodeId, portId, portType })
-    
+
     // Prevent duplicate calls - only allow if not already connecting
     const currentConnectionState = connectionStateRef.current
     if (currentConnectionState.isConnecting) {
       console.log('⚠️ Already connecting, ignoring duplicate call')
       return
     }
-    
+
     // Only allow dragging from output ports
     if (portType === 'output') {
       dispatch({ type: 'START_CONNECTION', payload: { nodeId, portId, type: portType } })
@@ -167,7 +260,7 @@ export function useWorkflowEventHandlers() {
   const handlePortDragEnd = useCallback((targetNodeId?: string, targetPortId?: string, canvasX?: number, canvasY?: number) => {
     // Get fresh connection state from ref
     const currentConnectionState = connectionStateRef.current
-    
+
     console.log('🔥 handlePortDragEnd called:', {
       targetNodeId,
       targetPortId,
@@ -176,39 +269,42 @@ export function useWorkflowEventHandlers() {
       isConnecting: currentConnectionState.isConnecting,
       connectionStart: currentConnectionState.connectionStart
     })
-    
+
     // Guard against multiple calls when not connecting
     if (!currentConnectionState.isConnecting || !currentConnectionState.connectionStart) {
       console.log('⚠️ Not currently connecting, ignoring call')
       return
     }
-    
+
     // Handle canvas background drop (create new node + connection)
     if (targetNodeId === '__CANVAS_DROP__' && canvasX !== undefined && canvasY !== undefined) {
       const { nodeId: sourceNodeId, portId: sourcePortId, type } = currentConnectionState.connectionStart
-      
+
       console.log('🎨 Canvas background drop detected, creating new node and connection:', {
         sourceNodeId,
         sourcePortId,
         sourceType: type,
         dropPosition: { x: canvasX, y: canvasY }
       })
-      
+
       // Only allow from output ports
       if (type === 'output') {
         console.log('✅ Creating new node from canvas drop')
-        
+
+        // Pick a sensible default next node type
+        const sourceNode = state.nodes.find(n => n.id === sourceNodeId)
+        const newType = suggestNextNodeType(sourceNode?.type, state.designerMode)
         // Create a new node at drop position
-        const newNode = operations.addNode('set', { x: canvasX, y: canvasY })
-        
+        const newNode = operations.addNode(newType, { x: canvasX, y: canvasY })
+
         if (newNode) {
           console.log('✅ New node created:', newNode.id)
-          
+
           // Create connection from source output to new node's first input port
           if (newNode.inputs && newNode.inputs.length > 0) {
             const targetInputPort = newNode.inputs[0]
             const result = operations.createConnection(sourceNodeId, sourcePortId, newNode.id, targetInputPort.id)
-            
+
             if (result) {
               console.log('✅ Connection created successfully to new node')
             } else {
@@ -227,7 +323,7 @@ export function useWorkflowEventHandlers() {
     // Handle regular port-to-port connections
     else if (targetNodeId && targetPortId) {
       const { nodeId: sourceNodeId, portId: sourcePortId, type } = currentConnectionState.connectionStart
-      
+
       console.log('🔗 Attempting to create connection:', {
         sourceNodeId,
         sourcePortId,
@@ -235,14 +331,14 @@ export function useWorkflowEventHandlers() {
         targetNodeId,
         targetPortId
       })
-      
+
       // Only allow output -> input connections
       if (type === 'output' && sourceNodeId !== targetNodeId) {
         console.log('✅ Valid connection attempt: output -> input')
-        
+
         // Use operations for connection creation
         const result = operations.createConnection(sourceNodeId, sourcePortId, targetNodeId, targetPortId)
-        
+
         if (result) {
           console.log('✅ Connection created successfully')
         } else {
@@ -256,10 +352,10 @@ export function useWorkflowEventHandlers() {
     } else {
       console.log('❌ Missing target information for connection')
     }
-    
+
     // Clear connection state after drag end
     dispatch({ type: 'CLEAR_CONNECTION_STATE' })
-  }, [operations, dispatch])
+  }, [operations, dispatch, state.nodes, state.designerMode])
 
   // Canvas internal click handler (for WorkflowCanvas component)
   const handleCanvasClickInternal = useCallback(() => {
@@ -267,7 +363,7 @@ export function useWorkflowEventHandlers() {
       dispatch({ type: 'CLEAR_CONNECTION_STATE' })
       return
     }
-    
+
     dispatch({ type: 'CLEAR_SELECTION' })
     dispatch({ type: 'SELECT_CONNECTION', payload: null })
     dispatch({ type: 'SET_SHOW_NODE_EDITOR', payload: false })
@@ -307,27 +403,27 @@ export function useWorkflowEventHandlers() {
       }
       event.preventDefault()
     }
-    
+
     // Select all (Ctrl+A)
     if ((event.ctrlKey || event.metaKey) && event.key === 'a') {
       const allNodeIds = new Set(state.nodes.map(node => node.id))
       dispatch({ type: 'SET_SELECTED_NODES', payload: allNodeIds })
       event.preventDefault()
     }
-    
+
     // Copy (Ctrl+C)
     if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
       if (state.selectedNodes.size > 0) {
         const selectedNodes = state.nodes.filter(node => state.selectedNodes.has(node.id))
-        const selectedConnections = state.connections.filter(conn => 
+        const selectedConnections = state.connections.filter(conn =>
           state.selectedNodes.has(conn.sourceNodeId) && state.selectedNodes.has(conn.targetNodeId)
         )
-        
+
         const clipboardData = {
           nodes: selectedNodes,
           connections: selectedConnections
         }
-        
+
         try {
           navigator.clipboard.writeText(JSON.stringify(clipboardData))
           console.log('Copied to clipboard:', clipboardData)
@@ -337,7 +433,7 @@ export function useWorkflowEventHandlers() {
       }
       event.preventDefault()
     }
-    
+
     // Escape - Clear selection and connection state
     if (event.key === 'Escape') {
       dispatch({ type: 'CLEAR_SELECTION' })
@@ -357,19 +453,19 @@ export function useWorkflowEventHandlers() {
     handleCanvasMouseMove,
     handleTransformChange,
     handleZoomLevelChange,
-    
+
     // Node handlers
     handleNodeClick,
     handleNodeDoubleClick,
     handleNodeDrag,
-    
+
     // Connection handlers
     handlePortClick,
     handleConnectionClick,
     handlePortDragStart,
     handlePortDrag,
     handlePortDragEnd,
-    
+
     // Keyboard handlers
     handleKeyDown
   }

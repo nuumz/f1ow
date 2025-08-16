@@ -116,7 +116,7 @@ export default function ArchitectureNodePalette({
       color: '#ec4899'
     },
     { 
-      type: 'api', 
+      type: 'rest-api', 
       label: 'REST API', 
       icon: iconComponents.api, 
       category: 'Services',

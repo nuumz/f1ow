@@ -9,335 +9,399 @@ import type { NodeSchema } from '../schemas'
 // Enhanced node type definitions with comprehensive information
 export const NodeTypes: Record<string, NodeTypeInfo> = {
   // Core/Control Flow nodes
-  start: { 
-    icon: '💬', 
-    color: '#00C853', 
+  start: {
+    icon: '💬',
+    color: '#00C853',
     label: 'When chat message received',
     category: 'Core/Control Flow',
     description: 'Starting point when chat message is received',
     shape: 'square'
   },
-  
-  if: { 
-    icon: '?', 
-    color: '#FF9800', 
+
+  if: {
+    icon: '?',
+    color: '#FF9800',
     label: 'IF',
     category: 'Core/Control Flow',
     description: 'Conditional branching based on boolean expression',
     shape: 'diamond'
   },
-  
-  switch: { 
-    icon: '⋔', 
-    color: '#9C27B0', 
+
+  switch: {
+    icon: '⋔',
+    color: '#9C27B0',
     label: 'Switch',
     category: 'Core/Control Flow',
     description: 'Multiple conditional branches based on value',
     shape: 'diamond'
   },
-  
-  merge: { 
-    icon: '⋈', 
-    color: '#607D8B', 
+
+  merge: {
+    icon: '⋈',
+    color: '#607D8B',
     label: 'Merge',
     category: 'Core/Control Flow',
     description: 'Merge multiple data streams'
   },
-  
-  split: { 
-    icon: '✂', 
-    color: '#795548', 
+
+  split: {
+    icon: '✂',
+    color: '#795548',
     label: 'Split In Batches',
     category: 'Core/Control Flow',
     description: 'Split data into smaller batches'
   },
-  
-  loop: { 
-    icon: '↻', 
-    color: '#00BCD4', 
+
+  loop: {
+    icon: '↻',
+    color: '#00BCD4',
     label: 'Loop Over Items',
     category: 'Core/Control Flow',
     description: 'Iterate over array items'
   },
-  
-  wait: { 
-    icon: '⏸', 
-    color: '#FFEB3B', 
+
+  wait: {
+    icon: '⏸',
+    color: '#FFEB3B',
     label: 'Wait',
     category: 'Core/Control Flow',
     description: 'Pause execution for specified time'
   },
-  
-  stop: { 
-    icon: '■', 
-    color: '#F44336', 
+
+  stop: {
+    icon: '■',
+    color: '#F44336',
     label: 'Stop and Error',
     category: 'Core/Control Flow',
     description: 'Stop workflow execution with error',
     shape: 'circle'
   },
-  
+
+  // Sub-workflow (palette alias)
+  subworkflow: {
+    icon: '📦',
+    color: '#607D8B',
+    label: 'Sub-workflow',
+    category: 'Core/Control Flow',
+    description: 'Execute a nested workflow'
+  },
+
   // Data Processing nodes
-  set: { 
-    icon: '≔', 
-    color: '#2196F3', 
+  set: {
+    icon: '≔',
+    color: '#2196F3',
     label: 'Set',
     category: 'Data Processing',
     description: 'Set or modify data fields'
   },
-  
-  edit: { 
-    icon: '✎', 
-    color: '#3F51B5', 
+
+  edit: {
+    icon: '✎',
+    color: '#3F51B5',
     label: 'Edit Fields',
     category: 'Data Processing',
     description: 'Edit specific fields in data'
   },
-  
-  code: { 
-    icon: '</>', 
-    color: '#4CAF50', 
+
+  code: {
+    icon: '</>',
+    color: '#4CAF50',
     label: 'Code',
     category: 'Data Processing',
     description: 'Execute custom JavaScript code'
   },
-  
-  function: { 
-    icon: 'ƒ', 
-    color: '#9E9E9E', 
+
+  function: {
+    icon: 'ƒ',
+    color: '#9E9E9E',
     label: 'Function',
     category: 'Data Processing',
     description: 'Execute predefined function'
   },
-  
-  filter: { 
-    icon: '⊍', 
-    color: '#FF5722', 
+
+  filter: {
+    icon: '⊍',
+    color: '#FF5722',
     label: 'Filter',
     category: 'Data Processing',
     description: 'Filter data based on conditions'
   },
-  
-  sort: { 
-    icon: '⇅', 
-    color: '#673AB7', 
+
+  sort: {
+    icon: '⇅',
+    color: '#673AB7',
     label: 'Sort',
     category: 'Data Processing',
     description: 'Sort data array'
   },
-  
-  limit: { 
-    icon: '⊤', 
-    color: '#009688', 
+
+  limit: {
+    icon: '⊤',
+    color: '#009688',
     label: 'Limit',
     category: 'Data Processing',
     description: 'Limit number of items'
   },
-  
-  aggregate: { 
-    icon: '∑', 
-    color: '#E91E63', 
+
+  aggregate: {
+    icon: '∑',
+    color: '#E91E63',
     label: 'Aggregate',
     category: 'Data Processing',
     description: 'Aggregate data calculations'
   },
-  
+
+  // Additional data ops used by palette
+  transform: {
+    icon: '⇄',
+    color: '#4CAF50',
+    label: 'Transform',
+    category: 'Data Processing',
+    description: 'Transform data between formats'
+  },
+  calculate: {
+    icon: '∑',
+    color: '#009688',
+    label: 'Calculate',
+    category: 'Data Processing',
+    description: 'Perform calculations'
+  },
+
   // Network nodes
-  http: { 
-    icon: '⌘', 
+  http: {
+    icon: '⌘',
     label: 'HTTP Request',
     category: 'Network',
     description: 'Make HTTP requests to APIs'
   },
-  
-  webhook: { 
-    icon: '⚡', 
-    color: '#607D8B', 
+
+  webhook: {
+    icon: '⚡',
+    color: '#607D8B',
     label: 'Webhook',
     category: 'Network',
     description: 'Receive webhook data'
   },
-  
+
+  email: {
+    icon: '✉️',
+    color: '#EF4444',
+    label: 'Email',
+    category: 'Network',
+    description: 'Send email notifications'
+  },
+
   // Database nodes
-  mysql: { 
-    icon: 'DB', 
-    color: '#00758F', 
+  mysql: {
+    icon: 'DB',
+    color: '#00758F',
     label: 'MySQL',
     category: 'Database',
     description: 'MySQL database operations'
   },
-  
-  postgres: { 
-    icon: 'PG', 
-    color: '#336791', 
+
+  postgres: {
+    icon: 'PG',
+    color: '#336791',
     label: 'PostgreSQL',
     category: 'Database',
     description: 'PostgreSQL database operations'
   },
-  
-  mongodb: { 
-    icon: 'MG', 
-    color: '#47A248', 
+  // Palette alias
+  postgresql: {
+    icon: 'PG',
+    color: '#336791',
+    label: 'PostgreSQL',
+    category: 'Database',
+    description: 'PostgreSQL database operations'
+  },
+
+  mongodb: {
+    icon: 'MG',
+    color: '#47A248',
     label: 'MongoDB',
     category: 'Database',
     description: 'MongoDB database operations'
   },
-  
-  redis: { 
-    icon: 'RD', 
-    color: '#DC382D', 
+
+  redis: {
+    icon: 'RD',
+    color: '#DC382D',
     label: 'Redis',
     category: 'Database',
     description: 'Redis cache operations'
   },
-  
+
   // File System nodes
-  readfile: { 
-    icon: '📖', 
-    color: '#795548', 
+  readfile: {
+    icon: '📖',
+    color: '#795548',
     label: 'Read File',
     category: 'File System',
     description: 'Read file contents'
   },
-  
-  writefile: { 
-    icon: '💾', 
-    color: '#607D8B', 
+
+  writefile: {
+    icon: '💾',
+    color: '#607D8B',
     label: 'Write File',
     category: 'File System',
     description: 'Write data to file'
   },
-  
-  ftp: { 
-    icon: 'FTP', 
-    color: '#795548', 
+
+  ftp: {
+    icon: 'FTP',
+    color: '#795548',
     label: 'FTP',
     category: 'File System',
     description: 'FTP file operations'
   },
-  
-  sftp: { 
-    icon: 'SFTP', 
-    color: '#607D8B', 
+
+  sftp: {
+    icon: 'SFTP',
+    color: '#607D8B',
     label: 'SFTP',
     category: 'File System',
     description: 'SFTP file operations'
   },
-  
+
   // Cloud Services nodes
-  aws: { 
-    icon: 'AWS', 
-    color: '#FF9900', 
+  aws: {
+    icon: 'AWS',
+    color: '#FF9900',
     label: 'AWS',
     category: 'Cloud Services',
     description: 'AWS cloud services'
   },
-  
-  gcloud: { 
-    icon: 'GCP', 
-    color: '#4285F4', 
+
+  gcloud: {
+    icon: 'GCP',
+    color: '#4285F4',
     label: 'Google Cloud',
     category: 'Cloud Services',
     description: 'Google Cloud Platform services'
   },
-  
-  azure: { 
-    icon: 'AZ', 
-    color: '#0078D4', 
+
+  azure: {
+    icon: 'AZ',
+    color: '#0078D4',
     label: 'Microsoft Azure',
     category: 'Cloud Services',
     description: 'Microsoft Azure services'
   },
-  
+
   // Triggers nodes
-  schedule: { 
-    icon: '⏰', 
-    color: '#FFC107', 
+  schedule: {
+    icon: '⏰',
+    color: '#FFC107',
     label: 'Schedule Trigger',
     category: 'Triggers',
     description: 'Trigger workflow on schedule'
   },
-  
-  interval: { 
-    icon: '⏱️', 
-    color: '#FF9800', 
+
+  interval: {
+    icon: '⏱️',
+    color: '#FF9800',
     label: 'Interval',
     category: 'Triggers',
     description: 'Trigger workflow at intervals'
   },
-  
-  manual: { 
-    icon: '👆', 
-    color: '#9E9E9E', 
+
+  manual: {
+    icon: '👆',
+    color: '#9E9E9E',
     label: 'Manual Trigger',
     category: 'Triggers',
     description: 'Manual workflow trigger'
   },
-  
+
   // AI/ML nodes
-  aiagent: { 
-    icon: '🤖', 
+  aiagent: {
+    icon: '🤖',
     label: 'AI Agent',
     category: 'AI/ML',
     description: 'AI agent processing'
   },
-  
-  openai: { 
-    icon: '🧠', 
-    color: '#10A37F', 
+
+  openai: {
+    icon: '🧠',
+    color: '#10A37F',
     label: 'OpenAI',
     category: 'AI/ML',
     description: 'OpenAI API integration'
   },
-  
+
   // Utilities nodes
-  delay: { 
-    icon: '⏳', 
-    color: '#FFEB3B', 
+  delay: {
+    icon: '⏳',
+    color: '#FFEB3B',
     label: 'Delay',
     category: 'Utilities',
     description: 'Add delay to workflow'
   },
-  
-  crypto: { 
-    icon: '🔐', 
-    color: '#9C27B0', 
+
+  crypto: {
+    icon: '🔐',
+    color: '#9C27B0',
     label: 'Crypto',
     category: 'Utilities',
     description: 'Cryptographic operations'
   },
-  
-  hash: { 
-    icon: '#️⃣', 
-    color: '#607D8B', 
+
+  hash: {
+    icon: '#️⃣',
+    color: '#607D8B',
     label: 'Hash',
     category: 'Utilities',
     description: 'Generate hash values'
   },
-  
-  xml: { 
-    icon: '📄', 
-    color: '#FF9800', 
+
+  xml: {
+    icon: '📄',
+    color: '#FF9800',
     label: 'XML',
     category: 'Utilities',
     description: 'XML processing'
   },
-  
-  json: { 
-    icon: '📋', 
-    color: '#4CAF50', 
+
+  json: {
+    icon: '📋',
+    color: '#4CAF50',
     label: 'JSON',
     category: 'Utilities',
     description: 'JSON processing',
     shape: 'square'
   },
-  
-  csv: { 
-    icon: '📊', 
-    color: '#2196F3', 
+
+  csv: {
+    icon: '📊',
+    color: '#2196F3',
     label: 'CSV',
     category: 'Utilities',
     description: 'CSV file processing'
+  }
+  ,
+  // Security & System palette aliases
+  auth: {
+    icon: '🔑',
+    color: '#9C27B0',
+    label: 'Authentication',
+    category: 'Authentication',
+    description: 'User authentication and authorization'
+  },
+  encrypt: {
+    icon: '🔐',
+    color: '#7C4DFF',
+    label: 'Encrypt',
+    category: 'Utilities',
+    description: 'Encrypt sensitive data'
+  },
+  config: {
+    icon: '⚙️',
+    color: '#607D8B',
+    label: 'Configuration',
+    category: 'Utilities',
+    description: 'Manage workflow configuration'
   }
 }
 
@@ -356,25 +420,36 @@ export const NodeDefinitions: Record<string, NodeDefinition> = {
     icon: '💬',
     color: '#00C853'
   },
-  
+
+  // Sub-workflow
+  subworkflow: {
+    inputs: [{ id: 'main', type: 'input', dataType: 'any', label: 'Main', required: false }],
+    outputs: [{ id: 'main', type: 'output', dataType: 'any', label: 'Main' }],
+    defaultConfig: { workflowId: '' },
+    category: 'Core/Control Flow',
+    description: 'Execute a nested workflow',
+    icon: '📦',
+    color: '#607D8B'
+  },
+
   if: {
     inputs: [{ id: 'main', type: 'input', dataType: 'any', label: 'Main', required: true }],
     outputs: [
       { id: 'true', type: 'output', dataType: 'any', label: 'True' },
       { id: 'false', type: 'output', dataType: 'any', label: 'False' }
     ],
-    defaultConfig: { 
-      condition: '', 
-      value1: '', 
-      operation: '=', 
-      value2: '' 
+    defaultConfig: {
+      condition: '',
+      value1: '',
+      operation: '=',
+      value2: ''
     },
     category: 'Core/Control Flow',
     description: 'Conditional branching based on boolean expression',
     icon: '?',
     color: '#FF9800'
   },
-  
+
   switch: {
     inputs: [{ id: 'main', type: 'input', dataType: 'any', label: 'Main', required: true }],
     outputs: [
@@ -389,7 +464,7 @@ export const NodeDefinitions: Record<string, NodeDefinition> = {
     icon: '⋔',
     color: '#9C27B0'
   },
-  
+
   merge: {
     inputs: [
       { id: 'main', type: 'input', dataType: 'any', label: 'Main', required: true },
@@ -402,7 +477,7 @@ export const NodeDefinitions: Record<string, NodeDefinition> = {
     icon: '⋈',
     color: '#607D8B'
   },
-  
+
   // Data Processing nodes
   set: {
     inputs: [{ id: 'main', type: 'input', dataType: 'any', label: 'Main', required: true }],
@@ -413,7 +488,7 @@ export const NodeDefinitions: Record<string, NodeDefinition> = {
     icon: '≔',
     color: '#2196F3'
   },
-  
+
   code: {
     inputs: [{ id: 'main', type: 'input', dataType: 'any', label: 'Main', required: true }],
     outputs: [{ id: 'main', type: 'output', dataType: 'any', label: 'Main' }],
@@ -423,14 +498,32 @@ export const NodeDefinitions: Record<string, NodeDefinition> = {
     icon: '</>',
     color: '#4CAF50'
   },
-  
+  transform: {
+    inputs: [{ id: 'main', type: 'input', dataType: 'any', label: 'Main', required: true }],
+    outputs: [{ id: 'main', type: 'output', dataType: 'any', label: 'Main' }],
+    defaultConfig: { mapping: {} },
+    category: 'Data Processing',
+    description: 'Transform data between formats',
+    icon: '⇄',
+    color: '#4CAF50'
+  },
+  calculate: {
+    inputs: [{ id: 'main', type: 'input', dataType: 'any', label: 'Main', required: false }],
+    outputs: [{ id: 'result', type: 'output', dataType: 'any', label: 'Result' }],
+    defaultConfig: { expression: '' },
+    category: 'Data Processing',
+    description: 'Perform calculations',
+    icon: '∑',
+    color: '#009688'
+  },
+
   // Network nodes
   http: {
     inputs: [{ id: 'main', type: 'input', dataType: 'any', label: 'Main' }],
     outputs: [{ id: 'main', type: 'output', dataType: 'any', label: 'Main' }],
-    defaultConfig: { 
-      method: 'GET', 
-      url: '', 
+    defaultConfig: {
+      method: 'GET',
+      url: '',
       authentication: 'none',
       timeout: 10000,
       followRedirect: true
@@ -440,7 +533,16 @@ export const NodeDefinitions: Record<string, NodeDefinition> = {
     icon: '⌘',
     color: '#2196F3'
   },
-  
+  email: {
+    inputs: [{ id: 'main', type: 'input', dataType: 'object', label: 'Data', required: false }],
+    outputs: [{ id: 'main', type: 'output', dataType: 'object', label: 'Result' }],
+    defaultConfig: { to: '', subject: '', body: '' },
+    category: 'Network',
+    description: 'Send email notifications',
+    icon: '✉️',
+    color: '#EF4444'
+  },
+
   // Database nodes
   mysql: {
     inputs: [{ id: 'main', type: 'input', dataType: 'any', label: 'Main', required: true }],
@@ -451,7 +553,16 @@ export const NodeDefinitions: Record<string, NodeDefinition> = {
     icon: 'DB',
     color: '#00758F'
   },
-  
+  postgresql: {
+    inputs: [{ id: 'query', type: 'input', dataType: 'string', label: 'Query', required: true }],
+    outputs: [{ id: 'result', type: 'output', dataType: 'object', label: 'Result' }],
+    defaultConfig: { connection: '', query: '' },
+    category: 'Database',
+    description: 'PostgreSQL database operations',
+    icon: 'PG',
+    color: '#336791'
+  },
+
   // AI Agent node
   aiagent: {
     inputs: [{ id: 'main', type: 'input', dataType: 'any', label: 'Input', required: true }],
@@ -461,7 +572,7 @@ export const NodeDefinitions: Record<string, NodeDefinition> = {
       { id: 'memory', type: 'input', dataType: 'object', label: 'Memory' },
       { id: 'tool', type: 'input', dataType: 'array', label: 'Tool' }
     ],
-    defaultConfig: { 
+    defaultConfig: {
       model: 'gpt-4',
       prompt: '',
       temperature: 0.7,
@@ -472,6 +583,34 @@ export const NodeDefinitions: Record<string, NodeDefinition> = {
     description: 'AI agent processing',
     icon: '🤖',
     color: '#9C27B0'
+  }
+  ,
+  auth: {
+    inputs: [{ id: 'main', type: 'input', dataType: 'object', label: 'Data' }],
+    outputs: [{ id: 'main', type: 'output', dataType: 'object', label: 'Result' }],
+    defaultConfig: { strategy: 'basic' },
+    category: 'Authentication',
+    description: 'User authentication and authorization',
+    icon: '🔑',
+    color: '#9C27B0'
+  },
+  encrypt: {
+    inputs: [{ id: 'main', type: 'input', dataType: 'any', label: 'Input' }],
+    outputs: [{ id: 'main', type: 'output', dataType: 'any', label: 'Encrypted' }],
+    defaultConfig: { algorithm: 'aes-256-gcm' },
+    category: 'Utilities',
+    description: 'Encrypt sensitive data',
+    icon: '🔐',
+    color: '#7C4DFF'
+  },
+  config: {
+    inputs: [{ id: 'main', type: 'input', dataType: 'any', label: 'Main' }],
+    outputs: [{ id: 'main', type: 'output', dataType: 'any', label: 'Main' }],
+    defaultConfig: {},
+    category: 'Utilities',
+    description: 'Manage workflow configuration',
+    icon: '⚙️',
+    color: '#607D8B'
   }
 }
 
@@ -497,7 +636,7 @@ export function getNodeColor(type: string, status?: string): string {
   if (status === 'completed') return '#66BB6A'
   if (status === 'error') return '#EF5350'
   if (status === 'warning') return '#FFCA28'
-  
+
   return NodeTypes[type]?.color || '#8d8d8d'
 }
 
@@ -523,7 +662,7 @@ export function getNodeCategories(): string[] {
   Object.values(NodeTypes).forEach(info => {
     if (info.category) categories.add(info.category)
   })
-  return Array.from(categories).sort()
+  return Array.from(categories).sort((a, b) => a.localeCompare(b))
 }
 
 export function getNodesByCategory(category: string): Array<{ type: string; info: NodeTypeInfo }> {
@@ -534,9 +673,9 @@ export function getNodesByCategory(category: string): Array<{ type: string; info
 
 // Node registry class for dynamic registration
 export class NodeRegistry {
-  private nodes = new Map<string, NodeTypeInfo>()
-  private definitions = new Map<string, NodeDefinition>()
-  private schemas = new Map<string, NodeSchema>()
+  private readonly nodes = new Map<string, NodeTypeInfo>()
+  private readonly definitions = new Map<string, NodeDefinition>()
+  private readonly schemas = new Map<string, NodeSchema>()
 
   registerNode(type: string, info: NodeTypeInfo, definition: NodeDefinition, schema?: NodeSchema): void {
     this.nodes.set(type, info)
@@ -568,18 +707,18 @@ export class NodeRegistry {
 
   getAllCategories(): string[] {
     const categories = new Set<string>()
-    
+
     // Add built-in categories
     Object.values(NodeTypes).forEach(info => {
       if (info.category) categories.add(info.category)
     })
-    
+
     // Add registered categories
     this.nodes.forEach(info => {
       if (info.category) categories.add(info.category)
     })
-    
-    return Array.from(categories).sort()
+
+    return Array.from(categories).sort((a, b) => a.localeCompare(b))
   }
 }
 

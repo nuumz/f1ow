@@ -9,10 +9,42 @@ import { getShapeAwareDimensions } from './node-utils'
 
 // Shared helpers for virtual side ports (architecture omni-ports)
 const isVirtualSidePortId = (id: string) => id.startsWith('__side-')
+
+// Architecture mode fixed sizing (must match WorkflowCanvas getConfigurableDimensions)
+const ARCH_SIZE = 64
+
+// Mode-aware dimensions helper
+function getModeAwareDimensions(node: WorkflowNode, modeId?: string) {
+  if (modeId === 'architecture') {
+    return { width: ARCH_SIZE, height: ARCH_SIZE }
+  }
+  const dims = getShapeAwareDimensions(node)
+  return { width: dims.width || 200, height: dims.height || 80 }
+}
+
 const getVirtualSidePortPosition = (node: WorkflowNode, portId: string): PortPosition => {
   const dims = getShapeAwareDimensions(node)
   const halfW = (dims.width || 200) / 2
   const halfH = (dims.height || 80) / 2
+  switch (portId) {
+    case '__side-top':
+      return { x: node.x, y: node.y - halfH }
+    case '__side-right':
+      return { x: node.x + halfW, y: node.y }
+    case '__side-bottom':
+      return { x: node.x, y: node.y + halfH }
+    case '__side-left':
+      return { x: node.x - halfW, y: node.y }
+    default:
+      return { x: node.x, y: node.y }
+  }
+}
+
+// Mode-aware virtual side port position
+function getVirtualSidePortPositionForMode(node: WorkflowNode, portId: string, modeId?: string): PortPosition {
+  const dims = getModeAwareDimensions(node, modeId)
+  const halfW = (dims.width) / 2
+  const halfH = (dims.height) / 2
   switch (portId) {
     case '__side-top':
       return { x: node.x, y: node.y - halfH }
@@ -55,6 +87,7 @@ export { generateOrthogonalRoundedPath, generateAdaptiveOrthogonalRoundedPath } 
 export type { AnalyzableConnection, GroupedConnection, ConnectionGroupInfo } from './connection-analysis'
 
 // Local helpers -------------------------------------------------------------
+type PortSide = 'top' | 'bottom' | 'left' | 'right' | 'unknown'
 function buildNodeBox(node: WorkflowNode) {
   const dims = getShapeAwareDimensions(node)
   const width = dims.width || 200
@@ -62,21 +95,30 @@ function buildNodeBox(node: WorkflowNode) {
   return { x: node.x - width / 2, y: node.y - height / 2, width, height }
 }
 
+function buildNodeBoxModeAware(node: WorkflowNode, modeId?: string) {
+  const dims = getModeAwareDimensions(node, modeId)
+  const width = dims.width
+  const height = dims.height
+  return { x: node.x - width / 2, y: node.y - height / 2, width, height }
+}
+
 // Detect which side of the node a port position lies on to infer segment orientation
-function detectPortSide(
+// NOTE: legacy detectPortSide removed; use detectPortSideModeAware instead
+
+function detectPortSideModeAware(
   node: WorkflowNode,
   portId: string,
-  pos: PortPosition
-): 'top' | 'bottom' | 'left' | 'right' | 'unknown' {
-  // Virtual side ports are explicit
+  pos: PortPosition,
+  modeId?: string
+): PortSide {
   if (portId === '__side-top') return 'top'
   if (portId === '__side-right') return 'right'
   if (portId === '__side-bottom') return 'bottom'
   if (portId === '__side-left') return 'left'
 
-  const dims = getShapeAwareDimensions(node)
-  const halfW = (dims.width || 200) / 2
-  const halfH = (dims.height || 80) / 2
+  const dims = getModeAwareDimensions(node, modeId)
+  const halfW = dims.width / 2
+  const halfH = dims.height / 2
   const leftX = node.x - halfW
   const rightX = node.x + halfW
   const topY = node.y - halfH
@@ -196,14 +238,55 @@ export function calculateConnectionPreviewPath(
   config?: PathConfig,
   modeId: string = 'workflow',
   hoverTargetBox?: { x: number; y: number; width: number; height: number }
-): string {
+): string { // NOSONAR: readability prioritized over cognitive complexity metric here
   // Determine if this is a bottom port (include side-bottom)
   const isSourceBottomPort = isBottomPort(sourceNode, sourcePortId) || sourcePortId === '__side-bottom'
   const portType = isSourceBottomPort ? 'bottom' : 'output'
   
-  const sourcePos = isVirtualSidePortId(sourcePortId)
-    ? getVirtualSidePortPosition(sourceNode, sourcePortId)
-    : calculatePortPositionCore(sourceNode, sourcePortId, portType, variant)
+  // Mode-aware port position for accurate endpoint alignment
+  let sourcePos: PortPosition
+  if (modeId === 'architecture') {
+    if (isVirtualSidePortId(sourcePortId)) {
+      sourcePos = getVirtualSidePortPositionForMode(sourceNode, sourcePortId, modeId)
+    } else {
+      // Architecture: fixed rectangle spacing ports
+      const dims = getModeAwareDimensions(sourceNode, modeId)
+      if (portType === 'bottom') {
+        // Bottom port: find index and layout
+        const ports = sourceNode.bottomPorts || []
+        const idx = Math.max(0, ports.findIndex(p => p.id === sourcePortId))
+        const portCount = ports.length
+        const usableWidth = Math.min(dims.width * 0.8, dims.width - 70)
+        let x = 0
+        if (portCount === 2) {
+          const spacing = usableWidth / 3
+          const positions = [-spacing, spacing]
+          x = positions[idx] || 0
+        } else if (portCount === 3) {
+          const halfWidth = usableWidth / 2
+          const positions = [-halfWidth, 0, halfWidth]
+          x = positions[idx] || 0
+        } else if (portCount >= 4) {
+          const spacing = usableWidth / (portCount - 1)
+          x = -usableWidth / 2 + spacing * idx
+  }
+        sourcePos = { x: sourceNode.x + x, y: sourceNode.y + dims.height / 2 }
+      } else {
+        // Non-bottom preview always originates from an output port in this flow
+        const ports = sourceNode.outputs
+        const idx = Math.max(0, ports.findIndex(p => p.id === sourcePortId))
+        const count = ports.length || 1
+        const spacing = dims.height / (count + 1)
+        const y = -dims.height / 2 + spacing * (idx + 1)
+        const x = dims.width / 2
+        sourcePos = { x: sourceNode.x + x, y: sourceNode.y + y }
+      }
+    }
+  } else {
+    sourcePos = isVirtualSidePortId(sourcePortId)
+      ? getVirtualSidePortPosition(sourceNode, sourcePortId)
+      : calculatePortPositionCore(sourceNode, sourcePortId, portType, variant)
+  }
   
   // Validate positions
   if (!validatePathInputs(sourcePos, previewPosition)) {
@@ -217,7 +300,7 @@ export function calculateConnectionPreviewPath(
   // Architecture mode should preview orthogonal (right‑angle) path with radius to match final rendering
   if (modeId === 'architecture') {
     // Prefer adaptive path to better match final routing around obstacles
-    const startSide = detectPortSide(sourceNode, sourcePortId, sourcePos)
+  const startSide = detectPortSideModeAware(sourceNode, sourcePortId, sourcePos, modeId)
     const startOrientation = sideToOrientation(startSide)
     // When starting from a bottom port, snap to target's top/bottom edge center depending on proximity if a hover target box is known
     // Rule: if (topPortTargetY - sourceY) <= 50px => use target bottom port; else use target top port
@@ -255,7 +338,7 @@ export function calculateConnectionPreviewPath(
       ].join(' ')
     }
 
-    const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, previewEnd, 16, {
+  const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, previewEnd, 16, {
       clearance: 10, // Minimal clearance for tight arrow positioning
       targetBox: hoverTargetBox,
       startOrientationOverride: startOrientation,
@@ -323,8 +406,12 @@ export function generateMultipleConnectionPath(opts: {
   
   // Architecture mode: Use bundled connection approach
   if (mode === 'architecture') {
-    // For architecture mode, all connections follow the same path but have different styles
-    return generateVariantAwareConnectionPath(sourceNode, sourcePortId, targetNode, targetPortId, variant, config)
+    // For architecture mode, use the orthogonal path generator with fixed sizing so endpoints align with ports
+    return generateArchitectureModeConnectionPath(
+      sourceNode,
+      targetNode,
+  { sourceNodeId: sourceNode.id, sourcePortId, targetNodeId: targetNode.id, targetPortId }
+    )
   }
   
   // Workflow mode: Show individual offset lines
@@ -363,7 +450,7 @@ export function generateModeAwareConnectionPath(
   if (!sourceNode || !targetNode) return ''
 
   if (modeId === 'architecture') {
-    return generateArchitectureModeConnectionPath(sourceNode, targetNode, connection, variant)
+    return generateArchitectureModeConnectionPath(sourceNode, targetNode, connection)
   }
 
   // Fallback to existing bezier
@@ -381,23 +468,83 @@ export function generateModeAwareConnectionPath(
 function generateArchitectureModeConnectionPath(
   sourceNode: WorkflowNode,
   targetNode: WorkflowNode,
-  connection: { sourceNodeId: string; sourcePortId: string; targetNodeId: string; targetPortId: string },
-  variant: NodeVariant
+  connection: { sourceNodeId: string; sourcePortId: string; targetNodeId: string; targetPortId: string }
 ): string {
   // Use port positioning (including virtual side-port anchors) for start/end, then orthogonal path
   const isSourceBottom = isBottomPort(sourceNode, connection.sourcePortId) || connection.sourcePortId === '__side-bottom'
   const isTargetBottom = isBottomPort(targetNode, connection.targetPortId) || connection.targetPortId === '__side-bottom'
   const sourceType = isSourceBottom ? 'bottom' : 'output'
   const targetType = isTargetBottom ? 'bottom' : 'input'
-  const sourcePos = isVirtualSidePortId(connection.sourcePortId)
-    ? getVirtualSidePortPosition(sourceNode, connection.sourcePortId)
-    : calculatePortPositionCore(sourceNode, connection.sourcePortId, sourceType, variant)
-  const targetPos = isVirtualSidePortId(connection.targetPortId)
-    ? getVirtualSidePortPosition(targetNode, connection.targetPortId)
-    : calculatePortPositionCore(targetNode, connection.targetPortId, targetType, variant)
+  // ARCH: compute using fixed-size geometry so endpoints match port circles
+  const sourceDims = getModeAwareDimensions(sourceNode, 'architecture')
+  const targetDims = getModeAwareDimensions(targetNode, 'architecture')
+  const sourcePos: PortPosition = (() => {
+    if (isVirtualSidePortId(connection.sourcePortId)) {
+      return getVirtualSidePortPositionForMode(sourceNode, connection.sourcePortId, 'architecture')
+    }
+    if (sourceType === 'bottom') {
+      const ports = sourceNode.bottomPorts || []
+      const idx = Math.max(0, ports.findIndex(p => p.id === connection.sourcePortId))
+      const count = ports.length
+      const usableWidth = Math.min(sourceDims.width * 0.8, sourceDims.width - 70)
+      let relX = 0
+      if (count === 2) {
+        const spacing = usableWidth / 3
+        const positions = [-spacing, spacing]
+        relX = positions[idx] || 0
+      } else if (count === 3) {
+        const half = usableWidth / 2
+        const positions = [-half, 0, half]
+        relX = positions[idx] || 0
+      } else if (count >= 4) {
+        const spacing = usableWidth / (count - 1)
+        relX = -usableWidth / 2 + spacing * idx
+      }
+      return { x: sourceNode.x + relX, y: sourceNode.y + sourceDims.height / 2 }
+    }
+  const ports = sourceNode.outputs
+  const idx = Math.max(0, ports.findIndex(p => p.id === connection.sourcePortId))
+    const count = ports.length || 1
+    const spacing = sourceDims.height / (count + 1)
+    const y = -sourceDims.height / 2 + spacing * (idx + 1)
+  const x = sourceDims.width / 2
+    return { x: sourceNode.x + x, y: sourceNode.y + y }
+  })()
+  const targetPos: PortPosition = (() => {
+    if (isVirtualSidePortId(connection.targetPortId)) {
+      return getVirtualSidePortPositionForMode(targetNode, connection.targetPortId, 'architecture')
+    }
+    if (targetType === 'bottom') {
+      const ports = targetNode.bottomPorts || []
+      const idx = Math.max(0, ports.findIndex(p => p.id === connection.targetPortId))
+      const count = ports.length
+      const usableWidth = Math.min(targetDims.width * 0.8, targetDims.width - 70)
+      let relX = 0
+      if (count === 2) {
+        const spacing = usableWidth / 3
+        const positions = [-spacing, spacing]
+        relX = positions[idx] || 0
+      } else if (count === 3) {
+        const half = usableWidth / 2
+        const positions = [-half, 0, half]
+        relX = positions[idx] || 0
+      } else if (count >= 4) {
+        const spacing = usableWidth / (count - 1)
+        relX = -usableWidth / 2 + spacing * idx
+      }
+      return { x: targetNode.x + relX, y: targetNode.y + targetDims.height / 2 }
+    }
+    const ports = targetType === 'input' ? targetNode.inputs : targetNode.outputs
+    const idx = Math.max(0, ports.findIndex(p => p.id === connection.targetPortId))
+    const count = ports.length || 1
+    const spacing = targetDims.height / (count + 1)
+    const y = -targetDims.height / 2 + spacing * (idx + 1)
+    const x = targetType === 'input' ? -targetDims.width / 2 : targetDims.width / 2
+    return { x: targetNode.x + x, y: targetNode.y + y }
+  })()
   if (!validatePathInputs(sourcePos, targetPos)) return ''
   // Build boxes and obstacles for adaptive routing
-  const startSide = detectPortSide(sourceNode, connection.sourcePortId, sourcePos)
+  const startSide = detectPortSideModeAware(sourceNode, connection.sourcePortId, sourcePos, 'architecture')
   const startOrientation = sideToOrientation(startSide)
   // Auto-select target side if targetPortId is not an explicit virtual side
   type SidePortId = '__side-left' | '__side-right' | '__side-top' | '__side-bottom'
@@ -406,7 +553,7 @@ function generateArchitectureModeConnectionPath(
     // Architecture rule: when starting from bottom port, choose target side based on vertical proximity
     // If target top is within 50px below the source Y, use target bottom; else use target top
   const SNAP_THRESHOLD = FIXED_LEAD_LENGTH * 2
-    const tBox = buildNodeBox(targetNode)
+    const tBox = buildNodeBoxModeAware(targetNode, 'architecture')
     const sourceY = sourcePos.y
     const topY = tBox.y
     const useBottom = (topY - sourceY) < SNAP_THRESHOLD
@@ -420,13 +567,13 @@ function generateArchitectureModeConnectionPath(
   } else {
     targetSidePortId = chooseAutoTargetSide(sourcePos, targetNode)
   }
-  const autoTargetPos = getVirtualSidePortPosition(targetNode, targetSidePortId)
-  const endOrientation = sideToOrientation(detectPortSide(targetNode, targetSidePortId, autoTargetPos))
+  const autoTargetPos = getVirtualSidePortPositionForMode(targetNode, targetSidePortId, 'architecture')
+  const endOrientation = sideToOrientation(detectPortSideModeAware(targetNode, targetSidePortId, autoTargetPos, 'architecture'))
 
   // If we chose bottom due to close vertical proximity, draw a U-shape under both nodes to avoid overlap
   if (isSourceBottom && targetSidePortId === '__side-bottom') {
-    const srcBox = buildNodeBox(sourceNode)
-    const tgtBox = buildNodeBox(targetNode)
+    const srcBox = buildNodeBoxModeAware(sourceNode, 'architecture')
+    const tgtBox = buildNodeBoxModeAware(targetNode, 'architecture')
   const safeClear = 16
   const boxesBottom = Math.max(srcBox.y + srcBox.height, tgtBox.y + tgtBox.height)
   // Enforce vertical leg min length of FIXED_LEAD_LENGTH for both sides
@@ -442,7 +589,7 @@ function generateArchitectureModeConnectionPath(
 
   const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, autoTargetPos, 16, {
     clearance: 10, // Minimal clearance for tight arrow positioning
-    targetBox: buildNodeBox(targetNode),
+    targetBox: buildNodeBoxModeAware(targetNode, 'architecture'),
     startOrientationOverride: startOrientation,
     endOrientationOverride: endOrientation
   })

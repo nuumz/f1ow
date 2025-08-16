@@ -33,37 +33,22 @@ import {
   GridPerformanceMonitor,
   GridOptimizer,
 } from "../utils/grid-performance";
-// Production connection imports removed - simplified to use standard connection paths
-// Connection config imports removed - simplified architecture
+// Extracted utility imports
+import {
+  PERFORMANCE_CONSTANTS,
+  GRID_CONSTANTS,
+  CallbackPriority,
+  NodeZIndexState,
+} from "../utils/canvas-constants";
+// Utility imports available for future enhancement:
+// import { CacheManager } from "../utils/cache-manager";
+// import { RAFScheduler, DebouncedRAFScheduler } from "../utils/raf-scheduler";
+// import { PortHighlightManager } from "../utils/port-highlighting";
 
-// ========== CONSTANTS ==========
-// Performance and caching constants
-const PERFORMANCE_CONSTANTS = {
-  MAX_CACHE_SIZE: 1000,
-  CACHE_CLEANUP_THRESHOLD: 1200,
-  GRID_CACHE_DURATION: 30000, // 30 seconds
-  CACHE_AGE_LIMIT: 1000, // 1 second
-  CLEANUP_INTERVAL: 30000, // 30 seconds
-  RAF_THROTTLE_INTERVAL: 16, // ~60fps
-} as const;
+// ========== EXTRACTED CONSTANTS ==========
+// Constants have been moved to ../utils/canvas-constants.ts for reusability
 
-// Grid rendering constants
-const GRID_CONSTANTS = {
-  BASE_GRID_SIZE: 20,
-  GRID_CACHE_TOLERANCE: 100, // pixels
-  VIEWPORT_CACHE_TOLERANCE: 400, // pixels
-  VIEWPORT_HEIGHT_TOLERANCE: 500, // pixels
-  CACHE_HIT_LOG_INTERVAL: 100,
-  PERFORMANCE_LOG_INTERVAL: 100,
-  PERFORMANCE_WARNING_INTERVAL: 50,
-} as const;
-
-// Arrow marker constants (commented out as not currently used - for future dynamic sizing)
-// Arrow marker constants removed (unused)
-
-// Type aliases for better maintainability
-type CallbackPriority = "high" | "normal" | "low";
-type NodeZIndexState = "normal" | "selected" | "dragging";
+// ========== COMPONENT INTERFACE ==========
 
 export interface WorkflowCanvasProps {
   // SVG ref
@@ -170,6 +155,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   onZoomLevelChange,
   onRegisterZoomBehavior,
 }: WorkflowCanvasProps) {
+  // ========== CONTEXT AND STATE ==========
   // Get dragging state and designer mode from context
   const {
     state: workflowContextState,
@@ -180,25 +166,24 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     endDragging,
   } = useWorkflowContext();
 
-  // Production connection system removed - simplified to use standard paths
+  // Component initialization state
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Debug controls removed - production connection system simplified
-
-  // Remove hover state from React - manage it directly in D3
+  // ========== PERFORMANCE REFS ==========
+  // General timeout and RAF management
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  // Performance state
-  const [isInitialized, setIsInitialized] = useState(false);
   const rafIdRef = useRef<number | null>(null);
   const rafScheduledRef = useRef<boolean>(false);
 
-  // Enhanced drag performance state
+  // Batched update queues for performance
   const connectionUpdateQueueRef = useRef<Set<string>>(new Set());
   const batchedConnectionUpdateRef = useRef<number | null>(null);
   const visualUpdateQueueRef = useRef<Set<string>>(new Set());
   const batchedVisualUpdateRef = useRef<number | null>(null);
 
-  // PERFORMANCE: D3 selection caching to avoid repeated DOM queries
+  // ========== CACHE REFS ==========
+  // D3 selection caching to avoid repeated DOM queries
   const d3SelectionCacheRef = useRef<{
     svg?: d3.Selection<SVGSVGElement, unknown, null, undefined>;
     nodeLayer?: d3.Selection<SVGGElement, unknown, null, undefined>;
@@ -207,18 +192,17 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     lastUpdate?: number;
   }>({});
 
-  // DRAG STATE: Store drag connection data independent of React state
+  // ========== DRAG STATE REFS ==========
+  // Store drag connection data independent of React state
   const dragConnectionDataRef = useRef<{
     nodeId: string;
     portId: string;
     type: "input" | "output";
   } | null>(null);
 
-  // PORT HIGHLIGHTING: Debounce port highlighting to prevent flickering
-  // Legacy timeout-based port highlighting removed; kept ref placeholder eliminated for cleanliness
+  // ========== PORT HIGHLIGHTING REFS ==========
+  // Debounce port highlighting to prevent flickering
   const lastPortHighlightStateRef = useRef<Map<string, boolean>>(new Map());
-
-  // Debounced port highlighting to prevent flickering
   const pendingPortHighlightsRef = useRef<
     Array<{
       key: string;
@@ -228,6 +212,7 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
   >([]);
   const highlightRafRef = useRef<number | null>(null);
 
+  // ========== PORT HIGHLIGHTING CALLBACKS ==========
   const flushPortHighlights = useCallback(() => {
     const items = pendingPortHighlightsRef.current;
     if (items.length === 0) return;
@@ -272,7 +257,8 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
     []
   );
 
-  // PERFORMANCE: Cached D3 selection getter
+  // ========== CACHE MANAGEMENT CALLBACKS ==========
+  // Cached D3 selection getter for performance
   const getCachedSelection = useCallback(
     (type: "svg" | "nodeLayer" | "connectionLayer" | "gridLayer") => {
       if (!svgRef.current) return null;

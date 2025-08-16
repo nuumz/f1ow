@@ -1,6 +1,6 @@
 import * as d3 from 'd3'
-import type { WorkflowNode } from '../hooks/useNodeSelection'
-import type { Connection } from '../hooks/useConnections'
+// Temporarily using types from main types file:
+import type { WorkflowNode, Connection } from '../types'
 
 export interface Point {
   x: number

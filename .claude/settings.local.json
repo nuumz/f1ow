@@ -22,7 +22,9 @@
       "Bash(rm:*)",
       "Bash(npx vite build:*)",
       "Bash(cp:*)",
-      "Bash(npx sass:*)"
+      "Bash(npx sass:*)",
+      "Bash(npm test:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": []
   }

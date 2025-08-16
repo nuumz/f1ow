@@ -323,6 +323,7 @@ export function calculateConnectionPreviewPath(
     if (
       isSourceBottomPort && hoverTargetBox && previewEnd.y === hoverTargetBox.y + hoverTargetBox.height
     ) {
+      // memoized source box for preview (shape-aware)
       const srcBox = buildNodeBox(sourceNode)
       const targetBottomY = hoverTargetBox.y + hoverTargetBox.height
       const boxesBottom = Math.max(srcBox.y + srcBox.height, targetBottomY)
@@ -341,12 +342,13 @@ export function calculateConnectionPreviewPath(
     // Horizontal U-shape during preview: only when targetX - sourceX < FIXED_LEAD_LENGTH
     if (hoverTargetBox) {
         const startSidePrev = detectPortSideModeAware(sourceNode, sourcePortId, sourcePos, modeId)
-        const tgtCenterX = hoverTargetBox.x + hoverTargetBox.width / 2;
+        const tgtCenterX = hoverTargetBox.x + hoverTargetBox.width / 2
+        // memoized source box for preview (shape-aware)
+        const srcBox = buildNodeBox(sourceNode)
       if (startSidePrev === 'right') {
           const rightEdgeCenter = { x: hoverTargetBox.x + hoverTargetBox.width, y: hoverTargetBox.y + hoverTargetBox.height / 2 }
           const isCloseHorizontally = (tgtCenterX - sourcePos.x) < FIXED_LEAD_LENGTH
           if (isCloseHorizontally) {
-            const srcBox = buildNodeBox(sourceNode)
             const boxesRight = Math.max(srcBox.x + srcBox.width, hoverTargetBox.x + hoverTargetBox.width)
             const safeClear = 50
             const minRight = Math.max(sourcePos.x, rightEdgeCenter.x) + FIXED_LEAD_LENGTH
@@ -364,7 +366,6 @@ export function calculateConnectionPreviewPath(
           const leftEdgeCenter = { x: hoverTargetBox.x, y: hoverTargetBox.y + hoverTargetBox.height / 2 }
           const isCloseHorizontally = (sourcePos.x - tgtCenterX) < FIXED_LEAD_LENGTH
           if (isCloseHorizontally) {
-            const srcBox = buildNodeBox(sourceNode)
             const boxesLeft = Math.min(srcBox.x, hoverTargetBox.x)
             const safeClear = 16
             const minLeft = Math.min(sourcePos.x, leftEdgeCenter.x) - FIXED_LEAD_LENGTH
@@ -512,6 +513,33 @@ function generateArchitectureModeConnectionPath(
   connection: { sourceNodeId: string; sourcePortId: string; targetNodeId: string; targetPortId: string }
 ): string {
   // Use port positioning (including virtual side-port anchors) for start/end, then orthogonal path
+  // Per-call lightweight caches to reduce repeated geometry computations
+  const boxCache = new Map<WorkflowNode, { x: number; y: number; width: number; height: number }>()
+  const portPosCache = new WeakMap<WorkflowNode, Map<string, { x: number; y: number }>>()
+  const cachedBuildNodeBoxModeAware = (node: WorkflowNode, mode: 'workflow' | 'architecture') => {
+    const hit = boxCache.get(node)
+    if (hit) return hit
+    const box = buildNodeBoxModeAware(node, mode)
+    boxCache.set(node, box)
+    return box
+  }
+  const cachedGetVirtualSidePortPositionForMode = (
+    node: WorkflowNode,
+    side: '__side-left' | '__side-right' | '__side-top' | '__side-bottom',
+    mode: 'workflow' | 'architecture'
+  ) => {
+    let inner = portPosCache.get(node)
+    if (!inner) {
+      inner = new Map<string, { x: number; y: number }>()
+      portPosCache.set(node, inner)
+    }
+    const key = `${side}|${mode}`
+    const hit = inner.get(key)
+    if (hit) return hit
+    const pos = getVirtualSidePortPositionForMode(node, side, mode)
+    inner.set(key, pos)
+    return pos
+  }
   const isSourceBottom = isBottomPort(sourceNode, connection.sourcePortId) || connection.sourcePortId === '__side-bottom'
   const isTargetBottom = isBottomPort(targetNode, connection.targetPortId) || connection.targetPortId === '__side-bottom'
   const sourceType = isSourceBottom ? 'bottom' : 'output'
@@ -631,11 +659,11 @@ function generateArchitectureModeConnectionPath(
   // Horizontal U-shape: when starting from RIGHT and target is horizontally very close,
   // route around the outer right side and terminate at the RIGHT port (same side as source).
   if (startSide === 'right') {
-    const forcedRightPos = getVirtualSidePortPositionForMode(targetNode, '__side-right', 'architecture')
+    const forcedRightPos = cachedGetVirtualSidePortPositionForMode(targetNode, '__side-right', 'architecture')
     const isCloseHorizontally = (targetNode.x - sourcePos.x) < FIXED_LEAD_LENGTH
     if (isCloseHorizontally) {
-      const srcBox = buildNodeBoxModeAware(sourceNode, 'architecture')
-      const tgtBox = buildNodeBoxModeAware(targetNode, 'architecture')
+      const srcBox = cachedBuildNodeBoxModeAware(sourceNode, 'architecture')
+      const tgtBox = cachedBuildNodeBoxModeAware(targetNode, 'architecture')
       const safeClear = 16
       const boxesRight = Math.max(srcBox.x + srcBox.width, tgtBox.x + tgtBox.width)
       // Enforce horizontal leg min length of FIXED_LEAD_LENGTH for both sides
@@ -653,11 +681,11 @@ function generateArchitectureModeConnectionPath(
   // Symmetric Horizontal U-shape: when starting from LEFT and target is horizontally very close,
   // route around the outer left side and terminate at the LEFT port (same side as source).
   if (startSide === 'left') {
-    const forcedLeftPos = getVirtualSidePortPositionForMode(targetNode, '__side-left', 'architecture')
+    const forcedLeftPos = cachedGetVirtualSidePortPositionForMode(targetNode, '__side-left', 'architecture')
     const isCloseHorizontally = (sourcePos.x - targetNode.x) < FIXED_LEAD_LENGTH
     if (isCloseHorizontally) {
-      const srcBox = buildNodeBoxModeAware(sourceNode, 'architecture')
-      const tgtBox = buildNodeBoxModeAware(targetNode, 'architecture')
+      const srcBox = cachedBuildNodeBoxModeAware(sourceNode, 'architecture')
+      const tgtBox = cachedBuildNodeBoxModeAware(targetNode, 'architecture')
       const safeClear = 16
       const boxesLeft = Math.min(srcBox.x, tgtBox.x)
       // Enforce horizontal leg min length of FIXED_LEAD_LENGTH for both sides (to the left)

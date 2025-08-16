@@ -33,6 +33,42 @@ import {
   GridPerformanceMonitor,
   GridOptimizer,
 } from "../utils/grid-performance";
+
+// Path measurement helpers (used for accurate connection label placement in architecture mode)
+let __wfMeasurePathEl: SVGPathElement | null = null;
+function getPathMidpointWithOrientation(
+  pathD: string
+): { x: number; y: number; orientation: "horizontal" | "vertical" } | null {
+  try {
+    if (!__wfMeasurePathEl) {
+      __wfMeasurePathEl = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "path"
+      );
+    }
+    const el = __wfMeasurePathEl;
+    el.setAttribute("d", pathD || "");
+    const total = el.getTotalLength();
+    if (!isFinite(total) || total <= 0) return null;
+    const mid = total / 2;
+    const p = el.getPointAtLength(mid);
+    const prev = el.getPointAtLength(Math.max(0, mid - 0.5));
+    const next = el.getPointAtLength(Math.min(total, mid + 0.5));
+    const dx = next.x - prev.x;
+    const dy = next.y - prev.y;
+    const orientation = Math.abs(dx) >= Math.abs(dy) ? "horizontal" : "vertical";
+    return { x: p.x, y: p.y, orientation };
+  } catch {
+    return null;
+  }
+}
+
+function getLabelOffsetForOrientation(
+  orientation: "horizontal" | "vertical"
+): { x: number; y: number } {
+  if (orientation === "horizontal") return { x: 0, y: -10 };
+  return { x: 10, y: 0 };
+}
 // Extracted utility imports
 import {
   PERFORMANCE_CONSTANTS,
@@ -2362,23 +2398,35 @@ const WorkflowCanvas = React.memo(function WorkflowCanvas({
             : "none";
         })
         .attr("x", (d: any) => {
-          // Position label at midpoint of connection
-          const sourceNode = nodeMap.get(d.sourceNodeId);
-          const targetNode = nodeMap.get(d.targetNodeId);
-          if (!sourceNode || !targetNode) return 0;
-
-          return (sourceNode.x + targetNode.x) / 2;
+          // Architecture mode: compute true midpoint from the actual orthogonal path
+          if (workflowContextState.designerMode === "architecture") {
+            const pathStr = getConnectionPath(d);
+            const mid = getPathMidpointWithOrientation(pathStr);
+            if (mid) {
+              const offset = getLabelOffsetForOrientation(mid.orientation);
+              return mid.x + offset.x;
+            }
+          }
+          // Fallback to node-center midpoint
+          const s = nodeMap.get(d.sourceNodeId);
+          const t = nodeMap.get(d.targetNodeId);
+          if (!s || !t) return 0;
+          return (s.x + t.x) / 2;
         })
         .attr("y", (d: any) => {
-          // Position label at midpoint of connection
-          const sourceNode = nodeMap.get(d.sourceNodeId);
-          const targetNode = nodeMap.get(d.targetNodeId);
-          if (!sourceNode || !targetNode) return 0;
-
-          // Position label close to the connection line (minimal offset)
-          const yOffset = -8; // Small offset above the connection line
-
-          return (sourceNode.y + targetNode.y) / 2 + yOffset;
+          if (workflowContextState.designerMode === "architecture") {
+            const pathStr = getConnectionPath(d);
+            const mid = getPathMidpointWithOrientation(pathStr);
+            if (mid) {
+              const offset = getLabelOffsetForOrientation(mid.orientation);
+              return mid.y + offset.y;
+            }
+          }
+          // Fallback to node-center midpoint with small offset
+          const s = nodeMap.get(d.sourceNodeId);
+          const t = nodeMap.get(d.targetNodeId);
+          if (!s || !t) return 0;
+          return (s.y + t.y) / 2 - 8;
         })
         .text((d: any) => {
           // Generate descriptive labels for different connection types

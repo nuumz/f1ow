@@ -125,7 +125,7 @@ export function useConnectionPaths(
         nodeVariant,
         modeId || 'workflow',
         // Config is used by workflow (bezier) generator only.
-        modeId === 'workflow' ? { arrowOffset: 9 } : undefined
+        modeId === 'workflow' ? { arrowOffset: 10 } : undefined
       )
 
       const finalPath = path

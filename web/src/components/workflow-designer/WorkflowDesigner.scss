@@ -157,13 +157,16 @@ $breakpoints: (
   $stroke-color,
   $hover-color,
   $selected-color,
-  $dash-pattern: none
+  $dash-pattern: none,
+  $workflow-mode: "workflow"
 ) {
   .connection .connection-path {
     stroke: $stroke-color;
     stroke-width: 2;
     @if $dash-pattern {
       stroke-dasharray: $dash-pattern;
+    }
+    @if $workflow-mode == "architecture" {
       marker-end: url(#arrowhead-architecture);
     } @else {
       marker-end: url(#arrowhead-workflow);
@@ -182,11 +185,14 @@ $breakpoints: (
     } @else {
       stroke-width: 3px !important;
     }
-    @if $dash-pattern {
+    @if $workflow-mode == "architecture" {
       marker-end: url(#arrowhead-architecture-hover) !important;
-      filter: drop-shadow(0 3px 10px #{rgba($hover-color, 0.3)});
     } @else {
       marker-end: url(#arrowhead-workflow-hover) !important;
+    }
+    @if $dash-pattern {
+      filter: drop-shadow(0 3px 10px #{rgba($hover-color, 0.3)});
+    } @else {
       filter: drop-shadow(0 2px 8px #{rgba($hover-color, 0.3)});
     }
     @if $dash-pattern {
@@ -198,12 +204,15 @@ $breakpoints: (
   .connection-selected .connection-path {
     stroke: $selected-color !important;
     stroke-width: 3px !important;
-    @if $dash-pattern {
+    @if $workflow-mode == "architecture" {
       marker-end: url(#arrowhead-architecture-selected) !important;
+    } @else {
+      marker-end: url(#arrowhead-workflow-selected) !important;
+    }
+    @if $dash-pattern {
       filter: drop-shadow(0 3px 12px #{rgba($selected-color, 0.5)});
       animation: architecturePulse 1.5s infinite;
     } @else {
-      marker-end: url(#arrowhead-workflow-selected) !important;
       filter: drop-shadow(0 2px 8px #{rgba($selected-color, 0.4)});
       animation: workflowPulse 2s infinite;
     }
@@ -744,7 +753,8 @@ $button-variants: (
     map.get($colors, architecture),
     #6d28d9,
     #dc2626,
-    "8, 6"
+    "8, 6",
+    "architecture"
   );
 
   .node:hover .port-group {
@@ -807,7 +817,8 @@ $button-variants: (
   .node .input-port-group,
   .node .output-port-group,
   .node.drag-hover .input-port-group:not(.can-dropped):not(.drop-target-port),
-  .node:not(.drag-hover) .input-port-group:not(.can-dropped):not(.drop-target-port) {
+  .node:not(.drag-hover)
+    .input-port-group:not(.can-dropped):not(.drop-target-port) {
     @include hidden-state;
     transition: var(--port-transition);
   }

@@ -404,7 +404,9 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
 
       if (!sourceNode || !targetNode) return "url(#arrowhead)";
 
-      const isWorkflowMode = workflowContextState.designerMode === "workflow";
+  // Default to workflow styling unless mode is explicitly 'architecture'.
+  // This prevents accidental purple (architecture) arrows when mode is undefined or other.
+  const isWorkflowMode = workflowContextState.designerMode !== "architecture";
       // Use a single auto-oriented marker per mode to ensure consistent arrowhead position
       return getArrowMarkerForMode(isWorkflowMode, state);
     },
@@ -1672,24 +1674,26 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
           .attr("orient", "auto")
           .attr("markerUnits", "userSpaceOnUse");
 
-        // Pad so the arrow tip stays BEFORE the path end to avoid overlapping into nodes
-        // Padding/backoff: for architecture markers we want the tip to touch the node edge exactly.
-        // Therefore pad = 0 for architecture*, otherwise keep a small backoff for workflow/general.
+  // Pad so the arrow tip stays BEFORE the path end to avoid overlapping into nodes
+  // For architecture markers: anchor the CENTER of the triangle at the path end.
+  // We'll trim the path by half the marker size in path-utils so the tip touches the node edge.
   const isArchitectureMarker = id.includes('architecture');
-  const pad = isArchitectureMarker ? 4 : Math.max(2, Math.round(size * 0.2));
+  const pad = isArchitectureMarker ? 0 : -4;
         if (direction === "right") {
-          // Right-pointing arrow (tip at x=size). For architecture: refX=size (touch edge). Others: size+pad.
+    // Right-pointing arrow (tip at x=size).
+    // Architecture: refX=size/2 (center anchored). Workflow/others: size+pad (tip anchored with small backoff).
           marker
-  .attr("refX", isArchitectureMarker ? size : size + pad)
+  .attr("refX", isArchitectureMarker ? size / 2 : size + pad)
             .attr("refY", size / 2)
             .append("polygon")
             .attr("points", `0,0 ${size},${size / 2} 0,${size}`)
             .attr("fill", color)
             .attr("stroke", "none");
         } else {
-          // Left-pointing arrow (tip at x=0). For architecture: refX=0 (touch). Others: -pad.
+    // Left-pointing arrow (tip at x=0).
+    // Architecture: refX=size/2 (center anchored). Workflow/others: -pad (tip anchored with small backoff).
           marker
-  .attr("refX", isArchitectureMarker ? 0 : -pad)
+  .attr("refX", isArchitectureMarker ? size / 2 : -pad)
             .attr("refY", size / 2)
             .append("polygon")
             .attr("points", `${size},0 0,${size / 2} ${size},${size}`)
@@ -1709,9 +1713,9 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
         createArrowMarker("arrowhead-left-hover", "#1976D2", 12, "left");
 
         // Mode-specific arrow markers for workflow mode
-        createArrowMarker("arrowhead-workflow", "#2563eb", 10);
-        createArrowMarker("arrowhead-workflow-selected", "#059669", 12);
-        createArrowMarker("arrowhead-workflow-hover", "#1d4ed8", 12);
+        createArrowMarker("arrowhead-workflow", "#2563eb", 14);
+        createArrowMarker("arrowhead-workflow-selected", "#059669", 16);
+        createArrowMarker("arrowhead-workflow-hover", "#1d4ed8", 16);
 
         // Mode-specific arrow markers for architecture mode
         createArrowMarker("arrowhead-architecture", "#7c3aed", 10);
@@ -4537,7 +4541,8 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
             path
               .attr("stroke", "#1976D2")
               .attr("stroke-width", 3)
-              .attr("marker-end", getConnectionMarker(d, "hover"));
+              .attr("marker-end", getConnectionMarker(d, "hover"))
+              .style("marker-end", getConnectionMarker(d, "hover"));
           }
         })
         .on("mouseleave", function (this: any, _event: any, d: any) {
@@ -4548,7 +4553,8 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
             path
               .attr("stroke", "white")
               .attr("stroke-width", 2)
-              .attr("marker-end", getConnectionMarker(d, "default"));
+              .attr("marker-end", getConnectionMarker(d, "default"))
+              .style("marker-end", getConnectionMarker(d, "default"));
           }
         });
 
@@ -4587,10 +4593,11 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
       // Update visible path
       merged
         .select<SVGPathElement>(".connection-path")
-        .attr("d", (d: any) => getConnectionPath(d))
+  .attr("d", (d: any) => getConnectionPath(d))
         .attr("stroke", "white")
         .attr("stroke-width", 2)
-        .attr("marker-end", (d: any) => getConnectionMarker(d, "default"))
+  .attr("marker-end", (d: any) => getConnectionMarker(d, "default"))
+  .style("marker-end", (d: any) => getConnectionMarker(d, "default"))
         .style("display", (d: any) => {
           const groupInfo = getConnectionGroupInfo(d.id, connections);
           return groupInfo.isMultiple && groupInfo.index > 0 ? "none" : "block";

@@ -401,8 +401,26 @@ export function calculateConnectionPreviewPath(
       }
     }
 
-    // Do NOT trim the end in architecture mode. Markers are configured so the tip sits at the path end.
-    const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, previewEnd, 16, {
+    // Trim the end by half marker size (center-anchored marker). Marker for architecture ~size 15.
+    const HALF_MARKER = 5.5
+    const trimmedEndPreview = (() => {
+      if (!hoverTargetBox) return previewEnd
+      const cx = hoverTargetBox.x + hoverTargetBox.width / 2
+      const cy = hoverTargetBox.y + hoverTargetBox.height / 2
+      const dx = cx - sourcePos.x
+      const dy = cy - sourcePos.y
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        // Horizontal approach
+        const right = dx > 0
+        return { x: previewEnd.x + (right ? -HALF_MARKER : HALF_MARKER), y: previewEnd.y }
+      } else {
+        // Vertical approach
+        const bottom = dy > 0
+        return { x: previewEnd.x, y: previewEnd.y + (bottom ? -HALF_MARKER : HALF_MARKER) }
+      }
+    })()
+
+    const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, trimmedEndPreview, 16, {
       clearance: 10, // Minimal clearance for tight arrow positioning
       targetBox: hoverTargetBox,
       startOrientationOverride: startOrientation,
@@ -661,8 +679,22 @@ function generateArchitectureModeConnectionPath(
   const autoTargetPos = getVirtualSidePortPositionForMode(targetNode, targetSidePortId, 'architecture')
   const endOrientation = sideToOrientation(detectPortSideModeAware(targetNode, targetSidePortId, autoTargetPos, 'architecture'))
 
-  // Do NOT trim the end in architecture mode. Markers are configured so the tip sits at the path end.
-  const trimmedEnd = autoTargetPos
+  // Trim the end by half marker size (center-anchored marker). Architecture marker size ≈ 15.
+  const HALF_MARKER = -5.5
+  const trimmedEnd = (() => {
+    switch (targetSidePortId) {
+      case '__side-left':
+        return { x: autoTargetPos.x + HALF_MARKER, y: autoTargetPos.y }
+      case '__side-right':
+        return { x: autoTargetPos.x - HALF_MARKER, y: autoTargetPos.y }
+      case '__side-top':
+        return { x: autoTargetPos.x, y: autoTargetPos.y + HALF_MARKER }
+      case '__side-bottom':
+        return { x: autoTargetPos.x, y: autoTargetPos.y - HALF_MARKER }
+      default:
+        return autoTargetPos
+    }
+  })()
 
   // If we chose bottom due to close vertical proximity, draw a U-shape under both nodes to avoid overlap
   if (isSourceBottom && targetSidePortId === '__side-bottom') {

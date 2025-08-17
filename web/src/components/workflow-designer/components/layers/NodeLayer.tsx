@@ -92,4 +92,25 @@ function NodeLayer(props: NodeLayerProps) {
   return null;
 }
 
-export default React.memo(NodeLayer);
+function nodeLayerPropsAreEqual(prev: NodeLayerProps, next: NodeLayerProps) {
+  if (prev.designerMode !== next.designerMode) return false;
+  if (prev.isDragging !== next.isDragging) return false;
+
+  const prevNodeFp = prev.nodes
+    .map((n) => `${n.id}@${Math.round((n as any).x ?? 0)},${Math.round((n as any).y ?? 0)}#${(n as any).inputs?.length ?? 0}:${(n as any).outputs?.length ?? 0}`)
+    .sort()
+    .join('|');
+  const nextNodeFp = next.nodes
+    .map((n) => `${n.id}@${Math.round((n as any).x ?? 0)},${Math.round((n as any).y ?? 0)}#${(n as any).inputs?.length ?? 0}:${(n as any).outputs?.length ?? 0}`)
+    .sort()
+    .join('|');
+  if (prevNodeFp !== nextNodeFp) return false;
+
+  const prevConnIds = prev.connections.map((c) => c.id ?? `${c.sourceNodeId}->${c.targetNodeId}`).sort().join('|');
+  const nextConnIds = next.connections.map((c) => c.id ?? `${c.sourceNodeId}->${c.targetNodeId}`).sort().join('|');
+  if (prevConnIds !== nextConnIds) return false;
+
+  return true;
+}
+
+export default React.memo(NodeLayer, nodeLayerPropsAreEqual);

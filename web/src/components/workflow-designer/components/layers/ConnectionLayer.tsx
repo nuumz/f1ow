@@ -27,4 +27,19 @@ function ConnectionLayer(props: ConnectionLayerProps) {
   return null;
 }
 
-export default React.memo(ConnectionLayer);
+function connectionLayerPropsAreEqual(prev: ConnectionLayerProps, next: ConnectionLayerProps) {
+  if (prev.designerMode !== next.designerMode) return false;
+  // Compare by connection identity and endpoints
+  const prevFp = prev.connections
+    .map((c) => `${c.id ?? ''}:${c.sourceNodeId}/${c.sourcePortId}->${c.targetNodeId}/${c.targetPortId}`)
+    .sort()
+    .join('|');
+  const nextFp = next.connections
+    .map((c) => `${c.id ?? ''}:${c.sourceNodeId}/${c.sourcePortId}->${c.targetNodeId}/${c.targetPortId}`)
+    .sort()
+    .join('|');
+  if (prevFp !== nextFp) return false;
+  return true;
+}
+
+export default React.memo(ConnectionLayer, connectionLayerPropsAreEqual);

@@ -1604,5 +1604,44 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
   );
 }
 
-export default React.memo(WorkflowCanvas);
+// Custom comparator: ensure re-render when nodes/connections content changes even if array refs are reused
+function workflowCanvasPropsAreEqual(prev: Readonly<WorkflowCanvasProps>, next: Readonly<WorkflowCanvasProps>) {
+  // Quick checks on primitives first
+  if (prev.showGrid !== next.showGrid) return false;
+  if (prev.nodeVariant !== next.nodeVariant) return false;
+  if (prev.isConnecting !== next.isConnecting) return false;
+
+  // Canvas transform
+  const pt = prev.canvasTransform;
+  const nt = next.canvasTransform;
+  if (pt.k !== nt.k || pt.x !== nt.x || pt.y !== nt.y) return false;
+
+  // Selected connection id
+  const prevSelConnId = prev.selectedConnection?.id || null;
+  const nextSelConnId = next.selectedConnection?.id || null;
+  if (prevSelConnId !== nextSelConnId) return false;
+
+  // Selected nodes size (Set reference may be stable across mutations)
+  if (prev.selectedNodes.size !== next.selectedNodes.size) return false;
+
+  // Fingerprints for nodes and connections by IDs (sorted) to detect content changes
+  const prevNodeFp = prev.nodes
+    .map((n) => `${n.id}@${Math.round((n as any).x ?? 0)},${Math.round((n as any).y ?? 0)}#${(n as any).inputs?.length ?? 0}:${(n as any).outputs?.length ?? 0}`)
+    .sort()
+    .join('|');
+  const nextNodeFp = next.nodes
+    .map((n) => `${n.id}@${Math.round((n as any).x ?? 0)},${Math.round((n as any).y ?? 0)}#${(n as any).inputs?.length ?? 0}:${(n as any).outputs?.length ?? 0}`)
+    .sort()
+    .join('|');
+  if (prevNodeFp !== nextNodeFp) return false;
+
+  const prevConnIds = prev.connections.map((c) => c.id ?? `${c.sourceNodeId}->${c.targetNodeId}`).sort().join('|');
+  const nextConnIds = next.connections.map((c) => c.id ?? `${c.sourceNodeId}->${c.targetNodeId}`).sort().join('|');
+  if (prevConnIds !== nextConnIds) return false;
+
+  // If we get here, consider equal enough to skip re-render
+  return true;
+}
+
+export default React.memo(WorkflowCanvas, workflowCanvasPropsAreEqual);
 export const CanvasCore = WorkflowCanvas;

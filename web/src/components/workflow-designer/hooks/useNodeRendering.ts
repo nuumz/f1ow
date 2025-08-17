@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import * as d3 from 'd3'
 import type { WorkflowNode, Connection } from '../types'
 import {
@@ -112,6 +112,10 @@ export function useNodeRendering(params: NodeRenderingParams) {
         getConfigurablePortPositions,
     } = params
 
+    // Track previous node ids and positions to decide when to rebuild DOM for smoother updates
+    const prevNodeIdsRef = useRef<Set<string>>(new Set())
+    const prevPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map())
+
     useEffect(() => {
         const svgEl = svgRef.current
         if (!svgEl) return
@@ -120,6 +124,41 @@ export function useNodeRendering(params: NodeRenderingParams) {
         const nodeLayer = svg.select<SVGGElement>('.node-layer')
         const g = svg.select<SVGGElement>('g.canvas-root')
         if (nodeLayer.empty() || g.empty()) return
+
+        // Heuristic: if a significant portion of nodes changed (new/removed) or moved, and not dragging,
+        // clear existing node groups first to avoid heavy merge/update churn that can stutter.
+        if (!isDragging) {
+            try {
+                const currentIds = new Set<string>(nodes.map((n) => n.id))
+                const prevIds = prevNodeIdsRef.current
+                let changed = 0
+                // count adds/removes
+                currentIds.forEach((id) => { if (!prevIds.has(id)) changed++ })
+                prevIds.forEach((id) => { if (!currentIds.has(id)) changed++ })
+                const changeRatio = prevIds.size > 0 ? changed / Math.max(prevIds.size, 1) : 1
+
+                // count moved positions (rounded to reduce noise)
+                let moved = 0
+                const prevPos = prevPositionsRef.current
+                for (const n of nodes) {
+                    const p = prevPos.get(n.id)
+                    if (!p) continue
+                    const dx = Math.abs(Math.round(n.x) - Math.round(p.x))
+                    const dy = Math.abs(Math.round(n.y) - Math.round(p.y))
+                    if (dx + dy >= 2) moved++
+                }
+                const movedRatio = nodes.length > 0 ? moved / nodes.length : 0
+
+                const MANY_NODES = nodes.length >= 150
+                const shouldRebuild = changeRatio >= 0.3 || movedRatio >= 0.5 || (MANY_NODES && (changed > 0 || moved > 0))
+
+                if (shouldRebuild) {
+                    nodeLayer.selectAll<SVGGElement, any>('.node').remove()
+                }
+            } catch {
+                // fallback: ignore heuristic errors
+            }
+        }
 
         // Ensure defs and background
         let defs = svg.select<SVGDefsElement>('defs')
@@ -1081,6 +1120,18 @@ export function useNodeRendering(params: NodeRenderingParams) {
                     .text(labelText)
             })
         }
+        // Update previous ids and positions for next render cycle
+        try {
+            const ids = new Set<string>()
+            const pos = new Map<string, { x: number; y: number }>()
+            for (const n of nodes) {
+                ids.add(n.id)
+                pos.set(n.id, { x: n.x, y: n.y })
+            }
+            prevNodeIdsRef.current = ids
+            prevPositionsRef.current = pos
+        } catch { }
+
     }, [
         svgRef,
         nodes,

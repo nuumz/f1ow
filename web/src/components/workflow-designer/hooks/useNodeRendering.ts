@@ -125,9 +125,19 @@ export function useNodeRendering(params: NodeRenderingParams) {
         const g = svg.select<SVGGElement>('g.canvas-root')
         if (nodeLayer.empty() || g.empty()) return
 
-        // Clean up any orphaned dragging classes if not actually dragging
-        if (!isContextDragging()) {
+        // Clean up dragging classes to prevent stale state blocking re-render
+        const currentDraggedId = getDraggedNodeId()
+        if (!isContextDragging() || !currentDraggedId) {
+            // If not dragging, remove all dragging classes globally
             nodeLayer.selectAll('.node.dragging').classed('dragging', false)
+        } else {
+            // If dragging, ensure only the actual dragged node has the class
+            nodeLayer
+                .selectAll<SVGGElement, any>('.node.dragging')
+                .filter(function (this: SVGGElement, d: any) {
+                    return d?.id !== currentDraggedId
+                })
+                .classed('dragging', false)
         }
 
         // Heuristic: if a significant portion of nodes changed (new/removed) or moved, and not dragging,
@@ -289,7 +299,7 @@ export function useNodeRendering(params: NodeRenderingParams) {
                 const px = nodeSvgX + cx
                 const py = nodeSvgY + cy
                 const dist = Math.hypot(canvasX - px, canvasY - py)
-                const tol = r + 50  // Significantly increase tolerance for easier targeting
+                const tol = r + 15  // Significantly increase tolerance for easier targeting
 
                 console.log('🔍 Input port check:', {
                     nodeId,
@@ -332,7 +342,7 @@ export function useNodeRendering(params: NodeRenderingParams) {
                 const py = nodeSvgY + y + h / 2
                 const size = Math.max(w, h)
                 const dist = Math.hypot(canvasX - px, canvasY - py)
-                const tol = size / 2 + 50  // Significantly increase tolerance for easier targeting
+                const tol = size / 2 + 15  // Significantly increase tolerance for easier targeting
 
                 console.log('🔍 Side port check:', {
                     nodeId,
@@ -390,13 +400,21 @@ export function useNodeRendering(params: NodeRenderingParams) {
                 const canDrop = !canDropOnNode || canDropOnNode(hovered.id)
                 console.log('🔍 Can drop on hovered node:', canDrop)
 
-                if (canDrop) {
+                // Override canDropOnNode check for center drops since validation already passed during drag
+                // This fixes the issue where canDropOnPort validates correctly but canDropOnNode fails
+                if (canDrop || designerMode === 'architecture') {
                     const inputs = (hovered.inputs || []) as any[]
                     const portId = inputs.length > 0 ? inputs[0].id : '__side-top'
-                    console.log('✅ Fallback target found:', { targetNodeId: hovered.id, targetPortId: portId, inputsCount: inputs.length })
+                    console.log('✅ Fallback target found (canDrop or architecture mode):', { 
+                        targetNodeId: hovered.id, 
+                        targetPortId: portId, 
+                        inputsCount: inputs.length,
+                        canDrop,
+                        designerMode
+                    })
                     return { targetNodeId: hovered.id, targetPortId: portId }
                 } else {
-                    console.log('❌ Cannot drop on hovered node')
+                    console.log('❌ Cannot drop on hovered node (workflow mode with canDrop=false)')
                 }
             } else {
                 console.log('❌ No hovered node found')

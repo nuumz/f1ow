@@ -6,6 +6,7 @@ import React, {
   useState,
   useMemo,
 } from "react";
+import { useStableLayerCallbacks } from "../hooks/useStableCallbacks";
 import * as d3 from "d3";
 import type {
   WorkflowNode,
@@ -31,19 +32,23 @@ import { calculateConnectionPreviewPath } from "../utils/connection-utils";
 import { useCanvasD3Setup } from "../hooks/useCanvasD3Setup";
 import {
   PERFORMANCE_CONSTANTS,
-  CallbackPriority,
   NodeZIndexState,
 } from "../utils/canvas-constants";
+import { rafCoordinator, scheduleConnectionUpdate, scheduleVisualUpdate } from "../utils/raf-coordinator";
+
+// Optimized layer imports
 import GridLayer from "./layers/GridLayer";
-import NodeLayer from "./layers/NodeLayer";
+import OptimizedNodeLayer from "./layers/OptimizedNodeLayer";
 import ConnectionLayer from "./layers/ConnectionLayer";
 import InteractionLayer from "./layers/InteractionLayer";
 import CanvasEffects from "./layers/CanvasEffects";
 
+import type { NodeLayerConfig, NodeLayerRefs } from "./layers/OptimizedNodeLayer";
+
 type DesignerMode = 'workflow' | 'architecture'
 
 // Props expected from WorkflowDesigner
-interface WorkflowCanvasProps {
+interface OptimizedWorkflowCanvasProps {
   svgRef: React.RefObject<SVGSVGElement>
   nodes: WorkflowNode[]
   connections: Connection[]
@@ -74,7 +79,7 @@ interface WorkflowCanvasProps {
   onRegisterZoomBehavior?: (zoom: d3.ZoomBehavior<SVGSVGElement, unknown>) => void
 }
 
-function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
+function OptimizedWorkflowCanvas(props: Readonly<OptimizedWorkflowCanvasProps>) {
   const {
     svgRef,
     nodes,
@@ -92,7 +97,7 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
     onNodeDoubleClick,
     onNodeDrag,
     onConnectionClick,
-  onPortClick,
+    onPortClick,
     onPortDragStart,
     onPortDrag,
     onPortDragEnd,
@@ -101,9 +106,9 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
     onTransformChange,
     onZoomLevelChange,
     onRegisterZoomBehavior,
-  onCanvasClick,
-  onCanvasMouseMove,
-  onPlusButtonClick,
+    onCanvasClick,
+    onCanvasMouseMove,
+    onPlusButtonClick,
   } = props
 
   // Workflow context (for designerMode + dragging helpers)
@@ -123,21 +128,23 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
   const CACHE_CLEANUP_THRESHOLD = PERFORMANCE_CONSTANTS.CACHE_CLEANUP_THRESHOLD
   const GRID_CACHE_DURATION = PERFORMANCE_CONSTANTS.GRID_CACHE_DURATION
 
-  // Refs used throughout
+  // Optimized refs - reduced from multiple individual refs
   const nodePositionCacheRef = useRef<Map<string, { x: number; y: number }>>(new Map())
   const gridCacheRef = useRef<{ lastRenderTime: number; key?: string } | null>(null)
   const nodeLayerRef = useRef<SVGGElement | null>(null)
   const selectionCacheRef = useRef<Map<string, d3.Selection<SVGGElement, unknown, null, undefined>>>(new Map())
-  const draggedElementRef = useRef<d3.Selection<any, any, any, any> | null>(null)
-  const draggedNodeElementRef = useRef<SVGGElement | null>(null)
-  const allNodeElementsRef = useRef<Map<string, SVGGElement>>(new Map())
-  const dragStateCleanupRef = useRef<NodeJS.Timeout | null>(null)
-  const connectionUpdateQueueRef = useRef<Set<string>>(new Set())
-  const visualUpdateQueueRef = useRef<Set<string>>(new Set())
-  const rafIdRef = useRef<number | null>(null)
-  const rafScheduledRef = useRef<boolean>(false)
-  const batchedVisualUpdateRef = useRef<number | null>(null)
-  const batchedConnectionUpdateRef = useRef<number | null>(null)
+  
+  // Consolidated refs for node layer
+  const nodeLayerRefs = useRef<NodeLayerRefs>({
+    draggedElementRef: useRef<d3.Selection<any, any, any, any> | null>(null),
+    draggedNodeElementRef: useRef<SVGGElement | null>(null),
+    allNodeElementsRef: useRef<Map<string, SVGGElement>>(new Map()),
+    dragStateCleanupRef: useRef<NodeJS.Timeout | null>(null),
+    currentDragPositionsRef: useRef<Map<string, { x: number; y: number }>>(new Map()),
+    connectionUpdateQueueRef: useRef<Set<string>>(new Set()),
+    visualUpdateQueueRef: useRef<Set<string>>(new Set()),
+  });
+
   const [isInitialized, setIsInitialized] = useState(false)
 
   // Centralized native event cleanup registry
@@ -195,7 +202,7 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
     [svgRef]
   )
 
-  // Shared icon registry for architecture mode icons (<defs>/<symbol>/<use> reuse)
+  // Architecture icons via shared symbol registry (<defs>/<symbol>/<use>)
   const { getArchitectureIconSvg } = useMemo(() => createIconRegistry(svgRef), [svgRef])
 
   const isServicesArchitectureNode = useCallback((node: any) => {
@@ -207,8 +214,8 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
   const createGrid = useCallback(
     (
       gridLayer: d3.Selection<SVGGElement, unknown, null, undefined>,
-  width: number,
-  height: number
+      width: number,
+      height: number
     ) => {
       const now = performance.now()
       gridCacheRef.current ??= { lastRenderTime: 0 }
@@ -228,14 +235,14 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
         defsSel = svgSel.append<SVGDefsElement>('defs')
       }
 
-  // Base dot grid pattern (original id) + a subtle major grid overlay
-  const patternId = 'workflow-grid' // keep original id for base dots
-  const majorPatternId = 'workflow-grid-major'
-  const size = 20
-  const majorStep = 5 // every 5 dots
-  const color = '#dee0e4' // base dots
-  const majorColor = '#dee0e4' // slightly darker for major dots
-  const opacity = 0.8
+      // Base dot grid pattern (original id) + a subtle major grid overlay
+      const patternId = 'workflow-grid' // keep original id for base dots
+      const majorPatternId = 'workflow-grid-major'
+      const size = 20
+      const majorStep = 5 // every 5 dots
+      const color = '#dee0e4' // base dots
+      const majorColor = '#dee0e4' // slightly darker for major dots
+      const opacity = 0.8
   const majorOpacity = 0.9
 
       // Create pattern only once
@@ -286,7 +293,7 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
 
       // Clear grid layer contents (not defs) and apply pattern fill
       gridLayer.selectAll('*').remove()
-  // Base dots
+      // Base dots
       gridLayer
         .append('rect')
         .attr('class', 'grid-pattern-rect base')
@@ -296,7 +303,7 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
         .attr('height', 100000)
         .attr('fill', `url(#${patternId})`)
 
-  // Major dots overlay
+      // Major dots overlay
       gridLayer
         .append('rect')
         .attr('class', 'grid-pattern-rect major')
@@ -306,12 +313,12 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
         .attr('height', 100000)
         .attr('fill', `url(#${majorPatternId})`)
 
-  // Store current viewport size (keeps args used for linting and allows debugging)
-  gridLayer.attr('data-grid-size', `${Math.round(width)}x${Math.round(height)}`)
+      // Store current viewport size (keeps args used for linting and allows debugging)
+      gridLayer.attr('data-grid-size', `${Math.round(width)}x${Math.round(height)}`)
 
       gridCacheRef.current.lastRenderTime = now
     },
-  []
+    []
   )
 
   // Marker resolver wrapper for connections
@@ -393,74 +400,13 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
     return () => clearInterval(cleanupInterval);
   }, [cleanupCaches]);
 
-  // Enhanced RAF scheduling system with priority queues
-  const rafCallbackQueueRef = useRef<
-    Array<{ callback: () => void; priority: CallbackPriority }>
-  >([]);
-
-  const processRAFQueue = useCallback((frameStart?: number) => {
-    if (rafCallbackQueueRef.current.length === 0) {
-      rafScheduledRef.current = false;
-      rafIdRef.current = null;
-      return;
-    }
-
-    const start = typeof frameStart === 'number' ? frameStart : performance.now();
-    const FRAME_BUDGET = 16.67;
-    const deadline = start + FRAME_BUDGET;
-
-    const prio = (p: CallbackPriority) => {
-      if (p === 'high') return 3
-      if (p === 'normal') return 2
-      return 1
-    };
-
-    while (rafCallbackQueueRef.current.length > 0 && performance.now() < deadline) {
-      // pick the highest priority item
-      let bestIdx = 0;
-      let bestScore = -1;
-      for (let i = 0; i < rafCallbackQueueRef.current.length; i++) {
-        const score = prio(rafCallbackQueueRef.current[i].priority);
-        if (score > bestScore) {
-          bestScore = score;
-          bestIdx = i;
-        }
-      }
-      const [item] = rafCallbackQueueRef.current.splice(bestIdx, 1);
-      try {
-        item.callback();
-      } catch (error) {
-        console.warn('RAF callback error:', error);
-      }
-    }
-
-    if (rafCallbackQueueRef.current.length > 0) {
-      rafIdRef.current = requestAnimationFrame(processRAFQueue);
-    } else {
-      rafScheduledRef.current = false;
-      rafIdRef.current = null;
-    }
-  }, []);
-
-  const scheduleRAF = useCallback(
-    (callback: () => void, priority: CallbackPriority = "normal") => {
-      rafCallbackQueueRef.current.push({ callback, priority });
-
-      if (!rafScheduledRef.current) {
-        rafScheduledRef.current = true;
-        rafIdRef.current = requestAnimationFrame(processRAFQueue);
-      }
-    },
-    [processRAFQueue]
-  );
-
   // Enhanced Z-Index Management with change detection to reduce DOM manipulation
   const lastZIndexStateRef = useRef<Map<string, NodeZIndexState>>(new Map());
 
   const organizeNodeZIndex = useCallback(
     (immediate = false) => {
       const nodeLayer = nodeLayerRef.current;
-      if (!nodeLayer || allNodeElementsRef.current.size === 0) return;
+      if (!nodeLayer || nodeLayerRefs.current.allNodeElementsRef.current.size === 0) return;
 
       const executeZIndexUpdate = () => {
         const normalNodes: SVGGElement[] = [];
@@ -469,7 +415,7 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
         const currentState = new Map<string, NodeZIndexState>();
         let hasChanges = false;
 
-        allNodeElementsRef.current.forEach((element, nodeId) => {
+        nodeLayerRefs.current.allNodeElementsRef.current.forEach((element, nodeId) => {
           if (!nodeLayer.contains(element)) return;
 
           const isNodeDragging = isDragging && nodeId === getDraggedNodeId();
@@ -521,16 +467,16 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
       if (immediate) {
         executeZIndexUpdate();
       } else {
-        scheduleRAF(executeZIndexUpdate, "high"); // Z-index updates are high priority for visual feedback
+        scheduleVisualUpdate("z-index-update", executeZIndexUpdate);
       }
     },
-  [isNodeSelected, scheduleRAF, isDragging, getDraggedNodeId]
+    [isNodeSelected, isDragging, getDraggedNodeId]
   );
 
   // Optimized immediate node dragging z-index management
   const setNodeAsDragging = useCallback(
     (nodeId: string) => {
-      const element = allNodeElementsRef.current.get(nodeId);
+      const element = nodeLayerRefs.current.allNodeElementsRef.current.get(nodeId);
       const nodeLayer = nodeLayerRef.current;
 
       if (element && nodeLayer) {
@@ -557,15 +503,6 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
   const lastDragUpdateRef = useRef(0);
   const dragUpdateThrottle = 16; // ~60fps for better performance balance
 
-  // Track last updated paths removed; hook handles caching
-
-  // Track current drag positions to prevent position conflicts
-  const currentDragPositionsRef = useRef<Map<string, { x: number; y: number }>>(
-    new Map()
-  );
-
-  // removed obsolete canBottomPortAcceptConnection (logic is owned by node hook)
-
   // Helper function to check if a port has multiple connections
   const hasMultipleConnections = useCallback(
     (nodeId: string, portId: string, portType: "input" | "output") => {
@@ -587,8 +524,6 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
     },
     [connections]
   );
-
-  // Legacy endpoint detection removed - no longer needed since legacy badges are removed
 
   // Enhanced port highlighting for architecture mode
   const getPortHighlightClass = useCallback(
@@ -729,11 +664,6 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
     [svgRef]
   );
 
-  // Removed manual trimPathForArrow. Arrow clearance is now handled in utils
-  // via calculateArrowAdjustedPosition and box projections.
-
-  // Connection path is provided by useConnectionPaths hook (see alias above)
-
   // Memoized configurable dimensions calculation (shape-aware)
   const getConfigurableDimensions = useMemo(() => {
     const dimCache = createLRUCache<any>(1000, 5 * 60 * 1000)
@@ -867,7 +797,7 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
           positions = calcRectOrSquare(dimensions, portCount, portType)
       }
 
-  portPosCache.set(cacheKey, positions);
+      portPosCache.set(cacheKey, positions);
       return positions;
     };
   }, [
@@ -876,25 +806,138 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
     getConfigurableDimensions,
   ]);
 
-  // Removed local bottom port layout; use calculatePortPosition for accuracy across modes/variants
+  // Memoized connection lookup for better drag performance
+  const nodeConnectionsMap = useMemo(() => {
+    const map = new Map<string, Connection[]>();
+    connections.forEach((conn) => {
+      // Index by source node
+      if (!map.has(conn.sourceNodeId)) {
+        map.set(conn.sourceNodeId, []);
+      }
+      map.get(conn.sourceNodeId)!.push(conn);
 
-  // Enhanced visual feedback system with batching and caching
-  const processBatchedVisualUpdates = useCallback(() => {
-    if (visualUpdateQueueRef.current.size === 0) return;
-    const start = performance.now();
-    if (!(window as any).__wfAdaptive) {
-      (window as any).__wfAdaptive = { vBudget: 4, lastDuration: 0 };
+      // Index by target node (if different from source)
+      if (conn.targetNodeId !== conn.sourceNodeId) {
+        if (!map.has(conn.targetNodeId)) {
+          map.set(conn.targetNodeId, []);
+        }
+        map.get(conn.targetNodeId)!.push(conn);
+      }
+    });
+    return map;
+  }, [connections]);
+
+  // Optimized batched connection update system using RAF coordinator
+  const processBatchedConnectionUpdates = useCallback(() => {
+    if (nodeLayerRefs.current.connectionUpdateQueueRef.current.size === 0) return;
+
+    // PERFORMANCE: Use cached DOM selections to avoid repeated queries
+    const connectionLayer = getCachedSelection("connectionLayer");
+    if (!connectionLayer) return;
+
+    // PERFORMANCE: Optimized batching - process more items but with time slicing
+    const nodesToProcess = Array.from(nodeLayerRefs.current.connectionUpdateQueueRef.current);
+  // Coordinator controls time budget centrally
+
+    for (const nodeId of nodesToProcess) {
+      const affectedConnections = nodeConnectionsMap.get(nodeId) || [];
+      if (affectedConnections.length === 0) {
+        nodeLayerRefs.current.connectionUpdateQueueRef.current.delete(nodeId);
+        continue;
+      }
+
+      // PERFORMANCE: Batch DOM operations together
+      const connectionElements = affectedConnections
+        .map((conn) => ({
+          conn,
+          element: connectionLayer.select(`[data-connection-id="${conn.id}"]`),
+        }))
+        .filter(({ element }) => !element.empty());
+
+      // Update all paths in a single batch
+      connectionElements.forEach(({ conn, element }) => {
+        const pathElement = element.select(".connection-path");
+        const newPath = getConnectionPath(conn, true);
+        pathElement.attr("d", newPath);
+      });
+
+      nodeLayerRefs.current.connectionUpdateQueueRef.current.delete(nodeId);
     }
-    const adaptive = (window as any).__wfAdaptive as {
-      vBudget: number;
-      lastDuration: number;
-    };
-    const MAX_MS = adaptive.vBudget;
-    for (const nodeId of Array.from(visualUpdateQueueRef.current)) {
-      if (performance.now() - start > MAX_MS) break;
-      const element = allNodeElementsRef.current.get(nodeId);
+  }, [nodeConnectionsMap, getConnectionPath, getCachedSelection]);
+
+  const updateDraggedNodePosition = useCallback(
+    (nodeId: string, newX: number, newY: number) => {
+      // Always update node position immediately for smooth dragging
+      if (nodeLayerRefs.current.draggedElementRef.current) {
+        nodeLayerRefs.current.draggedElementRef.current.attr(
+          "transform",
+          `translate(${newX}, ${newY})`
+        );
+      }
+
+      // Store current drag position
+      nodeLayerRefs.current.currentDragPositionsRef.current.set(nodeId, { x: newX, y: newY });
+      // Sync with connection paths hook for live path updates during drag
+      updateConnDragPos(nodeId, { x: newX, y: newY });
+
+      // Throttle connection updates to improve performance
+      const now = Date.now();
+      if (now - lastDragUpdateRef.current < dragUpdateThrottle) {
+        return;
+      }
+      lastDragUpdateRef.current = now;
+
+      // Queue connection updates for coordinated RAF processing with deduplication
+      const affectedConnections = nodeConnectionsMap.get(nodeId) || [];
+      if (affectedConnections.length > 0) {
+        const wasEmpty = nodeLayerRefs.current.connectionUpdateQueueRef.current.size === 0;
+        nodeLayerRefs.current.connectionUpdateQueueRef.current.add(nodeId);
+        
+        // Only schedule RAF task if this is the first item in queue to prevent duplicates
+        if (wasEmpty) {
+          scheduleConnectionUpdate('batched-conn-updates', processBatchedConnectionUpdates);
+        }
+      }
+    },
+    [
+      nodeConnectionsMap,
+      processBatchedConnectionUpdates,
+      dragUpdateThrottle,
+      updateConnDragPos,
+    ]
+  );
+
+  const resetNodeVisualStyle = useCallback(
+    (nodeElement: any, nodeId: string) => {
+      const isSelected = isNodeSelected(nodeId);
+      const nodeBackground = nodeElement.select(".node-background");
+      const node = nodeMap.get(nodeId);
+
+      if (isSelected) {
+        nodeElement
+          .style("opacity", 1)
+          .style("filter", "drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))");
+        nodeBackground.attr("stroke", "#2196F3").attr("stroke-width", 3);
+      } else {
+        nodeElement.style("opacity", 1).style("filter", "none");
+        if (node) {
+          nodeBackground
+            .attr("stroke", getNodeColor(node.type, node.status))
+            .attr("stroke-width", 2);
+        }
+      }
+    },
+    [isNodeSelected, nodeMap]
+  );
+
+  // Enhanced visual feedback system with coordinated RAF
+  const processBatchedVisualUpdates = useCallback(() => {
+    if (nodeLayerRefs.current.visualUpdateQueueRef.current.size === 0) return;
+    
+    for (const nodeId of Array.from(nodeLayerRefs.current.visualUpdateQueueRef.current)) {
+      const element = nodeLayerRefs.current.allNodeElementsRef.current.get(nodeId);
       if (!element) {
-        visualUpdateQueueRef.current.delete(nodeId);
+        nodeLayerRefs.current.visualUpdateQueueRef.current.delete(nodeId);
         continue;
       }
       const nodeElement = d3.select(element);
@@ -903,20 +946,34 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
         .style("opacity", 0.9)
         .style("filter", "drop-shadow(0 6px 12px rgba(0, 0, 0, 0.3))");
       nodeBackground.attr("stroke", "#2196F3").attr("stroke-width", 3);
-      visualUpdateQueueRef.current.delete(nodeId);
+      nodeLayerRefs.current.visualUpdateQueueRef.current.delete(nodeId);
     }
-    if (visualUpdateQueueRef.current.size > 0) {
-      scheduleRAF(processBatchedVisualUpdates, "normal");
-      batchedVisualUpdateRef.current = 1 as unknown as number;
-    } else {
-      batchedVisualUpdateRef.current = null;
-    }
-    const duration = performance.now() - start;
-    adaptive.lastDuration = duration;
-    const usage = duration / MAX_MS;
-    if (usage < 0.6 && adaptive.vBudget < 6) adaptive.vBudget += 0.25;
-    else if (usage > 0.9 && adaptive.vBudget > 2) adaptive.vBudget -= 0.25;
-  }, [scheduleRAF]);
+  }, []);
+
+  const applyDragVisualStyle = useCallback(
+    (nodeElement: any, nodeId: string) => {
+      // CRITICAL: Apply visual styling IMMEDIATELY during drag start for stable feedback
+      const nodeBackground = nodeElement.select(".node-background");
+
+      // Apply drag visual style immediately
+      nodeElement
+        .style("opacity", 0.9)
+        .style("filter", "drop-shadow(0 6px 12px rgba(0, 0, 0, 0.3))");
+
+      // Always use blue border when dragging (regardless of selection state)
+      nodeBackground.attr("stroke", "#2196F3").attr("stroke-width", 3);
+
+      // Queue for batched processing with deduplication
+      const wasEmpty = nodeLayerRefs.current.visualUpdateQueueRef.current.size === 0;
+      nodeLayerRefs.current.visualUpdateQueueRef.current.add(nodeId);
+      
+      // Only schedule RAF task if this is the first item in queue to prevent duplicates
+      if (wasEmpty) {
+        scheduleVisualUpdate('batched-visual-updates', processBatchedVisualUpdates);
+      }
+    },
+    [processBatchedVisualUpdates]
+  );
 
   // Unified drop state management
   const setDropFeedback = useCallback(
@@ -969,223 +1026,62 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
     updatePortHighlighting,
   })
 
-  // Defer useNodeRendering invocation until after helper callbacks are declared
-
-  const applyDragVisualStyle = useCallback(
-    (nodeElement: any, nodeId: string) => {
-      // CRITICAL: Apply visual styling IMMEDIATELY during drag start for stable feedback
-      const nodeBackground = nodeElement.select(".node-background");
-
-      // Apply drag visual style immediately
-      nodeElement
-        .style("opacity", 0.9)
-        .style("filter", "drop-shadow(0 6px 12px rgba(0, 0, 0, 0.3))");
-
-      // Always use blue border when dragging (regardless of selection state)
-      nodeBackground.attr("stroke", "#2196F3").attr("stroke-width", 3);
-
-      // Applied blue drag visual style immediately
-
-      // Also queue for batched processing as backup
-      visualUpdateQueueRef.current.add(nodeId);
-
-      // Start batched processing if not already running
-      if (!batchedVisualUpdateRef.current) {
-        scheduleRAF(processBatchedVisualUpdates, "normal");
-        batchedVisualUpdateRef.current = 1 as unknown as number;
-      }
+  // Create stable callback groups using useStableLayerCallbacks to prevent layer re-renders
+  const { callbacks: nodeLayerCallbacks, context: nodeLayerContext, visuals: nodeLayerVisuals, utils: nodeLayerUtils } = useStableLayerCallbacks(
+    {
+      isNodeSelected,
+      onNodeClick,
+      onNodeDoubleClick,
+      onNodeDrag,
+      onPortClick,
+      onPlusButtonClick,
+      onPortDragStart,
+      onPortDrag,
+      onPortDragEnd,
+      canDropOnNode,
     },
-  [processBatchedVisualUpdates, scheduleRAF]
+    {
+      isContextDragging,
+      getDraggedNodeId,
+      startDragging,
+      updateDragPosition,
+      endDragging,
+    },
+    {
+      setDropFeedback,
+      applyDragVisualStyle,
+      updateDraggedNodePosition,
+      resetNodeVisualStyle,
+      setNodeAsDragging,
+      organizeNodeZIndex,
+    },
+    {
+      getConfigurableDimensions,
+      getArchitectureIconSvg,
+      isServicesArchitectureNode,
+      getPortHighlightClass,
+      getConfigurablePortPositions,
+    }
   );
 
-  // Memoized connection lookup for better drag performance
-  const nodeConnectionsMap = useMemo(() => {
-    const map = new Map<string, Connection[]>();
-    connections.forEach((conn) => {
-      // Index by source node
-      if (!map.has(conn.sourceNodeId)) {
-        map.set(conn.sourceNodeId, []);
-      }
-      map.get(conn.sourceNodeId)!.push(conn);
-
-      // Index by target node (if different from source)
-      if (conn.targetNodeId !== conn.sourceNodeId) {
-        if (!map.has(conn.targetNodeId)) {
-          map.set(conn.targetNodeId, []);
-        }
-        map.get(conn.targetNodeId)!.push(conn);
-      }
-    });
-    return map;
-  }, [connections]);
-
-  // Batched connection update system for better performance
-  const processBatchedConnectionUpdates = useCallback(() => {
-    if (connectionUpdateQueueRef.current.size === 0) return;
-
-    // PERFORMANCE: Use cached DOM selections to avoid repeated queries
-    const connectionLayer = getCachedSelection("connectionLayer");
-    if (!connectionLayer) return;
-
-    // PERFORMANCE: Optimized batching - process more items but with time slicing
-    const nodesToProcess = Array.from(connectionUpdateQueueRef.current);
-    const startTime = performance.now();
-    if (!(window as any).__wfConnAdaptive) {
-      (window as any).__wfConnAdaptive = { cBudget: 8, lastDuration: 0 };
-    }
-    const connAdaptive = (window as any).__wfConnAdaptive as {
-      cBudget: number;
-      lastDuration: number;
-    };
-    const maxProcessingTime = connAdaptive.cBudget;
-    // Time-slice processing counter removed as it's not used for reporting
-
-    for (const nodeId of nodesToProcess) {
-      // Time-slice processing to avoid blocking main thread
-      if (performance.now() - startTime > maxProcessingTime) break;
-
-      const affectedConnections = nodeConnectionsMap.get(nodeId) || [];
-      if (affectedConnections.length === 0) {
-        connectionUpdateQueueRef.current.delete(nodeId);
-        continue;
-      }
-
-      // PERFORMANCE: Batch DOM operations together
-      const connectionElements = affectedConnections
-        .map((conn) => ({
-          conn,
-          element: connectionLayer.select(`[data-connection-id="${conn.id}"]`),
-        }))
-        .filter(({ element }) => !element.empty());
-
-      // Update all paths in a single batch
-      connectionElements.forEach(({ conn, element }) => {
-        const pathElement = element.select(".connection-path");
-        const newPath = getConnectionPath(conn, true);
-        pathElement.attr("d", newPath);
-      });
-
-      connectionUpdateQueueRef.current.delete(nodeId);
-    }
-
-    // Schedule next batch if there are more connections to process
-    if (connectionUpdateQueueRef.current.size > 0) {
-      scheduleRAF(processBatchedConnectionUpdates, "normal");
-      batchedConnectionUpdateRef.current = 1 as unknown as number;
-    } else {
-      batchedConnectionUpdateRef.current = null;
-    }
-    const duration = performance.now() - startTime;
-    connAdaptive.lastDuration = duration;
-    const usage = duration / maxProcessingTime;
-    if (usage < 0.55 && connAdaptive.cBudget < 10) connAdaptive.cBudget += 0.5;
-    else if (usage > 0.9 && connAdaptive.cBudget > 4)
-      connAdaptive.cBudget -= 0.5;
-  }, [nodeConnectionsMap, getConnectionPath, getCachedSelection, scheduleRAF]);
-
-  const updateDraggedNodePosition = useCallback(
-    (nodeId: string, newX: number, newY: number) => {
-      // Always update node position immediately for smooth dragging
-      if (draggedElementRef.current) {
-        draggedElementRef.current.attr(
-          "transform",
-          `translate(${newX}, ${newY})`
-        );
-      }
-
-      // Store current drag position
-      currentDragPositionsRef.current.set(nodeId, { x: newX, y: newY });
-      // Sync with connection paths hook for live path updates during drag
-      updateConnDragPos(nodeId, { x: newX, y: newY });
-
-      // Throttle connection updates to improve performance
-      const now = Date.now();
-      if (now - lastDragUpdateRef.current < dragUpdateThrottle) {
-        return;
-      }
-      lastDragUpdateRef.current = now;
-
-      // Queue connection updates for batched processing
-      const affectedConnections = nodeConnectionsMap.get(nodeId) || [];
-      if (affectedConnections.length > 0) {
-        connectionUpdateQueueRef.current.add(nodeId);
-
-        // Start batched processing if not already running
-        if (!batchedConnectionUpdateRef.current) {
-          scheduleRAF(processBatchedConnectionUpdates, "normal");
-          batchedConnectionUpdateRef.current = 1 as unknown as number;
-        }
-      }
-    },
-    [
-      nodeConnectionsMap,
-      processBatchedConnectionUpdates,
-      dragUpdateThrottle,
-  updateConnDragPos,
-  scheduleRAF,
-    ]
-  );
-
-  const resetNodeVisualStyle = useCallback(
-    (nodeElement: any, nodeId: string) => {
-      const isSelected = isNodeSelected(nodeId);
-      const nodeBackground = nodeElement.select(".node-background");
-      const node = nodeMap.get(nodeId);
-
-      if (isSelected) {
-        nodeElement
-          .style("opacity", 1)
-          .style("filter", "drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))");
-        nodeBackground.attr("stroke", "#2196F3").attr("stroke-width", 3);
-      } else {
-        nodeElement.style("opacity", 1).style("filter", "none");
-        if (node) {
-          nodeBackground
-            .attr("stroke", getNodeColor(node.type, node.status))
-            .attr("stroke-width", 2);
-        }
-      }
-    },
-    [isNodeSelected, nodeMap]
-  );
-
-  // Node layer (memoized wrapper around useNodeRendering)
-  
-
-  // Initialize flag once the SVG layers are present (nodes are now rendered by useNodeRendering)
-  useEffect(() => {
-    if (isInitialized) return
-    if (!svgRef.current) return
-    const svg = d3.select(svgRef.current)
-    const nodeLayer = svg.select<SVGGElement>('.node-layer')
-    if (!nodeLayer.empty()) setIsInitialized(true)
-  }, [isInitialized, svgRef])
+  const nodeLayerConfig: NodeLayerConfig = useMemo(() => ({
+    svgRef,
+    nodes,
+    connections,
+    isDragging,
+    designerMode: workflowContextState.designerMode as DesignerMode | undefined,
+  }), [svgRef, nodes, connections, isDragging, workflowContextState.designerMode]);
 
   // Enhanced cache management with memory optimization
   const clearAllCaches = useCallback(() => {
     // Clear connection path cache in hook
     clearConnCache();
     nodePositionCacheRef.current.clear();
-    // Removed: lastConnectionPathsRef (replaced by hook cache)
-    currentDragPositionsRef.current.clear();
     clearAllDragPositions();
-    connectionUpdateQueueRef.current.clear();
-    visualUpdateQueueRef.current.clear();
+    nodeLayerRefs.current.connectionUpdateQueueRef.current.clear();
+    nodeLayerRefs.current.visualUpdateQueueRef.current.clear();
     lastZIndexStateRef.current.clear();
-    rafCallbackQueueRef.current = [];
-    if (batchedConnectionUpdateRef.current) {
-      cancelAnimationFrame(batchedConnectionUpdateRef.current);
-      batchedConnectionUpdateRef.current = null;
-    }
-    if (batchedVisualUpdateRef.current) {
-      cancelAnimationFrame(batchedVisualUpdateRef.current);
-      batchedVisualUpdateRef.current = null;
-    }
-    if (rafIdRef.current) {
-      cancelAnimationFrame(rafIdRef.current);
-      rafIdRef.current = null;
-    }
-    rafScheduledRef.current = false;
+    rafCoordinator.cancelAll();
   }, [clearConnCache, clearAllDragPositions]);
 
   // Clear caches when nodes change
@@ -1198,148 +1094,14 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
     clearConnCache();
   }, [connections, clearConnCache]);
 
-  // Immediate z-index organization for selection changes
+  // Initialize flag once the SVG layers are present
   useEffect(() => {
-    if (!isDragging && isInitialized) {
-      // Use immediate update for selection changes to ensure proper layering
-      const nodeLayer = nodeLayerRef.current;
-      if (!nodeLayer || allNodeElementsRef.current.size === 0) return;
-
-      const normalNodes: SVGGElement[] = [];
-      const selectedNodes: SVGGElement[] = [];
-      const draggingNodes: SVGGElement[] = [];
-
-      allNodeElementsRef.current.forEach((element, nodeId) => {
-        if (!nodeLayer.contains(element)) return;
-
-  const isNodeDragging = isDragging && nodeId === getDraggedNodeId();
-        const isSelected = isNodeSelected(nodeId);
-
-        if (isNodeDragging) {
-          draggingNodes.push(element);
-        } else if (isSelected) {
-          selectedNodes.push(element);
-        } else {
-          normalNodes.push(element);
-        }
-      });
-
-      // Reorder DOM elements immediately: normal → selected → dragging
-      const orderedElements = [
-        ...normalNodes,
-        ...selectedNodes,
-        ...draggingNodes,
-      ];
-
-      orderedElements.forEach((element) => {
-        if (nodeLayer.contains(element) && nodeLayer.lastChild !== element) {
-          nodeLayer.appendChild(element);
-        }
-      });
-    }
-  }, [selectedNodes, isNodeSelected, isInitialized, isDragging, getDraggedNodeId]);
-
-  // Monitor drag state changes to clean up DOM classes
-  useEffect(() => {
-    if (!svgRef.current) return;
-
-    const svg = d3.select(svgRef.current);
-
-    // If we're not dragging, remove all dragging classes
-    if (!isDragging) {
-      svg.selectAll(".node.dragging").classed("dragging", false);
-      // Clear draggedElementRef when not dragging
-      if (draggedElementRef.current) {
-        draggedElementRef.current = null;
-      }
-    }
-  }, [isDragging, svgRef]);
-
-  // Legacy nodes effect removed. Nodes, ports, and side/bottom ports are rendered via useNodeRendering hook.
-
-  // Connections rendered via memoized layer
-
-  // (migrated) root SVG events now handled by useCanvasEvents
-
-  // Grid is managed in a memoized layer
-
-  // Remove duplicate CSS since hover styles are already in globals.css
-
-  // Visual state effect - handle selection and connection states with z-index management
-  useEffect(() => {
-    if (!svgRef.current || !isInitialized) return;
-
-    const svg = d3.select(svgRef.current);
-    const mainNodeLayer = svg.select(".node-layer");
-    const connectionLayer = svg.select(".connection-layer");
-
-    // Update node visual states only
-    mainNodeLayer.selectAll(".node").each(function (d: any) {
-      const nodeElement = d3.select(this);
-      const isSelected = isNodeSelected(d.id);
-      const isDragging = nodeElement.classed("dragging");
-      const nodeBackground = nodeElement.select(".node-background");
-
-      nodeElement.classed("selected", isSelected);
-
-      if (!isDragging) {
-        if (isSelected) {
-          nodeElement.style(
-            "filter",
-            "drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))"
-          );
-          nodeBackground.attr("stroke", "#2196F3").attr("stroke-width", 3);
-        } else {
-          nodeElement.style("filter", "none");
-          nodeBackground
-            .attr("stroke", getNodeColor(d.type, d.status))
-            .attr("stroke-width", 2);
-        }
-      }
-    });
-
-    // Ensure proper z-index after visual state changes (but only if not dragging)
-    if (!isDragging) {
-      organizeNodeZIndex(true); // Use immediate execution to ensure proper layering
-    }
-
-    // Update connection selection state only - don't touch hover state
-    connectionLayer.selectAll(".connection").each(function (d: any) {
-      const connectionGroup = d3.select(this as SVGGElement);
-      const pathElement = connectionGroup.select(".connection-path");
-      const isSelected = selectedConnection?.id === d.id;
-      const isCurrentlyHovered = connectionGroup.classed("connection-hover");
-
-      // Update selection class
-      connectionGroup.classed("connection-selected", isSelected);
-
-      // Production selection effects removed - using CSS-based styling
-
-      // Only update visual attributes if not currently hovered
-      if (!isCurrentlyHovered) {
-        if (isSelected) {
-          pathElement
-            .attr("stroke", "#2196F3")
-            .attr("stroke-width", 3)
-            .attr("marker-end", getConnectionMarker(d, "selected"));
-        } else {
-          pathElement
-            .attr("stroke", "white")
-            .attr("stroke-width", 2)
-            .attr("marker-end", getConnectionMarker(d, "default"));
-        }
-      }
-    });
-  }, [
-    selectedNodes,
-    selectedConnection?.id,
-    isInitialized,
-    isDragging,
-    getConnectionMarker,
-    isNodeSelected,
-    organizeNodeZIndex,
-    svgRef,
-  ]);
+    if (isInitialized) return
+    if (!svgRef.current) return
+    const svg = d3.select(svgRef.current)
+    const nodeLayer = svg.select<SVGGElement>('.node-layer')
+    if (!nodeLayer.empty()) setIsInitialized(true)
+  }, [isInitialized, svgRef])
 
   // Connection state effect
   useEffect(() => {
@@ -1352,19 +1114,8 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
     g.selectAll(".connection-preview").remove();
 
     if (isConnecting && connectionStart) {
-      console.log("🔄 Connection effect - preview update:", {
-        isConnecting,
-        connectionStart,
-        connectionPreview,
-      });
       const sourceNode = nodeMap.get(connectionStart.nodeId);
       if (sourceNode && connectionPreview) {
-        console.log(
-          "🔄 Rendering preview in effect from:",
-          sourceNode.id,
-          "to:",
-          connectionPreview
-        );
         // Compute hover target box if mouse is over a node group
         const hoveredNode = nodes.find((n) => {
           const dims = getConfigurableDimensions(n as any);
@@ -1403,8 +1154,6 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
           hoverTargetBox
         );
 
-        // Arrow clearance handled by preview path utilities; no manual trim needed
-
         // Determine preview marker consistent with final connection markers
         const isWorkflowMode = workflowContextState.designerMode === "workflow";
         const previewMarker = getArrowMarkerForMode(isWorkflowMode, "default");
@@ -1420,18 +1169,8 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
           .attr("marker-end", previewMarker)
           .attr("pointer-events", "none")
           .style("opacity", 0.7);
-      } else {
-        console.log("🔄 Effect not rendering preview:", {
-          sourceNode: !!sourceNode,
-          connectionPreview: !!connectionPreview,
-        });
       }
     }
-
-  // Port visual states are managed by usePortInteractions hook
-
-    // Fixed: Added all required dependencies to prevent stale closures
-    // Uses memoized functions where possible to prevent infinite re-renders
   }, [
     isConnecting,
     connectionPreview,
@@ -1440,17 +1179,10 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
     isInitialized,
     workflowContextState.designerMode,
     nodeMap,
-    nodes, // Required for hover detection and port highlighting
+    nodes,
     svgRef,
     getConfigurableDimensions,
   ]);
-
-  // REMOVED: Architecture mode port visibility JavaScript management
-  // CSS now handles all port visibility states automatically:
-  // - Base state: .canvas-container.architecture-mode .port-group (hidden)
-  // - Hover state: .canvas-container.architecture-mode .node:hover .port-group (visible)
-  // - Connecting state: .canvas-container .workflow-canvas.connecting .port-group (visible)
-  // This prevents inline style conflicts with CSS class-based styling
 
   // Connection cleanup effect - clear port highlighting when connection ends
   useEffect(() => {
@@ -1464,12 +1196,8 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
       svg.selectAll(".input-port-group").classed("can-dropped", false);
       svg.selectAll(".output-port-group").classed("can-dropped", false);
       svg.selectAll(".port-group").classed("can-dropped", false);
-
-      console.log("🧹 Cleaned up port highlighting after connection ended");
     }
   }, [isConnecting, isInitialized, svgRef]);
-
-  // Removed canvasTransform-tied grid update to avoid dependency storms; handled by useGridEffect
 
   // Wire optional canvas-level native events
   useEffect(() => {
@@ -1505,13 +1233,7 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
   // Cleanup effect
   useEffect(() => {
     return () => {
-      if (rafIdRef.current) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-  // Clear batched markers; central RAF loop will stop when queue empties
-  batchedVisualUpdateRef.current = null;
-  batchedConnectionUpdateRef.current = null;
+      rafCoordinator.cancelAll();
       // Clear connection path cache managed by hook
       clearConnCache();
       gridCacheRef.current = null;
@@ -1545,45 +1267,13 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
         getConnectionMarker={getConnectionMarker}
         createFilledPolygonFromPath={createFilledPolygonFromPath}
       />
-      <NodeLayer
-        svgRef={svgRef}
-        nodes={nodes}
-        connections={connections}
-        isDragging={isDragging}
-        designerMode={workflowContextState.designerMode as DesignerMode | undefined}
-        isNodeSelected={isNodeSelected}
-        onNodeClick={onNodeClick}
-        onNodeDoubleClick={onNodeDoubleClick}
-        onNodeDrag={onNodeDrag}
-        onPortClick={onPortClick}
-        onPlusButtonClick={onPlusButtonClick}
-        onPortDragStart={onPortDragStart}
-        onPortDrag={onPortDrag}
-        onPortDragEnd={onPortDragEnd}
-        canDropOnNode={canDropOnNode}
-        isContextDragging={isContextDragging}
-        getDraggedNodeId={getDraggedNodeId}
-        startDragging={startDragging}
-        updateDragPosition={updateDragPosition}
-        endDragging={endDragging}
-        setDropFeedback={setDropFeedback}
-        applyDragVisualStyle={applyDragVisualStyle}
-        updateDraggedNodePosition={updateDraggedNodePosition}
-        resetNodeVisualStyle={resetNodeVisualStyle}
-        setNodeAsDragging={setNodeAsDragging}
-        organizeNodeZIndex={organizeNodeZIndex}
-        getConfigurableDimensions={(n: any) => (getConfigurableDimensions as any)(n)}
-        getArchitectureIconSvg={getArchitectureIconSvg}
-        isServicesArchitectureNode={isServicesArchitectureNode}
-        getPortHighlightClass={getPortHighlightClass}
-        getConfigurablePortPositions={getConfigurablePortPositions}
-        draggedElementRef={draggedElementRef as any}
-        draggedNodeElementRef={draggedNodeElementRef}
-        allNodeElementsRef={allNodeElementsRef}
-        dragStateCleanupRef={dragStateCleanupRef}
-        currentDragPositionsRef={currentDragPositionsRef}
-        connectionUpdateQueueRef={connectionUpdateQueueRef}
-        visualUpdateQueueRef={visualUpdateQueueRef}
+      <OptimizedNodeLayer
+        config={nodeLayerConfig}
+        callbacks={nodeLayerCallbacks}
+        context={nodeLayerContext}
+        visuals={nodeLayerVisuals}
+        utils={nodeLayerUtils}
+        refs={nodeLayerRefs.current}
       />
       <CanvasEffects
         svgRef={svgRef}
@@ -1604,5 +1294,4 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
   );
 }
 
-export default React.memo(WorkflowCanvas);
-export const CanvasCore = WorkflowCanvas;
+export default React.memo(OptimizedWorkflowCanvas);

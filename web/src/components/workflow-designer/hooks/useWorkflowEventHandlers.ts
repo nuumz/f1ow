@@ -4,7 +4,7 @@ import { useWorkflowContext } from '../contexts/WorkflowContext'
 import { useWorkflowOperations } from './useWorkflowOperations'
 import { useWorkflowCanvas } from './useWorkflowCanvas'
 import { suggestNextNodeType } from '../utils/node-suggestions'
-import { ArchitectureNodeDefinitions } from '../types/architecture'
+import { ArchitectureNodeDefinitions, resolveArchitectureNodeType } from '../types/architecture'
 import type { NodeDefinition } from '../types'
 import type { WorkflowNode } from './useNodeSelection'
 import type { Connection } from './useConnections'
@@ -67,16 +67,10 @@ export function useWorkflowEventHandlers() {
 
         // Route by mode: architecture nodes use ArchitectureNodeDefinitions
         if (state.designerMode === 'architecture') {
-          // Common aliases from palette → definition keys
-          const alias: Record<string, string> = {
-            api: 'rest-api',
-            queue: 'message-queue',
-            storage: 'database',
-            loadbalancer: 'load-balancer'
-          }
+          // Resolve to canonical architecture definition key
           const defKey = ArchitectureNodeDefinitions[nodeType]
             ? nodeType
-            : (alias[nodeType] ?? nodeType)
+            : resolveArchitectureNodeType(nodeType)
 
           const def: NodeDefinition | undefined = ArchitectureNodeDefinitions[defKey]
 
@@ -117,15 +111,9 @@ export function useWorkflowEventHandlers() {
       } else {
         // Fallback to screen coordinates if transform not available
         if (state.designerMode === 'architecture') {
-          const alias: Record<string, string> = {
-            api: 'rest-api',
-            queue: 'message-queue',
-            storage: 'database',
-            loadbalancer: 'load-balancer'
-          }
           const defKey = ArchitectureNodeDefinitions[nodeType]
             ? nodeType
-            : (alias[nodeType] ?? nodeType)
+            : resolveArchitectureNodeType(nodeType)
 
           const def: NodeDefinition | undefined = ArchitectureNodeDefinitions[defKey]
           if (def) {

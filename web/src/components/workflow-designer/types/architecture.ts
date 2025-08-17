@@ -4,11 +4,13 @@
  */
 
 import type { WorkflowNode, NodeDefinition, NodeTypeInfo } from './index'
+// Reuse the same normalization as icon registry to keep keys consistent across palette/canvas/rendering
+import { normalizeArchitectureType } from '../utils/icon-registry'
 
 // Architecture diagram specific node categories
-export type ArchitectureNodeCategory = 
+export type ArchitectureNodeCategory =
   | 'System/External Service'
-  | 'System/Internal Service' 
+  | 'System/Internal Service'
   | 'System/Database'
   | 'System/Queue'
   | 'System/Cache'
@@ -188,6 +190,29 @@ export interface ArchitectureDiagramLayout {
   }[]
 }
 
+// Centralized alias map to deduplicate/resolve overlapping palette names into canonical keys
+// Example: 'api' and 'restapi' -> 'rest-api', 'queue' -> 'message-queue', etc.
+export const ArchitectureTypeAliases: Record<string, string> = {
+  // Common variants
+  // (removed) queue → message-queue, storage → database (keep distinct types)
+  // Minor spelling/format variants
+  // (removed) micro-service → microservice, loadbalancer → load-balancer, messagequeue → message-queue, cloudservice → cloud-service
+}
+
+// Resolve any input type/alias to a canonical ArchitectureNodeTypes/Definitions key
+export function resolveArchitectureNodeType(input: string): string {
+  const norm = normalizeArchitectureType(input)
+  // Direct alias mapping first
+  const aliased = ArchitectureTypeAliases[norm] ?? norm
+  // If it's a known type key already, return as-is; otherwise keep aliased as best-effort
+  // We check both Types and Definitions to cover partial registries
+  if (Object.prototype.hasOwnProperty.call(ArchitectureNodeTypes, aliased) ||
+    Object.prototype.hasOwnProperty.call(ArchitectureNodeDefinitions, aliased)) {
+    return aliased
+  }
+  return aliased
+}
+
 // Architecture node type definitions
 export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
   // External Services
@@ -199,7 +224,7 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     description: 'Third-party external service',
     shape: 'rectangle'
   },
-  
+
   'ext-api': {
     icon: '🔗',
     color: '#4ECDC4',
@@ -207,7 +232,7 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     category: 'API/REST Endpoint',
     description: 'External API endpoint'
   },
-  
+
   // Internal Services
   'microservice': {
     icon: '⚙️',
@@ -217,7 +242,7 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     description: 'Internal microservice',
     shape: 'rectangle'
   },
-  
+
   'api-gateway': {
     icon: '🚪',
     color: '#96CEB4',
@@ -225,7 +250,7 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     category: 'System/Gateway',
     description: 'API gateway service'
   },
-  
+
   'load-balancer': {
     icon: '⚖️',
     color: '#FFEAA7',
@@ -233,7 +258,7 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     category: 'System/Load Balancer',
     description: 'Load balancing service'
   },
-  
+
   // Data Stores
   'database': {
     icon: '🗄️',
@@ -243,7 +268,7 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     description: 'Database system',
     shape: 'circle'
   },
-  
+
   'cache': {
     icon: '⚡',
     color: '#FD79A8',
@@ -252,7 +277,7 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     description: 'Caching layer',
     shape: 'diamond'
   },
-  
+
   'message-queue': {
     icon: '📬',
     color: '#FDCB6E',
@@ -260,7 +285,16 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     category: 'System/Queue',
     description: 'Message queue system'
   },
-  
+
+  // Distinct queue (generic) separate from message-queue
+  'queue': {
+    icon: '📦',
+    color: '#F59E0B',
+    label: 'Queue',
+    category: 'System/Queue',
+    description: 'Generic queueing component'
+  },
+
   // API Types
   'rest-api': {
     icon: '🔄',
@@ -269,7 +303,7 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     category: 'API/REST Endpoint',
     description: 'REST API endpoint'
   },
-  
+
   'graphql-api': {
     icon: '📊',
     color: '#E17055',
@@ -277,7 +311,7 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     category: 'API/GraphQL Endpoint',
     description: 'GraphQL API endpoint'
   },
-  
+
   'websocket': {
     icon: '🔌',
     color: '#A29BFE',
@@ -285,7 +319,7 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     category: 'API/WebSocket',
     description: 'WebSocket connection'
   },
-  
+
   'event-stream': {
     icon: '🌊',
     color: '#FD79A8',
@@ -293,7 +327,7 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     category: 'API/Event Stream',
     description: 'Event streaming endpoint'
   },
-  
+
   // Business Layer
   'domain-service': {
     icon: '💼',
@@ -302,7 +336,7 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     category: 'Business/Domain Service',
     description: 'Business domain service'
   },
-  
+
   'use-case': {
     icon: '🎯',
     color: '#00B894',
@@ -310,7 +344,7 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     category: 'Business/Use Case',
     description: 'Business use case'
   },
-  
+
   'business-process': {
     icon: '📋',
     color: '#FDCB6E',
@@ -318,7 +352,7 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     category: 'Business/Process',
     description: 'Business process flow'
   },
-  
+
   // Infrastructure
   'container': {
     icon: '📦',
@@ -327,7 +361,7 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     category: 'Infrastructure/Container',
     description: 'Container/Pod'
   },
-  
+
   'cloud-service': {
     icon: '☁️',
     color: '#0984E3',
@@ -335,7 +369,7 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     category: 'Infrastructure/Cloud Service',
     description: 'Cloud platform service'
   },
-  
+
   'cdn': {
     icon: '🌍',
     color: '#00CEC9',
@@ -343,7 +377,16 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     category: 'System/CDN',
     description: 'Content delivery network'
   },
-  
+
+  // Distinct object storage separate from database
+  'storage': {
+    icon: '🗂️',
+    color: '#0EA5E9',
+    label: 'Object Storage',
+    category: 'Infrastructure/Cloud Service',
+    description: 'File and object storage service'
+  },
+
   // Security
   'auth-service': {
     icon: '🔐',
@@ -352,7 +395,7 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     category: 'Security/Authentication',
     description: 'Authentication service'
   },
-  
+
   'authorization': {
     icon: '🛡️',
     color: '#00B894',
@@ -360,7 +403,7 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     category: 'Security/Authorization',
     description: 'Authorization service'
   },
-  
+
   // Monitoring
   'logger': {
     icon: '📝',
@@ -369,7 +412,7 @@ export const ArchitectureNodeTypes: Record<string, NodeTypeInfo> = {
     category: 'Monitoring/Logging',
     description: 'Logging service'
   },
-  
+
   'metrics': {
     icon: '📊',
     color: '#A29BFE',
@@ -403,7 +446,7 @@ export const ArchitectureNodeDefinitions: Record<string, NodeDefinition> = {
     icon: '⚙️',
     color: '#45B7D1'
   },
-  
+
   'rest-api': {
     inputs: [
       { id: 'request', type: 'input', dataType: 'object', label: 'Request', required: true }
@@ -424,7 +467,7 @@ export const ArchitectureNodeDefinitions: Record<string, NodeDefinition> = {
     icon: '🔄',
     color: '#00B894'
   },
-  
+
   'database': {
     inputs: [
       { id: 'query', type: 'input', dataType: 'string', label: 'Query', required: true }
@@ -443,7 +486,26 @@ export const ArchitectureNodeDefinitions: Record<string, NodeDefinition> = {
     icon: '🗄️',
     color: '#6C5CE7'
   },
-  
+
+  // Distinct queue (generic)
+  'queue': {
+    inputs: [
+      { id: 'enqueue', type: 'input', dataType: 'object', label: 'Enqueue', required: false }
+    ],
+    outputs: [
+      { id: 'dequeue', type: 'output', dataType: 'object', label: 'Dequeue' }
+    ],
+    defaultConfig: {
+      name: '',
+      retention: '7d',
+      visibilityTimeout: 30
+    },
+    category: 'System/Queue',
+    description: 'Generic queueing component',
+    icon: '📦',
+    color: '#F59E0B'
+  },
+
   'ext-service': {
     inputs: [
       { id: 'request', type: 'input', dataType: 'object', label: 'Request', required: true }
@@ -462,6 +524,26 @@ export const ArchitectureNodeDefinitions: Record<string, NodeDefinition> = {
     icon: '🌐',
     color: '#FF6B6B'
   }
+  ,
+  // Distinct object storage (separate from database)
+  'storage': {
+    inputs: [
+      { id: 'put', type: 'input', dataType: 'object', label: 'Put Object', required: false },
+      { id: 'get', type: 'input', dataType: 'object', label: 'Get Object', required: false }
+    ],
+    outputs: [
+      { id: 'result', type: 'output', dataType: 'object', label: 'Result' }
+    ],
+    defaultConfig: {
+      bucket: '',
+      region: '',
+      public: false
+    },
+    category: 'Infrastructure/Cloud Service',
+    description: 'File and object storage service',
+    icon: '🗂️',
+    color: '#0EA5E9'
+  }
 }
 
 // Layout presets
@@ -478,7 +560,7 @@ export const ArchitectureLayouts: Record<string, ArchitectureDiagramLayout> = {
       },
       {
         id: 'business',
-        name: 'Business Layer', 
+        name: 'Business Layer',
         y: 200,
         color: '#FFF2E8',
         nodeTypes: ['System/Internal Service', 'Business/Domain Service', 'Business/Use Case']
@@ -499,7 +581,7 @@ export const ArchitectureLayouts: Record<string, ArchitectureDiagramLayout> = {
       }
     ]
   },
-  
+
   'api-first': {
     type: 'cluster',
     clusters: [

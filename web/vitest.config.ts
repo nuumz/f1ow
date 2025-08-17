@@ -7,6 +7,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    // Avoid worker threads; use forks to bypass NODE_OPTIONS restrictions in Worker
+    pool: 'forks',
     setupFiles: ['./src/test-setup.ts'],
     include: ['**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     coverage: {

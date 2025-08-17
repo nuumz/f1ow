@@ -6,8 +6,8 @@
 import { useMemo } from 'react'
 import { 
   Server, Database, Globe, Shield, Monitor, Cloud, 
-  GitBranch, Package, Users, FileText, Box, Layers,
-  Cpu, HardDrive, Network, Lock, Smartphone, Tablet
+  GitBranch, Package, Users, FileText, Layers,
+  Cpu, HardDrive, Lock, Smartphone, Tablet, Network
 } from 'lucide-react'
 import BaseNodePalette, { type NodePaletteItem } from './BaseNodePalette'
 
@@ -21,19 +21,20 @@ const iconComponents = {
   // Infrastructure
   server: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Server size={size} {...props} />,
   database: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Database size={size} {...props} />,
-  loadbalancer: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Network size={size} {...props} />,
+  // canonical: 'load-balancer'
+  loadBalancer: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Network size={size} {...props} />, 
   cdn: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Globe size={size} {...props} />,
   cache: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <HardDrive size={size} {...props} />,
   
   // Services
-  microservice: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Box size={size} {...props} />,
+  microservice: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Package size={size} {...props} />,
   api: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Globe size={size} {...props} />,
   queue: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Package size={size} {...props} />,
   storage: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Database size={size} {...props} />,
   
   // Cloud Services
   cloudfunction: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Cloud size={size} {...props} />,
-  container: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Box size={size} {...props} />,
+  container: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Package size={size} {...props} />,
   kubernetes: ({ size = 16, ...props }: { size?: number | string; [key: string]: unknown }) => <Layers size={size} {...props} />,
   
   // Security
@@ -82,9 +83,9 @@ export default function ArchitectureNodePalette({
       color: '#f59e0b'
     },
     { 
-      type: 'loadbalancer', 
+      type: 'load-balancer', 
       label: 'Load Balancer', 
-      icon: iconComponents.loadbalancer, 
+      icon: iconComponents.loadBalancer, 
       category: 'Infrastructure',
       description: 'Traffic distribution and balancing',
       color: '#10b981'

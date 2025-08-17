@@ -18,7 +18,7 @@ export type NodeLayerProps = {
   onPlusButtonClick?: (nodeId: string, portId: string) => void;
   onPortDragStart: (nodeId: string, portId: string, type: "input" | "output") => void;
   onPortDrag: (x: number, y: number) => void;
-  onPortDragEnd: (targetNodeId?: string, targetPortId?: string) => void;
+  onPortDragEnd: (targetNodeId?: string, targetPortId?: string, canvasX?: number, canvasY?: number) => void;
   canDropOnNode?: (targetNodeId: string) => boolean;
   isContextDragging: () => boolean;
   getDraggedNodeId: () => string | null;
@@ -109,6 +109,12 @@ function nodeLayerPropsAreEqual(prev: NodeLayerProps, next: NodeLayerProps) {
   const prevConnIds = prev.connections.map((c) => c.id ?? `${c.sourceNodeId}->${c.targetNodeId}`).sort().join('|');
   const nextConnIds = next.connections.map((c) => c.id ?? `${c.sourceNodeId}->${c.targetNodeId}`).sort().join('|');
   if (prevConnIds !== nextConnIds) return false;
+
+  // Re-render when critical handler/selector functions change to avoid stale closures
+  if (prev.onNodeClick !== next.onNodeClick) return false;
+  if (prev.isNodeSelected !== next.isNodeSelected) return false;
+  if (prev.onNodeDoubleClick !== next.onNodeDoubleClick) return false;
+  if (prev.onNodeDrag !== next.onNodeDrag) return false;
 
   return true;
 }

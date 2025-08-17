@@ -8,8 +8,19 @@ import type { WorkflowNode, Connection } from '../types'
 // Normalized shape for checksum operations (no metadata)
 interface DraftWorkflowNormalized {
   name: string
-  nodes: Array<WorkflowNode & { x: number; y: number }>
-  connections: Connection[]
+  nodes: Array<{
+    id: string
+    type: string
+    x: number
+    y: number
+  }>
+  connections: Array<{
+    id: string
+    sourceNodeId: string
+    sourcePortId: string
+    targetNodeId: string
+    targetPortId: string
+  }>
   canvasTransform: { x: number; y: number; k: number }
 }
 
@@ -40,17 +51,17 @@ export interface DraftWorkflow {
 const STORAGE_CONFIG = {
   DRAFT_PREFIX: 'workflow-draft-',
   CURRENT_VERSION: '1.0',
-  
+
   // Auto-save timing
   AUTO_SAVE_MIN_DELAY: 100,    // Minimum delay (0.1s)
   AUTO_SAVE_MAX_DELAY: 5000,   // Maximum delay (5s)
   AUTO_SAVE_INCREMENT: 300,    // Increment per rapid change
-  
+
   // Performance thresholds
   COMPRESSION_THRESHOLD: 8192, // 8KB - compress larger data
   LARGE_WORKFLOW_NODES: 50,    // Consider large if >50 nodes
   MAX_SAVE_TIME: 100,          // Max time allowed for save (ms)
-  
+
   // Change detection
   POSITION_GRID_SIZE: 1,       // Grid size for position bucketing (1px for precise detection)
   DEBOUNCE_RAPID_THRESHOLD: 5, // Rapid change threshold
@@ -63,6 +74,60 @@ let isAutoSaving = false
 let autoSaveCallback: ((status: 'started' | 'completed' | 'failed', error?: string) => void) | null = null
 let lastSavedData: string | null = null
 let changeHistory: number[] = []
+/**
+ * Safe JSON stringify that:
+ * - Skips circular references
+ * - Skips DOM nodes, Window, and D3 selections (objects with _groups)
+ * - Skips functions and symbols
+ */
+function safeStringify(value: unknown): string {
+  const seen = new WeakSet<object>()
+
+  const isObject = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object'
+  const isDomNode = (v: unknown): boolean => {
+    // Cross-realm heuristic only (avoid instanceof across iframes)
+    return isObject(v) && ('nodeType' in v || 'ownerDocument' in v || 'tagName' in v)
+  }
+  const isWindowLike = (v: unknown): boolean => {
+    return isObject(v) && ('window' in v || 'self' in v) && ('document' in v)
+  }
+  const isD3SelectionLike = (v: unknown): boolean => isObject(v) && (('_groups' in v) || ('_parents' in v))
+
+  const replacer = (_key: string, val: unknown) => {
+    // Primitives
+    if (val === null) return null
+    const t = typeof val
+    if (t === 'string' || t === 'number' || t === 'boolean') return val
+    if (t === 'bigint') return (val as bigint).toString()
+    if (t === 'symbol' || t === 'function' || t === 'undefined') return undefined
+
+    // Skip DOM nodes / Window-like
+    if (isDomNode(val) || isWindowLike(val)) {
+      return undefined
+    }
+    // Skip D3 selections (heuristic)
+    if (isD3SelectionLike(val)) {
+      return undefined
+    }
+
+    if (isObject(val)) {
+      if (seen.has(val)) return undefined // drop circular
+      seen.add(val)
+    }
+    return val
+  }
+  try {
+    return JSON.stringify(value, replacer)
+  } catch {
+    // Fallback best-effort
+    try {
+      return JSON.stringify(JSON.parse(JSON.stringify(value)))
+    } catch {
+      return '{}'
+    }
+  }
+}
+
 
 /**
  * Performance utilities
@@ -84,10 +149,30 @@ function decompressData(data: string): string {
   return data
 }
 
+// Dispatch browser event for UI listeners (optional enhancement)
+function dispatchAutoSaveEvent(status: 'started' | 'completed' | 'failed', error?: string) {
+  // In tests or non-browser env, window may not exist
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const win: any = typeof window !== 'undefined' ? window : undefined
+  if (!win || typeof win.CustomEvent === 'undefined') return
+  try {
+    const evt = new win.CustomEvent('workflow:autosave', {
+      detail: {
+        status,
+        error,
+        timestamp: Date.now()
+      }
+    })
+    win.dispatchEvent(evt)
+  } catch {
+    // ignore if CustomEvent not available
+  }
+}
+
 // Generate checksum for change detection
 function generateChecksum(data: Omit<DraftWorkflow, 'metadata'>): string {
   const normalized = normalizeDataForChecksum(data)
-  const str = JSON.stringify(normalized)
+  const str = safeStringify(normalized)
   let hash = 0
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i)
@@ -101,12 +186,22 @@ function generateChecksum(data: Omit<DraftWorkflow, 'metadata'>): string {
 function normalizeDataForChecksum(data: Omit<DraftWorkflow, 'metadata'>): DraftWorkflowNormalized {
   return {
     name: data.name,
+    // Only include stable, essential fields to avoid non-serializable content
     nodes: data.nodes.map(node => ({
-      ...node,
+      id: node.id,
+      type: node.type,
       x: Math.round(node.x),
       y: Math.round(node.y)
     })),
-    connections: [...data.connections].sort((a, b) => a.id.localeCompare(b.id)),
+    connections: [...data.connections]
+      .map(c => ({
+        id: c.id,
+        sourceNodeId: c.sourceNodeId,
+        sourcePortId: c.sourcePortId,
+        targetNodeId: c.targetNodeId,
+        targetPortId: c.targetPortId
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
     canvasTransform: {
       x: Math.round(data.canvasTransform.x),
       y: Math.round(data.canvasTransform.y),
@@ -118,13 +213,13 @@ function normalizeDataForChecksum(data: Omit<DraftWorkflow, 'metadata'>): DraftW
 // Calculate smart debounce delay based on change frequency
 function calculateSmartDelay(): number {
   const now = Date.now()
-  
+
   // Clean old change history
   changeHistory = changeHistory.filter(time => now - time < STORAGE_CONFIG.RAPID_CHANGE_WINDOW)
-  
+
   // Add current change
   changeHistory.push(now)
-  
+
   // Calculate delay based on change frequency
   const recentChanges = changeHistory.length
   if (recentChanges >= STORAGE_CONFIG.DEBOUNCE_RAPID_THRESHOLD) {
@@ -135,19 +230,19 @@ function calculateSmartDelay(): number {
       STORAGE_CONFIG.AUTO_SAVE_MAX_DELAY
     )
   }
-  
+
   return STORAGE_CONFIG.AUTO_SAVE_MIN_DELAY
 }
 
 // Check if data has actually changed
 function hasDataChanged(newData: Omit<DraftWorkflow, 'metadata'>): boolean {
   if (!lastSavedData) return true
-  
+
   try {
     const newChecksum = generateChecksum(newData)
     const lastSavedDraft = JSON.parse(lastSavedData) as DraftWorkflow
     const lastChecksum = lastSavedDraft.metadata.checksum
-    
+
     return newChecksum !== lastChecksum
   } catch {
     return true // If we can't compare, assume changed
@@ -168,7 +263,7 @@ interface SaveOptions { bumpVersion?: boolean }
 
 export function saveDraftWorkflow(draft: Omit<DraftWorkflow, 'metadata'>, options: SaveOptions = {}): boolean {
   const startTime = performance.now()
-  
+
   try {
     // Generate checksum for change detection
     const checksum = generateChecksum(draft)
@@ -212,32 +307,32 @@ export function saveDraftWorkflow(draft: Omit<DraftWorkflow, 'metadata'>, option
         compressed: false
       }
     }
-    
-    let dataToStore = JSON.stringify(fullDraft)
-    
+
+    let dataToStore = safeStringify(fullDraft)
+
     // Apply compression for large workflows
     if (dataToStore.length > STORAGE_CONFIG.COMPRESSION_THRESHOLD) {
       const compressed = compressData(dataToStore)
       if (compressed.length < dataToStore.length * 0.9) { // Only use if >10% savings
         dataToStore = compressed
         fullDraft.metadata.compressed = true
-        console.log('📦 Applied compression:', `${dataToStore.length}/${JSON.stringify(fullDraft).length} bytes`)
+        console.log('📦 Applied compression:', `${dataToStore.length}/${safeStringify(fullDraft).length} bytes`)
       }
     }
-    
+
     localStorage.setItem(key, dataToStore)
-    
+
     // Cache the saved data for change detection
-    lastSavedData = JSON.stringify(fullDraft)
-    
-  const saveTime = performance.now() - startTime
-  console.log(`✅ Draft saved: ${draft.name} (${saveTime.toFixed(1)}ms, ${dataToStore.length} bytes)${options.bumpVersion === false ? ' (no version bump)' : ''}`)
-    
+    lastSavedData = safeStringify(fullDraft)
+
+    const saveTime = performance.now() - startTime
+    console.log(`✅ Draft saved: ${draft.name} (${saveTime.toFixed(1)}ms, ${dataToStore.length} bytes)${options.bumpVersion === false ? ' (no version bump)' : ''}`)
+
     // Warn if save took too long
     if (saveTime > STORAGE_CONFIG.MAX_SAVE_TIME) {
       console.warn(`⚠️ Slow save detected: ${saveTime.toFixed(1)}ms`)
     }
-    
+
     return true
   } catch (error) {
     console.error('❌ Failed to save draft:', error)
@@ -250,35 +345,35 @@ export function saveDraftWorkflow(draft: Omit<DraftWorkflow, 'metadata'>, option
  */
 export function loadDraftWorkflow(draftId: string): DraftWorkflow | null {
   const startTime = performance.now()
-  
+
   try {
     const key = `${STORAGE_CONFIG.DRAFT_PREFIX}${draftId}`
     const saved = localStorage.getItem(key)
-    
+
     if (!saved) return null
-    
+
     // Handle compressed data
     let dataToProcess = saved
     if (saved.startsWith('{') && saved.includes('"compressed":true')) {
       // This is compressed data, decompress it
-      dataToProcess = decompressData(saved)  
+      dataToProcess = decompressData(saved)
     }
-    
+
     const draft = JSON.parse(dataToProcess)
-    
+
     // Backward compatibility: Add missing mode fields for old drafts
     const loadedDraft: DraftWorkflow = {
       ...draft,
       designerMode: draft.designerMode || 'workflow',
       architectureMode: draft.architectureMode || 'context'
     }
-    
+
     // Cache loaded data for change detection
-    lastSavedData = JSON.stringify(loadedDraft)
-    
+    lastSavedData = safeStringify(loadedDraft)
+
     const loadTime = performance.now() - startTime
     console.log(`✅ Draft loaded: ${loadedDraft.name} (${loadTime.toFixed(1)}ms) - Mode: ${loadedDraft.designerMode}`)
-    
+
     return loadedDraft
   } catch (error) {
     console.error('❌ Failed to load draft:', error)
@@ -294,21 +389,21 @@ export function autoSaveDraftWorkflow(draft: Omit<DraftWorkflow, 'metadata'>): v
   if (isAutoSaving) {
     return
   }
-  
+
   // Check if data has actually changed
   if (!hasDataChanged(draft)) {
     return
   }
-  
+
   // Clear existing timer
   if (autoSaveTimer) {
     clearTimeout(autoSaveTimer)
   }
-  
+
   // Calculate smart delay based on change frequency
   const delay = calculateSmartDelay()
-  
-  
+
+
   // Set new timer with smart delay
   autoSaveTimer = setTimeout(() => {
     performAutoSave(draft)
@@ -320,30 +415,35 @@ export function autoSaveDraftWorkflow(draft: Omit<DraftWorkflow, 'metadata'>): v
  */
 function performAutoSave(draft: Omit<DraftWorkflow, 'metadata'>): void {
   if (isAutoSaving) return
-  
+
   isAutoSaving = true
   autoSaveCallback?.('started')
-  
+  dispatchAutoSaveEvent('started')
+
   try {
     // Performance warning for large workflows
     if (draft.nodes.length > STORAGE_CONFIG.LARGE_WORKFLOW_NODES) {
       console.log(`⚠️ Large workflow detected: ${draft.nodes.length} nodes`)
     }
-    
-  const success = saveDraftWorkflow(draft, { bumpVersion: false })
-    
+
+    const success = saveDraftWorkflow(draft, { bumpVersion: false })
+
     if (success) {
       autoSaveCallback?.('completed')
-      
+      dispatchAutoSaveEvent('completed')
+
       // Reset change history after successful save
       changeHistory = []
     } else {
       console.error('❌ Auto-save failed')
       autoSaveCallback?.('failed', 'Save operation failed')
+      dispatchAutoSaveEvent('failed', 'Save operation failed')
     }
   } catch (error) {
     console.error('❌ Auto-save error:', error)
-    autoSaveCallback?.('failed', error instanceof Error ? error.message : 'Unknown error')
+    const msg = error instanceof Error ? error.message : 'Unknown error'
+    autoSaveCallback?.('failed', msg)
+    dispatchAutoSaveEvent('failed', msg)
   } finally {
     isAutoSaving = false
   }
@@ -354,7 +454,7 @@ function performAutoSave(draft: Omit<DraftWorkflow, 'metadata'>): void {
  */
 export function listDraftWorkflows(): Array<Pick<DraftWorkflow, 'id' | 'name' | 'metadata'>> {
   const drafts: Array<Pick<DraftWorkflow, 'id' | 'name' | 'metadata'>> = []
-  
+
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
@@ -373,7 +473,7 @@ export function listDraftWorkflows(): Array<Pick<DraftWorkflow, 'id' | 'name' | 
   } catch (error) {
     console.error('❌ Failed to list drafts:', error)
   }
-  
+
   return drafts.sort((a, b) => b.metadata.updatedAt - a.metadata.updatedAt)
 }
 
@@ -400,7 +500,7 @@ export function getWorkflowStorageStats() {
   let draftCount = 0
   let compressedCount = 0
   let largestDraft = 0
-  
+
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
@@ -409,12 +509,12 @@ export function getWorkflowStorageStats() {
         if (value) {
           totalSize += value.length
           draftCount++
-          
+
           // Track largest draft
           if (value.length > largestDraft) {
             largestDraft = value.length
           }
-          
+
           // Check if compressed
           if (value.includes('"compressed":true')) {
             compressedCount++
@@ -425,7 +525,7 @@ export function getWorkflowStorageStats() {
   } catch (error) {
     console.error('❌ Failed to get storage stats:', error)
   }
-  
+
   return {
     draftCount,
     totalSize,
@@ -463,11 +563,11 @@ export function getAutoSaveMetrics() {
     isAutoSaving,
     pendingChanges: changeHistory.length,
     rapidChangeThreshold: STORAGE_CONFIG.DEBOUNCE_RAPID_THRESHOLD,
-    currentDelay: changeHistory.length >= STORAGE_CONFIG.DEBOUNCE_RAPID_THRESHOLD 
+    currentDelay: changeHistory.length >= STORAGE_CONFIG.DEBOUNCE_RAPID_THRESHOLD
       ? Math.min(
-          STORAGE_CONFIG.AUTO_SAVE_MIN_DELAY * Math.min(changeHistory.length / STORAGE_CONFIG.DEBOUNCE_RAPID_THRESHOLD, 4),
-          STORAGE_CONFIG.AUTO_SAVE_MAX_DELAY
-        )
+        STORAGE_CONFIG.AUTO_SAVE_MIN_DELAY * Math.min(changeHistory.length / STORAGE_CONFIG.DEBOUNCE_RAPID_THRESHOLD, 4),
+        STORAGE_CONFIG.AUTO_SAVE_MAX_DELAY
+      )
       : STORAGE_CONFIG.AUTO_SAVE_MIN_DELAY,
     hasLastSavedData: !!lastSavedData
   }
@@ -481,7 +581,7 @@ export function forceAutoSave(draft: Omit<DraftWorkflow, 'metadata'>): void {
     clearTimeout(autoSaveTimer)
     autoSaveTimer = null
   }
-  
+
   console.log('🚀 Force auto-save triggered')
   performAutoSave(draft)
 }

@@ -41,18 +41,53 @@ export function useCanvasD3Setup(params: Params) {
             root = svg.append('g').attr('class', 'canvas-root')
         }
 
-        // Ensure child layers exist
+        // Ensure child layers exist (order matters for pointer interactions)
+        // Desired stacking: grid (back) -> connections -> nodes -> previews (top)
         let grid = root.select<SVGGElement>('g.grid-layer')
         if (grid.empty()) {
             grid = root.append('g').attr('class', 'grid-layer').style('pointer-events', 'none')
         }
+
+        // Create/ensure connection layer BEFORE node layer so nodes sit on top
+        let connections = root.select<SVGGElement>('g.connection-layer')
+        if (connections.empty()) {
+            // If node-layer exists, insert before it; otherwise append now
+            const nodeLayerExisting = root.select<SVGGElement>('g.node-layer')
+            if (!nodeLayerExisting.empty()) {
+                connections = root.insert('g', 'g.node-layer').attr('class', 'connection-layer')
+            } else {
+                connections = root.append('g').attr('class', 'connection-layer')
+            }
+        }
+
+        // Now ensure node layer exists (will be above connections)
         let nodes = root.select<SVGGElement>('g.node-layer')
         if (nodes.empty()) {
             nodes = root.append('g').attr('class', 'node-layer')
         }
-        let connections = root.select<SVGGElement>('g.connection-layer')
-        if (connections.empty()) {
-            connections = root.append('g').attr('class', 'connection-layer')
+
+        // Ensure a dedicated preview layer exists and sits on top of everything
+        let previews = root.select<SVGGElement>('g.preview-layer')
+        if (previews.empty()) {
+            // Append after connection layer to keep previews above everything else on the canvas
+            previews = root.append('g').attr('class', 'preview-layer').style('pointer-events', 'none')
+        }
+
+        // Final enforcement of stacking order in case of prior DOM structure
+        try {
+            // Move grid to back, previews to front; keep connections below nodes
+            grid.lower()
+            previews.raise()
+            // If connections accidentally above nodes, move nodes to front then lower previews back up
+            const nodeEl = nodes.node()
+            const connEl = connections.node()
+            if (nodeEl && connEl && nodeEl.compareDocumentPosition(connEl) & Node.DOCUMENT_POSITION_FOLLOWING) {
+                // conn comes after node (on top) -> move node to front
+                nodes.raise()
+                previews.raise()
+            }
+        } catch {
+            // non-fatal ordering best-effort
         }
 
         layersRef.current = {

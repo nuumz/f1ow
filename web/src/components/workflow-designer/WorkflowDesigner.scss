@@ -665,6 +665,20 @@ $button-variants: (
       pointer-events: none;
     }
   }
+
+  // Preview layer styles (live connection preview rendered above everything)
+  .preview-layer {
+    pointer-events: none;
+
+    .connection-preview {
+      fill: none;
+      // Keep color/marker from JS; only control visibility pattern here
+      stroke-dasharray: 6, 4;
+      opacity: 0.9;
+      shape-rendering: geometricPrecision;
+      marker-end: inherit; // allow inline attr/style to take precedence
+    }
+  }
 }
 
 // ===== MODE-SPECIFIC STYLES =====

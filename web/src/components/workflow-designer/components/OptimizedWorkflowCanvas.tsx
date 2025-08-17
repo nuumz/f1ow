@@ -71,7 +71,7 @@ interface OptimizedWorkflowCanvasProps {
   onPlusButtonClick?: (nodeId: string, portId: string) => void
   onPortDragStart: (nodeId: string, portId: string, type: 'input' | 'output') => void
   onPortDrag: (x: number, y: number) => void
-  onPortDragEnd: (targetNodeId?: string, targetPortId?: string) => void
+  onPortDragEnd: (targetNodeId?: string, targetPortId?: string, canvasX?: number, canvasY?: number) => void
   canDropOnPort?: (targetNodeId: string, targetPortId: string, portType?: 'input' | 'output') => boolean
   canDropOnNode?: (targetNodeId: string) => boolean
   onTransformChange?: (transform: d3.ZoomTransform) => void

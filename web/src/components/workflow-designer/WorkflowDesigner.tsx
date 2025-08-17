@@ -550,12 +550,14 @@ function WorkflowDesignerContent({
                   
                   // Check if this is a valid connection direction (output -> input)
                   if (connectionStart.type === 'output' && portType === 'input') {
-                    console.log('✅ Architecture mode: Allowing output -> input connection', {
-                      sourceNodeId: connectionStart.nodeId,
-                      sourcePortId: connectionStart.portId,
-                      targetNodeId,
-                      targetPortId
-                    })
+                    if (process.env.NODE_ENV === 'development') {
+                      console.log('✅ Architecture mode: Allowing output -> input connection', {
+                        sourceNodeId: connectionStart.nodeId,
+                        sourcePortId: connectionStart.portId,
+                        targetNodeId,
+                        targetPortId
+                      })
+                    }
                     return true
                   }
                   
@@ -676,13 +678,16 @@ function WorkflowDesignerContent({
                 // Simple and reliable check: allow if we have connectionStart and it's not the same node
                 const canDrop = !!(connectionStart && connectionStart.nodeId !== targetNodeId && connectionStart.type === 'output')
                 
-                console.log('🔍 canDropOnNode called:', {
-                  targetNodeId,
-                  sourceNodeId: connectionStart?.nodeId,
-                  sourceType: connectionStart?.type,
-                  isConnecting,
-                  canDrop
-                })
+                // Only log if we actually have a connection state to avoid spam
+                if (connectionStart) {
+                  console.log('🔍 canDropOnNode called:', {
+                    targetNodeId,
+                    sourceNodeId: connectionStart.nodeId,
+                    sourceType: connectionStart.type,
+                    isConnecting,
+                    canDrop
+                  })
+                }
                 
                 return canDrop
               }}

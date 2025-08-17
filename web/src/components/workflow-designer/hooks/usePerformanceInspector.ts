@@ -52,7 +52,7 @@ export function usePerformanceLogging(intervalMs = 5000) {
       const v = (window as any).__wfAdaptive
       const c = (window as any).__wfConnAdaptive
       if (v || c) {
-        // eslint-disable-next-line no-console
+         
         console.log('[CanvasPerf]', {
           visualBudget: v?.vBudget, visualLast: v?.lastDuration,
           connectionBudget: c?.cBudget, connectionLast: c?.lastDuration

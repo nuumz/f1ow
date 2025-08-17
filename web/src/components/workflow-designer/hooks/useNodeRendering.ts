@@ -33,7 +33,7 @@ export interface NodeRenderingParams {
     onPlusButtonClick?: (nodeId: string, portId: string) => void
     onPortDragStart: (nodeId: string, portId: string, type: 'input' | 'output') => void
     onPortDrag: (x: number, y: number) => void
-    onPortDragEnd: (targetNodeId?: string, targetPortId?: string) => void
+    onPortDragEnd: (targetNodeId?: string, targetPortId?: string, canvasX?: number, canvasY?: number) => void
     canDropOnNode?: (targetNodeId: string) => boolean
 
     // Context-based dragging helpers
@@ -125,6 +125,11 @@ export function useNodeRendering(params: NodeRenderingParams) {
         const g = svg.select<SVGGElement>('g.canvas-root')
         if (nodeLayer.empty() || g.empty()) return
 
+        // Clean up any orphaned dragging classes if not actually dragging
+        if (!isContextDragging()) {
+            nodeLayer.selectAll('.node.dragging').classed('dragging', false)
+        }
+
         // Heuristic: if a significant portion of nodes changed (new/removed) or moved, and not dragging,
         // clear existing node groups first to avoid heavy merge/update churn that can stutter.
         if (!isDragging) {
@@ -150,10 +155,19 @@ export function useNodeRendering(params: NodeRenderingParams) {
                 const movedRatio = nodes.length > 0 ? moved / nodes.length : 0
 
                 const MANY_NODES = nodes.length >= 150
-                const shouldRebuild = changeRatio >= 0.3 || movedRatio >= 0.5 || (MANY_NODES && (changed > 0 || moved > 0))
+                // Lower threshold to trigger rebuild more often
+                const shouldRebuild = changeRatio >= 0.1 || movedRatio >= 0.2 || (MANY_NODES && (changed > 0 || moved > 0))
 
                 if (shouldRebuild) {
+                    nodeLayer.selectAll<SVGGElement, any>('.node').each(function (this: any, d: any) {
+                        allNodeElementsRef.current.delete(d.id)
+                    })
                     nodeLayer.selectAll<SVGGElement, any>('.node').remove()
+
+                    // Clear dragged element ref if we're rebuilding
+                    if (draggedElementRef.current) {
+                        draggedElementRef.current = null
+                    }
                 }
             } catch {
                 // fallback: ignore heuristic errors
@@ -232,9 +246,169 @@ export function useNodeRendering(params: NodeRenderingParams) {
             createArrowMarker('arrowhead-architecture-hover', '#6d28d9', 12)
         }
 
+        // Helper utilities to reduce nesting in drag-end handlers
+        function getCanvasCoordsFromEvent(sourceEvent: any): [number, number] {
+            const svgElement = svgRef.current!
+            const [sx, sy] = d3.pointer(sourceEvent, svgElement)
+            const transform = d3.zoomTransform(svgElement)
+            return transform.invert([sx, sy]) as [number, number]
+        }
+
+        function findNearestPortTarget(canvasX: number, canvasY: number): { targetNodeId?: string; targetPortId?: string } {
+            const svgElement = svgRef.current!
+            const svgSel = d3.select(svgElement)
+
+            let targetNodeId: string | undefined
+            let targetPortId: string | undefined
+            let minDistance = Infinity
+
+            console.log('🔍 findNearestPortTarget called with canvas coords:', { canvasX, canvasY })
+            console.log('🔍 SVG element exists:', !!svgElement)
+
+            // Count available ports for debugging
+            const inputPortCount = svgSel.selectAll('.input-port-circle').size()
+            const sidePortCount = svgSel.selectAll('.side-port-rect').size()
+            console.log('🔍 Available ports:', { inputPortCount, sidePortCount })
+
+            // Scan input port circles
+            svgSel.selectAll<SVGCircleElement, any>('.input-port-circle').each(function (portData: any) {
+                const circle = d3.select(this)
+                const portGroup = d3.select(this.parentNode as SVGGElement)
+                const nodeGroup = d3.select(portGroup.node()?.closest('g[data-node-id]') as SVGGElement)
+                if (nodeGroup.empty()) {
+                    console.log('⚠️ Empty nodeGroup for input port')
+                    return
+                }
+                const nodeId = nodeGroup.attr('data-node-id')
+                const m = /translate\(([^,]+),([^)]+)\)/.exec(nodeGroup.attr('transform') || '')
+                const nodeSvgX = m ? parseFloat(m[1]) : 0
+                const nodeSvgY = m ? parseFloat(m[2]) : 0
+                const cx = parseFloat(circle.attr('cx') || '0')
+                const cy = parseFloat(circle.attr('cy') || '0')
+                const r = parseFloat(circle.attr('r') || '8')
+                const px = nodeSvgX + cx
+                const py = nodeSvgY + cy
+                const dist = Math.hypot(canvasX - px, canvasY - py)
+                const tol = r + 50  // Significantly increase tolerance for easier targeting
+
+                console.log('🔍 Input port check:', {
+                    nodeId,
+                    portId: portData.id,
+                    nodeSvgPos: { x: nodeSvgX, y: nodeSvgY },
+                    circlePos: { cx, cy },
+                    absolutePos: { px, py },
+                    distance: dist,
+                    tolerance: tol,
+                    withinTolerance: dist <= tol,
+                    currentMinDistance: minDistance
+                })
+
+                if (dist <= tol && dist < minDistance) {
+                    minDistance = dist
+                    targetNodeId = nodeId
+                    targetPortId = portData.id
+                    console.log('✅ New best target (input):', { targetNodeId, targetPortId, distance: dist })
+                }
+            })
+
+            // Scan side rectangles (architecture omni-ports)
+            svgSel.selectAll<SVGRectElement, any>('.side-port-rect').each(function (portData: any) {
+                const rect = d3.select(this)
+                const portGroup = d3.select(this.parentNode as SVGGElement)
+                const nodeGroup = d3.select(portGroup.node()?.closest('g[data-node-id]') as SVGGElement)
+                if (nodeGroup.empty()) {
+                    console.log('⚠️ Empty nodeGroup for side port')
+                    return
+                }
+                const nodeId = nodeGroup.attr('data-node-id')
+                const m = /translate\(([^,]+),([^)]+)\)/.exec(nodeGroup.attr('transform') || '')
+                const nodeSvgX = m ? parseFloat(m[1]) : 0
+                const nodeSvgY = m ? parseFloat(m[2]) : 0
+                const x = parseFloat(rect.attr('x') || '0')
+                const y = parseFloat(rect.attr('y') || '0')
+                const w = parseFloat(rect.attr('width') || '10')
+                const h = parseFloat(rect.attr('height') || '10')
+                const px = nodeSvgX + x + w / 2
+                const py = nodeSvgY + y + h / 2
+                const size = Math.max(w, h)
+                const dist = Math.hypot(canvasX - px, canvasY - py)
+                const tol = size / 2 + 50  // Significantly increase tolerance for easier targeting
+
+                console.log('🔍 Side port check:', {
+                    nodeId,
+                    portId: portData.id,
+                    nodeSvgPos: { x: nodeSvgX, y: nodeSvgY },
+                    rectPos: { x, y, w, h },
+                    absolutePos: { px, py },
+                    distance: dist,
+                    tolerance: tol,
+                    withinTolerance: dist <= tol,
+                    currentMinDistance: minDistance
+                })
+
+                if (dist <= tol && dist < minDistance) {
+                    minDistance = dist
+                    targetNodeId = nodeId
+                    targetPortId = portData.id
+                    console.log('✅ New best target (side):', { targetNodeId, targetPortId, distance: dist })
+                }
+            })
+
+            console.log('🔍 findNearestPortTarget result:', { targetNodeId, targetPortId, finalMinDistance: minDistance })
+            return { targetNodeId, targetPortId }
+        }
+
+        function findHoveredNodeFallback(canvasX: number, canvasY: number): { targetNodeId?: string; targetPortId?: string } {
+            console.log('🔍 findHoveredNodeFallback called with canvas coords:', { canvasX, canvasY })
+            console.log('🔍 Total nodes to check:', nodes.length)
+
+            const hovered = (nodes as any[]).find((n: any) => {
+                const dims = getConfigurableDimensions(n)
+                const w = dims.width
+                const h = dims.height
+                const inBounds = canvasX >= n.x - w / 2 && canvasX <= n.x + w / 2 && canvasY >= n.y - h / 2 && canvasY <= n.y + h / 2
+
+                console.log('🔍 Node bounds check:', {
+                    nodeId: n.id,
+                    nodePos: { x: n.x, y: n.y },
+                    dimensions: { w, h },
+                    bounds: {
+                        left: n.x - w / 2,
+                        right: n.x + w / 2,
+                        top: n.y - h / 2,
+                        bottom: n.y + h / 2
+                    },
+                    canvasPos: { x: canvasX, y: canvasY },
+                    inBounds
+                })
+
+                return inBounds
+            }) as any
+
+            if (hovered) {
+                console.log('🔍 Found hovered node:', hovered.id)
+                const canDrop = !canDropOnNode || canDropOnNode(hovered.id)
+                console.log('🔍 Can drop on hovered node:', canDrop)
+
+                if (canDrop) {
+                    const inputs = (hovered.inputs || []) as any[]
+                    const portId = inputs.length > 0 ? inputs[0].id : '__side-top'
+                    console.log('✅ Fallback target found:', { targetNodeId: hovered.id, targetPortId: portId, inputsCount: inputs.length })
+                    return { targetNodeId: hovered.id, targetPortId: portId }
+                } else {
+                    console.log('❌ Cannot drop on hovered node')
+                }
+            } else {
+                console.log('❌ No hovered node found')
+            }
+
+            console.log('🔍 findHoveredNodeFallback result: no target')
+            return {}
+        }
+
         // Drag handlers
         function dragStarted(this: any, event: any, d: WorkflowNode) {
-            const nodeElement = d3.select(this)
+            // Prepare drag state; don't attach D3 selection to data to keep state serializable
 
             if (dragStateCleanupRef.current) {
                 clearTimeout(dragStateCleanupRef.current)
@@ -246,27 +420,17 @@ export function useNodeRendering(params: NodeRenderingParams) {
             const transform = d3.zoomTransform(svgElement)
             const [canvasX, canvasY] = transform.invert([mouseX, mouseY])
 
-            startDragging(d.id, { x: canvasX, y: canvasY })
-
-            nodeElement.classed('dragging', true)
-            draggedElementRef.current = nodeElement
-            draggedNodeElementRef.current = this as SVGGElement
-
-            applyDragVisualStyle(nodeElement, d.id)
-            setNodeAsDragging(d.id)
-
-            setTimeout(() => {
-                if (draggedElementRef.current && getDraggedNodeId() === d.id) {
-                    draggedElementRef.current.classed('dragging', true)
-                }
-            }, 0)
+                // Do NOT mark context as dragging yet; wait for threshold in dragged()
+                // Keep element refs unset until real drag begins
 
                 ; (d as any).dragStartX = canvasX
                 ; (d as any).dragStartY = canvasY
-                ; (d as any).initialX = d.x
-                ; (d as any).initialY = d.y
+                ; (d as any).initialX = d.x || 0
+                ; (d as any).initialY = d.y || 0
                 ; (d as any).hasDragged = false
                 ; (d as any).dragStartTime = Date.now()
+                ; (d as any).dragArmed = true
+                ; (d as any).dragThreshold = 5
         }
 
         function dragged(this: any, event: any, d: WorkflowNode) {
@@ -284,12 +448,23 @@ export function useNodeRendering(params: NodeRenderingParams) {
 
             updateDragPosition(currentCanvasX, currentCanvasY)
 
-            if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
+            const movedEnough = Math.abs(deltaX) > (dragData.dragThreshold || 5) || Math.abs(deltaY) > (dragData.dragThreshold || 5)
+
+            // Arm real dragging only after threshold is exceeded (prevents click being blocked)
+            if (!dragData.hasDragged && movedEnough) {
                 dragData.hasDragged = true
+                // Now mark context as dragging and apply visuals
+                startDragging(d.id, { x: dragData.dragStartX, y: dragData.dragStartY })
+                const nodeElement = d3.select(this)
+                nodeElement.classed('dragging', true)
+                draggedElementRef.current = nodeElement
+                draggedNodeElementRef.current = this as SVGGElement
+                applyDragVisualStyle(nodeElement, d.id)
+                setNodeAsDragging(d.id)
             }
 
-            const nodeElement = d3.select(this)
-            if (!nodeElement.classed('dragging')) nodeElement.classed('dragging', true)
+            // If not actually dragging yet, do nothing further (let click happen)
+            if (!dragData.hasDragged) return
 
             const newX = dragData.initialX + deltaX
             const newY = dragData.initialY + deltaY
@@ -310,6 +485,8 @@ export function useNodeRendering(params: NodeRenderingParams) {
             delete dragData.initialY
             delete dragData.hasDragged
             delete dragData.dragStartTime
+            // Ensure no non-serializable references remain on the bound data
+            try { delete (dragData as any).nodeElement } catch { }
 
             const currentDraggedNodeId = getDraggedNodeId()
             const currentlyDragging = isContextDragging()
@@ -317,7 +494,13 @@ export function useNodeRendering(params: NodeRenderingParams) {
                 endDragging()
             }
 
+            // Force remove dragging class from this node
             nodeElement.classed('dragging', false)
+
+            // Also ensure no other nodes have the dragging class if we're not dragging
+            if (!isContextDragging()) {
+                nodeLayer.selectAll('.node').classed('dragging', false)
+            }
 
             if (draggedElementRef.current && draggedElementRef.current.node() === this) {
                 draggedElementRef.current = null
@@ -336,11 +519,13 @@ export function useNodeRendering(params: NodeRenderingParams) {
             }
         }
 
-        // Data join
-        const nodeSelection = nodeLayer.selectAll<SVGGElement, any>('.node').data(nodes as any, (d: any) => d.id)
+        // Data join - force update existing nodes
+        const existingNodes = nodeLayer.selectAll<SVGGElement, any>('.node')
+        const nodeSelection = existingNodes.data(nodes as any, (d: any) => d.id)
 
-        nodeSelection
-            .exit()
+        // Handle exit selection (removed nodes)
+        const exitNodes = nodeSelection.exit()
+        exitNodes
             .each(function (this: any, d: any) {
                 allNodeElementsRef.current.delete(d.id)
             })
@@ -355,10 +540,15 @@ export function useNodeRendering(params: NodeRenderingParams) {
             .style('cursor', 'move')
             .each(function (this: any, d: any) {
                 allNodeElementsRef.current.set(d.id, this)
-                if (isDragging && getDraggedNodeId() === d.id) {
+                // Check both isDragging prop and actual dragging state
+                const currentDraggedNodeId = getDraggedNodeId()
+                const currentlyDragging = isContextDragging()
+
+                if (currentlyDragging && currentDraggedNodeId === d.id) {
                     const nodeElement = d3.select(this)
                     nodeElement.classed('dragging', true)
                     draggedElementRef.current = nodeElement
+                    draggedNodeElementRef.current = this as SVGGElement
                 }
             })
             .call(
@@ -371,33 +561,48 @@ export function useNodeRendering(params: NodeRenderingParams) {
                     .on('end', dragEnded) as any
             )
 
+        // Merge enter and update selections - this includes both new and existing nodes
         const nodeGroups = nodeEnter.merge(nodeSelection as any)
 
-        // Preserve dragging class right after merge
+        // Synchronize dragging class with actual drag state
         nodeGroups.each(function (this: any, d: any) {
             const nodeElement = d3.select(this)
             const currentDraggedNodeId = getDraggedNodeId()
             const currentlyDragging = isContextDragging()
 
-            const hasDragging = nodeElement.classed('dragging')
-            if (currentlyDragging && currentDraggedNodeId === d.id) {
-                if (!hasDragging) nodeElement.classed('dragging', true)
+            const shouldHaveDraggingClass = currentlyDragging && currentDraggedNodeId === d.id
+            const hasDraggingClass = nodeElement.classed('dragging')
+
+            // Update dragging class only if it doesn't match the expected state
+            if (shouldHaveDraggingClass && !hasDraggingClass) {
+                nodeElement.classed('dragging', true)
                 if (!draggedElementRef.current || draggedElementRef.current.node() !== this) {
                     draggedElementRef.current = nodeElement
+                    draggedNodeElementRef.current = this as SVGGElement
                 }
-            } else if (currentlyDragging && currentDraggedNodeId && currentDraggedNodeId !== d.id) {
-                if (hasDragging) nodeElement.classed('dragging', false)
-            } else if (!currentlyDragging) {
-                if (hasDragging) nodeElement.classed('dragging', false)
+            } else if (!shouldHaveDraggingClass && hasDraggingClass) {
+                nodeElement.classed('dragging', false)
+                if (draggedElementRef.current && draggedElementRef.current.node() === this) {
+                    draggedElementRef.current = null
+                    draggedNodeElementRef.current = null
+                }
             }
         })
 
-        // Update positions for non-dragging nodes
+        // Update positions for all nodes - binding new data
         nodeGroups
-            .filter(function (this: any) {
-                return !d3.select(this).classed('dragging')
+            .each(function (this: any, d: any) {
+                const element = d3.select(this)
+                const isDraggingNode = element.classed('dragging')
+
+                // Always update transform for non-dragging nodes
+                if (!isDraggingNode) {
+                    element.attr('transform', `translate(${d.x}, ${d.y})`)
+                }
+
+                // Store latest data on the element for access in event handlers
+                (this as any).__data__ = d
             })
-            .attr('transform', (d: any) => `translate(${d.x}, ${d.y})`)
 
         // Node background
         nodeEnter
@@ -416,7 +621,8 @@ export function useNodeRendering(params: NodeRenderingParams) {
                 onNodeDoubleClick(d as WorkflowNode)
             })
             .on('dragover', (event: any, d: any) => {
-                if (canDropOnNode?.((d as WorkflowNode).id)) {
+                // Only handle HTML5 drag events if we're in a connecting state
+                if (isContextDragging() && canDropOnNode?.((d as WorkflowNode).id)) {
                     event.preventDefault()
                     event.stopPropagation()
                     const nodeElement = d3.select(event.currentTarget.parentNode as SVGGElement)
@@ -434,7 +640,8 @@ export function useNodeRendering(params: NodeRenderingParams) {
                 setDropFeedback(nodeElement, false)
 
                 const node = d as WorkflowNode
-                if (canDropOnNode?.(node.id)) {
+                // Only handle drops if we're actually dragging a connection
+                if (isContextDragging() && canDropOnNode?.(node.id)) {
                     const available = node.inputs || []
                     if (available.length > 0) {
                         onPortDragEnd(node.id, available[0].id)
@@ -456,7 +663,7 @@ export function useNodeRendering(params: NodeRenderingParams) {
             .style('opacity', 0.8)
             .style('display', 'none')
 
-        // Update node background (shape-aware)
+        // Update node background (shape-aware) and rebind click handler with fresh dragging check
         nodeGroups
             .select('.node-background')
             .attr('d', (d: any) => {
@@ -491,6 +698,15 @@ export function useNodeRendering(params: NodeRenderingParams) {
                 const currentlyDragging = isContextDragging()
                 if (currentlyDragging && currentDraggedNodeId === d.id) return 3
                 return 2
+            })
+            // Always rebind the click handler so it reads current dragging state
+            .on('click', function (event: any, d: any) {
+                // Prevent bubbling to canvas; handle only when not dragging currently
+                if (!isContextDragging()) {
+                    event.stopPropagation()
+                    const ctrlKey = event.ctrlKey || event.metaKey
+                    onNodeClick(d as WorkflowNode, ctrlKey)
+                }
             })
 
         // Outline sizing and visibility
@@ -646,17 +862,23 @@ export function useNodeRendering(params: NodeRenderingParams) {
                 .style('cursor', designerMode === 'architecture' ? 'crosshair' : 'default')
                 .style('pointer-events', designerMode === 'architecture' ? 'all' : 'none')
 
-            inputPortGroups.selectAll('circle').remove()
-            inputPortGroups
-                .append('circle')
-                .attr('class', 'port-circle input-port-circle')
-                .attr('cx', (d: any, i: number) => getConfigurablePortPositions(d.nodeData, 'input')[i]?.x || 0)
-                .attr('cy', (d: any, i: number) => getConfigurablePortPositions(d.nodeData, 'input')[i]?.y || 0)
-                .attr('r', (d: any) => getConfigurableDimensions(d.nodeData).portRadius || 6)
-                .attr('fill', getPortColor('any'))
-                .attr('stroke', '#333')
-                .attr('stroke-width', 2)
-                .style('pointer-events', 'none')
+            // Clear existing circles and recreate them
+            inputPortGroups.selectAll('circle.port-circle').remove()
+            inputPortGroups.each(function (this: any, d: any, i: number) {
+                const group = d3.select(this)
+                const pos = getConfigurablePortPositions(d.nodeData, 'input')[i]
+                if (pos) {
+                    group.append('circle')
+                        .attr('class', 'port-circle input-port-circle')
+                        .attr('cx', pos.x)
+                        .attr('cy', pos.y)
+                        .attr('r', getConfigurableDimensions(d.nodeData).portRadius || 6)
+                        .attr('fill', getPortColor('any'))
+                        .attr('stroke', '#333')
+                        .attr('stroke-width', 2)
+                        .style('pointer-events', 'none')
+                }
+            })
 
             const outputPortGroups = nodeGroups
                 .selectAll('.output-port-group')
@@ -669,16 +891,22 @@ export function useNodeRendering(params: NodeRenderingParams) {
                 .style('cursor', 'crosshair')
                 .style('pointer-events', 'all')
 
-            outputPortGroups.selectAll('circle').remove()
-            outputPortGroups
-                .append('circle')
-                .attr('class', 'port-circle output-port-circle')
-                .attr('cx', (d: any, i: number) => getConfigurablePortPositions(d.nodeData, 'output')[i]?.x || 0)
-                .attr('cy', (d: any, i: number) => getConfigurablePortPositions(d.nodeData, 'output')[i]?.y || 0)
-                .attr('r', (d: any) => getConfigurableDimensions(d.nodeData).portRadius || 6)
-                .attr('fill', getPortColor('any'))
-                .attr('stroke', '#333')
-                .attr('stroke-width', 2)
+            // Clear existing circles and recreate them
+            outputPortGroups.selectAll('circle.port-circle').remove()
+            outputPortGroups.each(function (this: any, d: any, i: number) {
+                const group = d3.select(this)
+                const pos = getConfigurablePortPositions(d.nodeData, 'output')[i]
+                if (pos) {
+                    group.append('circle')
+                        .attr('class', 'port-circle output-port-circle')
+                        .attr('cx', pos.x)
+                        .attr('cy', pos.y)
+                        .attr('r', getConfigurableDimensions(d.nodeData).portRadius || 6)
+                        .attr('fill', getPortColor('any'))
+                        .attr('stroke', '#333')
+                        .attr('stroke-width', 2)
+                }
+            })
 
             // Architecture mode: render four side ports (top/right/bottom/left) as virtual omni-ports
             const isArchitectureMode = designerMode === 'architecture'
@@ -737,84 +965,38 @@ export function useNodeRendering(params: NodeRenderingParams) {
                             onPortDrag(cx, cy)
                         })
                         .on('end', (event: any) => {
-                            const svgElement = svgRef.current!
-                            const svgSel = d3.select(svgElement)
-                            const transform = d3.zoomTransform(svgElement)
-                            const [sx, sy] = d3.pointer(event.sourceEvent, svgElement)
-                            const [canvasX, canvasY] = transform.invert([sx, sy])
-
-                            let targetNodeId: string | undefined
-                            let targetPortId: string | undefined
-                            let minDistance = Infinity
-
-                            // Check input circles (rendered above)
-                            svgSel.selectAll<SVGCircleElement, any>('.input-port-circle').each(function (portData: any) {
-                                const circle = d3.select(this)
-                                const portGroup = d3.select(this.parentNode as SVGGElement)
-                                const nodeGroup = d3.select(portGroup.node()?.closest('g[data-node-id]') as SVGGElement)
-                                if (nodeGroup.empty()) return
-                                const nodeId = nodeGroup.attr('data-node-id')
-                                const m = /translate\(([^,]+),([^)]+)\)/.exec(nodeGroup.attr('transform') || '')
-                                const nodeSvgX = m ? parseFloat(m[1]) : 0
-                                const nodeSvgY = m ? parseFloat(m[2]) : 0
-                                const cx = parseFloat(circle.attr('cx') || '0')
-                                const cy = parseFloat(circle.attr('cy') || '0')
-                                const r = parseFloat(circle.attr('r') || '8')
-                                const px = nodeSvgX + cx
-                                const py = nodeSvgY + cy
-                                const dist = Math.hypot(canvasX - px, canvasY - py)
-                                const tol = r + 5
-                                if (dist <= tol && dist < minDistance) {
-                                    minDistance = dist
-                                    targetNodeId = nodeId
-                                    targetPortId = portData.id
-                                }
-                            })
-
-                            // Also check side rectangles (top/left act as inputs)
-                            svgSel.selectAll<SVGRectElement, any>('.side-port-rect').each(function (portData: any) {
-                                const rect = d3.select(this)
-                                const portGroup = d3.select(this.parentNode as SVGGElement)
-                                const nodeGroup = d3.select(portGroup.node()?.closest('g[data-node-id]') as SVGGElement)
-                                if (nodeGroup.empty()) return
-                                const nodeId = nodeGroup.attr('data-node-id')
-                                const m = /translate\(([^,]+),([^)]+)\)/.exec(nodeGroup.attr('transform') || '')
-                                const nodeSvgX = m ? parseFloat(m[1]) : 0
-                                const nodeSvgY = m ? parseFloat(m[2]) : 0
-                                const x = parseFloat(rect.attr('x') || '0')
-                                const y = parseFloat(rect.attr('y') || '0')
-                                const w = parseFloat(rect.attr('width') || '10')
-                                const h = parseFloat(rect.attr('height') || '10')
-                                const px = nodeSvgX + x + w / 2
-                                const py = nodeSvgY + y + h / 2
-                                const size = Math.max(w, h)
-                                const dist = Math.hypot(canvasX - px, canvasY - py)
-                                const tol = size / 2 + 5
-                                if (dist <= tol && dist < minDistance) {
-                                    minDistance = dist
-                                    targetNodeId = nodeId
-                                    targetPortId = portData.id
-                                }
-                            })
-
-                            onPortDragEnd(targetNodeId, targetPortId)
+                            const [canvasX, canvasY] = getCanvasCoordsFromEvent(event.sourceEvent)
+                            const { targetNodeId, targetPortId } = findNearestPortTarget(canvasX, canvasY)
+                            if (targetNodeId && targetPortId) {
+                                onPortDragEnd(targetNodeId, targetPortId, canvasX, canvasY)
+                                return
+                            }
+                            const fb = findHoveredNodeFallback(canvasX, canvasY)
+                            if (fb.targetNodeId && fb.targetPortId) {
+                                onPortDragEnd(fb.targetNodeId, fb.targetPortId, canvasX, canvasY)
+                            } else {
+                                onPortDragEnd('__CANVAS_DROP__', undefined, canvasX, canvasY)
+                            }
                         }) as any
                 )
 
-            sidePortGroups.selectAll('rect').remove()
-            sidePortGroups
-                .append('rect')
-                .attr('class', 'side-port-rect')
-                .attr('x', (d: any) => d.x - 6)
-                .attr('y', (d: any) => d.y - 6)
-                .attr('width', 12)
-                .attr('height', 12)
-                .attr('rx', 2)
-                .attr('ry', 2)
-                .attr('fill', (d: any) => (d.kind === 'output' ? '#A8A9B4' : '#CCCCCC'))
-                .attr('stroke', '#8d8d8d')
-                .attr('stroke-width', 1.5)
-                .style('pointer-events', 'all')
+            // Clear existing rectangles and recreate them
+            sidePortGroups.selectAll('rect.side-port-rect').remove()
+            sidePortGroups.each(function (this: any, d: any) {
+                const group = d3.select(this)
+                group.append('rect')
+                    .attr('class', 'side-port-rect')
+                    .attr('x', d.x - 6)
+                    .attr('y', d.y - 6)
+                    .attr('width', 12)
+                    .attr('height', 12)
+                    .attr('rx', 2)
+                    .attr('ry', 2)
+                    .attr('fill', d.kind === 'output' ? '#A8A9B4' : '#CCCCCC')
+                    .attr('stroke', '#8d8d8d')
+                    .attr('stroke-width', 1.5)
+                    .style('pointer-events', 'all')
+            })
 
             // Bottom ports (diamonds) + connectors + plus button + label
             const bottomPortGroups = nodeGroups
@@ -846,72 +1028,23 @@ export function useNodeRendering(params: NodeRenderingParams) {
                             onPortDrag(cx, cy)
                         })
                         .on('end', (event: any) => {
-                            const svgElement = svgRef.current!
-                            const svgSel = d3.select(svgElement)
-                            const transform = d3.zoomTransform(svgElement)
-                            const [sx, sy] = d3.pointer(event.sourceEvent, svgElement)
-                            const [canvasX, canvasY] = transform.invert([sx, sy])
-
-                            let targetNodeId: string | undefined
-                            let targetPortId: string | undefined
-                            let minDistance = Infinity
-
-                            // Check input circles first
-                            svgSel.selectAll<SVGCircleElement, any>('.input-port-circle').each(function (portData: any) {
-                                const circle = d3.select(this)
-                                const portGroup = d3.select(this.parentNode as SVGGElement)
-                                const nodeGroup = d3.select(portGroup.node()?.closest('g[data-node-id]') as SVGGElement)
-                                if (nodeGroup.empty()) return
-                                const nodeId = nodeGroup.attr('data-node-id')
-                                const m = /translate\(([^,]+),([^)]+)\)/.exec(nodeGroup.attr('transform') || '')
-                                const nodeSvgX = m ? parseFloat(m[1]) : 0
-                                const nodeSvgY = m ? parseFloat(m[2]) : 0
-                                const cx = parseFloat(circle.attr('cx') || '0')
-                                const cy = parseFloat(circle.attr('cy') || '0')
-                                const r = parseFloat(circle.attr('r') || '8')
-                                const px = nodeSvgX + cx
-                                const py = nodeSvgY + cy
-                                const dist = Math.hypot(canvasX - px, canvasY - py)
-                                const tol = r + 5
-                                if (dist <= tol && dist < minDistance) {
-                                    minDistance = dist
-                                    targetNodeId = nodeId
-                                    targetPortId = portData.id
-                                }
-                            })
-
-                            // Check side rectangles as additional targets (architecture omni-ports)
-                            svgSel.selectAll<SVGRectElement, any>('.side-port-rect').each(function (portData: any) {
-                                const rect = d3.select(this)
-                                const portGroup = d3.select(this.parentNode as SVGGElement)
-                                const nodeGroup = d3.select(portGroup.node()?.closest('g[data-node-id]') as SVGGElement)
-                                if (nodeGroup.empty()) return
-                                const nodeId = nodeGroup.attr('data-node-id')
-                                const m = /translate\(([^,]+),([^)]+)\)/.exec(nodeGroup.attr('transform') || '')
-                                const nodeSvgX = m ? parseFloat(m[1]) : 0
-                                const nodeSvgY = m ? parseFloat(m[2]) : 0
-                                const x = parseFloat(rect.attr('x') || '0')
-                                const y = parseFloat(rect.attr('y') || '0')
-                                const w = parseFloat(rect.attr('width') || '10')
-                                const h = parseFloat(rect.attr('height') || '10')
-                                const px = nodeSvgX + x + w / 2
-                                const py = nodeSvgY + y + h / 2
-                                const size = Math.max(w, h)
-                                const dist = Math.hypot(canvasX - px, canvasY - py)
-                                const tol = size / 2 + 5
-                                if (dist <= tol && dist < minDistance) {
-                                    minDistance = dist
-                                    targetNodeId = nodeId
-                                    targetPortId = portData.id
-                                }
-                            })
-
-                            onPortDragEnd(targetNodeId, targetPortId)
+                            const [canvasX, canvasY] = getCanvasCoordsFromEvent(event.sourceEvent)
+                            const { targetNodeId, targetPortId } = findNearestPortTarget(canvasX, canvasY)
+                            if (targetNodeId && targetPortId) {
+                                onPortDragEnd(targetNodeId, targetPortId, canvasX, canvasY)
+                                return
+                            }
+                            const fb = findHoveredNodeFallback(canvasX, canvasY)
+                            if (fb.targetNodeId && fb.targetPortId) {
+                                onPortDragEnd(fb.targetNodeId, fb.targetPortId, canvasX, canvasY)
+                            } else {
+                                onPortDragEnd('__CANVAS_DROP__', undefined, canvasX, canvasY)
+                            }
                         }) as any
                 )
 
-            // Draw bottom port diamond
-            bottomPortGroups.selectAll('path').remove()
+            // Clear existing diamonds and recreate them
+            bottomPortGroups.selectAll('path.bottom-port-diamond').remove()
             bottomPortGroups
                 .append('path')
                 .attr('class', 'bottom-port-diamond')
@@ -928,8 +1061,8 @@ export function useNodeRendering(params: NodeRenderingParams) {
                 .attr('fill', '#A8A9B4')
                 .attr('stroke', 'none')
 
-            // Connector line (simple length for now)
-            bottomPortGroups.selectAll('line').remove()
+            // Clear existing connectors and recreate them
+            bottomPortGroups.selectAll('line.bottom-port-connector').remove()
             bottomPortGroups
                 .append('line')
                 .attr('class', 'bottom-port-connector')
@@ -961,8 +1094,8 @@ export function useNodeRendering(params: NodeRenderingParams) {
                 const nodeIsSelected = isNodeSelected(d.nodeId)
                 const shouldShowButton = nodeIsSelected ? true : !hasConnection
 
+                // Remove existing plus button container and recreate if needed
                 group.selectAll('.plus-button-container').remove()
-                group.selectAll('.bottom-port-label-container').remove()
 
                 if (shouldShowButton) {
                     const abs = calculatePortPosition(d.nodeData, d.id, 'bottom', 'normal' as any)
@@ -997,42 +1130,81 @@ export function useNodeRendering(params: NodeRenderingParams) {
                                     onPortDrag(cx, cy)
                                 })
                                 .on('end', (event: any) => {
-                                    const svgElement = svgRef.current!
-                                    const transform = d3.zoomTransform(svgElement)
-                                    const [sx, sy] = d3.pointer(event.sourceEvent, svgElement)
-                                    const [canvasX, canvasY] = transform.invert([sx, sy])
+                                    const [canvasX, canvasY] = getCanvasCoordsFromEvent(event.sourceEvent)
+                                    console.log('🚀 Port drag end handler - Plus button drag end:', {
+                                        sourceNodeId: d.nodeId,
+                                        sourcePortId: d.id,
+                                        canvasCoords: { x: canvasX, y: canvasY },
+                                        sourceEvent: event.sourceEvent?.type
+                                    })
 
-                                    // Find nearest input or bottom port target
-                                    let targetNodeId: string | undefined
-                                    let targetPortId: string | undefined
-                                    let minDistance = 50
+                                    // First, reuse nearest standard/side port resolution
+                                    let { targetNodeId, targetPortId } = findNearestPortTarget(canvasX, canvasY)
+                                    console.log('🚀 First attempt result:', { targetNodeId, targetPortId })
 
-                                    nodes.forEach((node: any) => {
-                                        if (node.id === d.nodeId) return
-                                        // inputs
-                                        node.inputs.forEach((input: any, index: number) => {
-                                            const pos = (getConfigurablePortPositions as any)(node, 'input')[index]
-                                            if (!pos) return
-                                            const dist = Math.hypot(canvasX - node.x - pos.x, canvasY - node.y - pos.y)
-                                            if (dist < minDistance) {
-                                                minDistance = dist
-                                                targetNodeId = node.id
-                                                targetPortId = input.id
-                                            }
-                                        })
-                                            // bottoms
-                                            ; (node.bottomPorts || []).forEach((bp: any) => {
-                                                const pos = calculatePortPosition(node, bp.id, 'bottom', 'normal' as any)
-                                                const dist = Math.hypot(canvasX - pos.x, canvasY - pos.y)
+                                    // If none, search inputs and bottom ports by data positions (for non-rendered overlaps)
+                                    if (!targetNodeId || !targetPortId) {
+                                        console.log('🚀 Trying secondary search by data positions...')
+                                        let minDistance = 50
+                                        nodes.forEach((node: any) => {
+                                            if (node.id === d.nodeId) return
+                                            // inputs by configured positions
+                                            node.inputs.forEach((input: any, index: number) => {
+                                                const pos = (getConfigurablePortPositions as any)(node, 'input')[index]
+                                                if (!pos) return
+                                                const dist = Math.hypot(canvasX - node.x - pos.x, canvasY - node.y - pos.y)
+                                                console.log('🚀 Input position check:', {
+                                                    nodeId: node.id,
+                                                    inputId: input.id,
+                                                    position: pos,
+                                                    absolutePos: { x: node.x + pos.x, y: node.y + pos.y },
+                                                    distance: dist,
+                                                    minDistance
+                                                })
                                                 if (dist < minDistance) {
                                                     minDistance = dist
                                                     targetNodeId = node.id
-                                                    targetPortId = bp.id
+                                                    targetPortId = input.id
+                                                    console.log('🚀 New best from input positions:', { targetNodeId, targetPortId, dist })
                                                 }
                                             })
-                                    })
+                                                // bottom ports by absolute positions
+                                                ; (node.bottomPorts || []).forEach((bp: any) => {
+                                                    const pos = calculatePortPosition(node, bp.id, 'bottom', 'normal' as any)
+                                                    const dist = Math.hypot(canvasX - pos.x, canvasY - pos.y)
+                                                    console.log('🚀 Bottom port check:', {
+                                                        nodeId: node.id,
+                                                        bottomPortId: bp.id,
+                                                        position: pos,
+                                                        distance: dist,
+                                                        minDistance
+                                                    })
+                                                    if (dist < minDistance) {
+                                                        minDistance = dist
+                                                        targetNodeId = node.id
+                                                        targetPortId = bp.id
+                                                        console.log('🚀 New best from bottom ports:', { targetNodeId, targetPortId, dist })
+                                                    }
+                                                })
+                                        })
+                                        console.log('🚀 Secondary search result:', { targetNodeId, targetPortId, finalMinDistance: minDistance })
+                                    }
 
-                                    onPortDragEnd(targetNodeId, targetPortId)
+                                    if (targetNodeId && targetPortId) {
+                                        console.log('🚀 Calling onPortDragEnd with target:', { targetNodeId, targetPortId, canvasX, canvasY })
+                                        onPortDragEnd(targetNodeId, targetPortId, canvasX, canvasY)
+                                        return
+                                    }
+
+                                    console.log('🚀 No target found, trying fallback...')
+                                    const fb = findHoveredNodeFallback(canvasX, canvasY)
+                                    if (fb.targetNodeId && fb.targetPortId) {
+                                        console.log('🚀 Calling onPortDragEnd with fallback:', fb)
+                                        onPortDragEnd(fb.targetNodeId, fb.targetPortId, canvasX, canvasY)
+                                    } else {
+                                        console.log('🚀 No fallback found, dropping on canvas')
+                                        onPortDragEnd('__CANVAS_DROP__', undefined, canvasX, canvasY)
+                                    }
                                 }) as any
                         )
                         .on('click', (event: any) => {
@@ -1080,7 +1252,9 @@ export function useNodeRendering(params: NodeRenderingParams) {
                         .attr('stroke-linecap', 'round')
                 }
 
-                // Label under bottom port
+                // Label under bottom port - remove existing and recreate
+                group.selectAll('.bottom-port-label-container').remove()
+
                 const abs = calculatePortPosition(d.nodeData, d.id, 'bottom', 'normal' as any)
                 const labelX = abs.x - d.nodeData.x
                 const labelY = abs.y - d.nodeData.y + 15

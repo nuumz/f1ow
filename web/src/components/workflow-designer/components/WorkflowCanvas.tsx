@@ -66,7 +66,7 @@ interface WorkflowCanvasProps {
   onPlusButtonClick?: (nodeId: string, portId: string) => void
   onPortDragStart: (nodeId: string, portId: string, type: 'input' | 'output') => void
   onPortDrag: (x: number, y: number) => void
-  onPortDragEnd: (targetNodeId?: string, targetPortId?: string) => void
+  onPortDragEnd: (targetNodeId?: string, targetPortId?: string, canvasX?: number, canvasY?: number) => void
   canDropOnPort?: (targetNodeId: string, targetPortId: string, portType?: 'input' | 'output') => boolean
   canDropOnNode?: (targetNodeId: string) => boolean
   onTransformChange?: (transform: d3.ZoomTransform) => void
@@ -1058,11 +1058,20 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
         }))
         .filter(({ element }) => !element.empty());
 
-      // Update all paths in a single batch
+      // Update all paths in a single batch (both visible path and hitbox)
       connectionElements.forEach(({ conn, element }) => {
-        const pathElement = element.select(".connection-path");
         const newPath = getConnectionPath(conn, true);
-        pathElement.attr("d", newPath);
+        // Visible stroke path
+        element.select(".connection-path").attr("d", newPath);
+        // Invisible hitbox used for interaction (keep it in sync during drag)
+        const hitbox = element.select<SVGPathElement>(".connection-hitbox");
+        if (!hitbox.empty()) {
+          try {
+            hitbox.attr("d", createFilledPolygonFromPath(newPath, 8));
+          } catch {
+            // best effort only; ignore errors in hitbox update during drag
+          }
+        }
       });
 
       connectionUpdateQueueRef.current.delete(nodeId);
@@ -1081,7 +1090,7 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
     if (usage < 0.55 && connAdaptive.cBudget < 10) connAdaptive.cBudget += 0.5;
     else if (usage > 0.9 && connAdaptive.cBudget > 4)
       connAdaptive.cBudget -= 0.5;
-  }, [nodeConnectionsMap, getConnectionPath, getCachedSelection, scheduleRAF]);
+  }, [nodeConnectionsMap, getConnectionPath, getCachedSelection, scheduleRAF, createFilledPolygonFromPath]);
 
   const updateDraggedNodePosition = useCallback(
     (nodeId: string, newX: number, newY: number) => {
@@ -1346,10 +1355,14 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
     if (!svgRef.current || !isInitialized) return;
 
     const svg = d3.select(svgRef.current);
-    const g = svg.select("g");
+    // Prefer rendering preview inside a dedicated preview layer to ensure top-most z-order
+    const previewLayerSel = (() => {
+      const layer = svg.select<SVGGElement>(".preview-layer");
+      return layer.empty() ? svg.select<SVGGElement>(".connection-layer") : layer;
+    })();
 
     // Handle connection preview
-    g.selectAll(".connection-preview").remove();
+  previewLayerSel.selectAll<SVGPathElement, unknown>(".connection-preview").remove();
 
     if (isConnecting && connectionStart) {
       console.log("🔄 Connection effect - preview update:", {
@@ -1409,7 +1422,7 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
         const isWorkflowMode = workflowContextState.designerMode === "workflow";
         const previewMarker = getArrowMarkerForMode(isWorkflowMode, "default");
 
-        g.append("path")
+  previewLayerSel.append("path")
           .attr("class", "connection-preview")
           .attr("d", previewPath)
           .attr("stroke", "#2196F3")
@@ -1418,6 +1431,7 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
           .attr("stroke-linecap", "round")
           .attr("fill", "none")
           .attr("marker-end", previewMarker)
+          .style("marker-end", previewMarker)
           .attr("pointer-events", "none")
           .style("opacity", 0.7);
       } else {
@@ -1443,6 +1457,8 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
     nodes, // Required for hover detection and port highlighting
     svgRef,
     getConfigurableDimensions,
+    // Ensure we re-run when cached layer utility would change
+    getCachedSelection,
   ]);
 
   // REMOVED: Architecture mode port visibility JavaScript management
@@ -1610,6 +1626,19 @@ function workflowCanvasPropsAreEqual(prev: Readonly<WorkflowCanvasProps>, next: 
   if (prev.showGrid !== next.showGrid) return false;
   if (prev.nodeVariant !== next.nodeVariant) return false;
   if (prev.isConnecting !== next.isConnecting) return false;
+
+  // Connection drag state (must trigger re-render for live preview)
+  const pCP = prev.connectionPreview;
+  const nCP = next.connectionPreview;
+  const cpChanged = (pCP?.x ?? null) !== (nCP?.x ?? null) || (pCP?.y ?? null) !== (nCP?.y ?? null);
+  if (cpChanged) return false;
+
+  const pCS = prev.connectionStart;
+  const nCS = next.connectionStart;
+  const csChanged = (pCS?.nodeId ?? null) !== (nCS?.nodeId ?? null)
+    || (pCS?.portId ?? null) !== (nCS?.portId ?? null)
+    || (pCS?.type ?? null) !== (nCS?.type ?? null);
+  if (csChanged) return false;
 
   // Canvas transform
   const pt = prev.canvasTransform;

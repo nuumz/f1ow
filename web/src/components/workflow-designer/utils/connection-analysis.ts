@@ -45,10 +45,17 @@ export interface ConnectionGroupStats {
 }
 
 /**
- * Generates a unique key for a connection group based on node pairs
+ * Generates a unique key for a connection group based on node pairs AND port pairs
  */
-export function generateConnectionGroupKey(sourceNodeId: string, targetNodeId: string): string {
-  return `${sourceNodeId}->${targetNodeId}`
+export function generateConnectionGroupKey(
+  sourceNodeId: string,
+  targetNodeId: string,
+  sourcePortId?: string,
+  targetPortId?: string
+): string {
+  const srcPort = sourcePortId ?? '*'
+  const tgtPort = targetPortId ?? '*'
+  return `${sourceNodeId}:${srcPort}->${targetNodeId}:${tgtPort}`
 }
 
 /**
@@ -58,17 +65,22 @@ export function groupConnectionsByNodePairs(
   connections: AnalyzableConnection[]
 ): Map<string, AnalyzableConnection[]> {
   const groups = new Map<string, AnalyzableConnection[]>()
-  
+
   for (const connection of connections) {
-    const groupKey = generateConnectionGroupKey(connection.sourceNodeId, connection.targetNodeId)
-    
+    const groupKey = generateConnectionGroupKey(
+      connection.sourceNodeId,
+      connection.targetNodeId,
+      connection.sourcePortId,
+      connection.targetPortId
+    )
+
     if (!groups.has(groupKey)) {
       groups.set(groupKey, [])
     }
-    
+
     groups.get(groupKey)!.push(connection)
   }
-  
+
   return groups
 }
 
@@ -80,7 +92,7 @@ export function analyzeConnectionGroups(
 ): Map<string, GroupedConnection[]> {
   const rawGroups = groupConnectionsByNodePairs(connections)
   const analyzedGroups = new Map<string, GroupedConnection[]>()
-  
+
   rawGroups.forEach((groupConnections, groupKey) => {
     const enrichedGroup = groupConnections.map((connection, index) => ({
       ...connection,
@@ -88,10 +100,10 @@ export function analyzeConnectionGroups(
       total: groupConnections.length,
       groupKey
     }))
-    
+
     analyzedGroups.set(groupKey, enrichedGroup)
   })
-  
+
   return analyzedGroups
 }
 
@@ -112,19 +124,24 @@ export function getConnectionGroupInfo(
       groupKey: 'unknown'
     }
   }
-  
+
   // Generate group key
-  const groupKey = generateConnectionGroupKey(connection.sourceNodeId, connection.targetNodeId)
-  
-  // Find all connections in the same group
-  const sameGroupConnections = connections.filter(c => 
-    generateConnectionGroupKey(c.sourceNodeId, c.targetNodeId) === groupKey
+  const groupKey = generateConnectionGroupKey(
+    connection.sourceNodeId,
+    connection.targetNodeId,
+    connection.sourcePortId,
+    connection.targetPortId
   )
-  
+
+  // Find all connections in the same group
+  const sameGroupConnections = connections.filter(c =>
+    generateConnectionGroupKey(c.sourceNodeId, c.targetNodeId, c.sourcePortId, c.targetPortId) === groupKey
+  )
+
   // Find index of current connection
   const index = sameGroupConnections.findIndex(c => c.id === connectionId)
   const total = sameGroupConnections.length
-  
+
   return {
     index: index >= 0 ? index : 0,
     total,
@@ -141,7 +158,7 @@ export function findConnectionsBetweenNodes(
   targetNodeId: string,
   connections: AnalyzableConnection[]
 ): AnalyzableConnection[] {
-  return connections.filter(c => 
+  return connections.filter(c =>
     c.sourceNodeId === sourceNodeId && c.targetNodeId === targetNodeId
   )
 }
@@ -159,7 +176,7 @@ export function findConnectionsForNode(
 } {
   const outgoing = connections.filter(c => c.sourceNodeId === nodeId)
   const incoming = connections.filter(c => c.targetNodeId === nodeId)
-  
+
   return {
     outgoing,
     incoming,
@@ -173,13 +190,13 @@ export function findConnectionsForNode(
 export function getConnectionGroupStats(connections: AnalyzableConnection[]): ConnectionGroupStats {
   const groups = groupConnectionsByNodePairs(connections)
   const groupSizes = Array.from(groups.values()).map(group => group.length)
-  
+
   const totalGroups = groups.size
   const totalConnections = connections.length
   const multipleConnectionGroups = groupSizes.filter(size => size > 1).length
   const largestGroupSize = Math.max(...groupSizes, 0)
   const averageGroupSize = totalConnections / totalGroups || 0
-  
+
   return {
     totalGroups,
     totalConnections,
@@ -197,13 +214,13 @@ export function findMultipleConnectionGroups(
 ): Map<string, GroupedConnection[]> {
   const allGroups = analyzeConnectionGroups(connections)
   const multipleGroups = new Map<string, GroupedConnection[]>()
-  
+
   allGroups.forEach((groupConnections, groupKey) => {
     if (groupConnections.length > 1) {
       multipleGroups.set(groupKey, groupConnections)
     }
   })
-  
+
   return multipleGroups
 }
 
@@ -222,7 +239,7 @@ export function validateConnectionIntegrity(
   const invalidConnections: string[] = []
   const warnings: string[] = []
   const seenIds = new Set<string>()
-  
+
   for (const connection of connections) {
     // Check for duplicate IDs
     if (seenIds.has(connection.id)) {
@@ -230,22 +247,22 @@ export function validateConnectionIntegrity(
     } else {
       seenIds.add(connection.id)
     }
-    
+
     // Check for invalid data
     if (!connection.sourceNodeId || !connection.targetNodeId) {
       invalidConnections.push(connection.id)
     }
-    
+
     if (!connection.sourcePortId || !connection.targetPortId) {
       warnings.push(`Connection ${connection.id} missing port IDs`)
     }
-    
+
     // Check for self-connections
     if (connection.sourceNodeId === connection.targetNodeId) {
       warnings.push(`Connection ${connection.id} is a self-connection`)
     }
   }
-  
+
   return {
     valid: duplicateIds.length === 0 && invalidConnections.length === 0,
     duplicateIds,
@@ -261,13 +278,16 @@ export function optimizeConnectionOrder(
   groupedConnections: GroupedConnection[]
 ): GroupedConnection[] {
   // Sort by source port first, then target port for consistent ordering
-  return groupedConnections.sort((a, b) => {
-    const sourcePortCompare = a.sourcePortId.localeCompare(b.sourcePortId)
-    if (sourcePortCompare !== 0) {
-      return sourcePortCompare
+  const ordered = [...groupedConnections].sort(
+    (a: GroupedConnection, b: GroupedConnection) => {
+      const sourcePortCompare = a.sourcePortId.localeCompare(b.sourcePortId)
+      if (sourcePortCompare !== 0) {
+        return sourcePortCompare
+      }
+      return a.targetPortId.localeCompare(b.targetPortId)
     }
-    return a.targetPortId.localeCompare(b.targetPortId)
-  }).map((connection, index) => ({
+  )
+  return ordered.map((connection: GroupedConnection, index: number) => ({
     ...connection,
     index // Update index after sorting
   }))
@@ -280,12 +300,12 @@ export function createConnectionGroupLookup(
   connections: AnalyzableConnection[]
 ): Map<string, ConnectionGroupInfo> {
   const lookup = new Map<string, ConnectionGroupInfo>()
-  
+
   for (const connection of connections) {
     const groupInfo = getConnectionGroupInfo(connection.id, connections)
     lookup.set(connection.id, groupInfo)
   }
-  
+
   return lookup
 }
 
@@ -303,13 +323,13 @@ export function detectConnectionIssues(
   const unusuallyLargeGroups: string[] = []
   const potentialDuplicates: string[] = []
   const orphanedConnections: string[] = []
-  
+
   groups.forEach((groupConnections, groupKey) => {
     // Flag groups with many connections (might indicate a design issue)
     if (groupConnections.length > 5) {
       unusuallyLargeGroups.push(groupKey)
     }
-    
+
     // Look for potential duplicates (same ports)
     const portCombos = new Set<string>()
     for (const conn of groupConnections) {
@@ -321,7 +341,7 @@ export function detectConnectionIssues(
       }
     }
   })
-  
+
   return {
     unusuallyLargeGroups,
     potentialDuplicates,

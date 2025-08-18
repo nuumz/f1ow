@@ -2093,7 +2093,21 @@ function WorkflowCanvas({
             { id: '__side-bottom', x: 0, y: halfH, kind: 'output' },
             { id: '__side-left', x: -halfW, y: 0, kind: 'input' },
           ];
-          return sides.map((s) => ({
+          // Business rule:
+          // - If node has inputs, hide left side port (input)
+          // - If node has outputs, hide right side port (output)
+          const hasMultipleInputs = Array.isArray(d.inputs) && d.inputs.length > 1;
+          const hasMultipleOutputs = Array.isArray(d.outputs) && d.outputs.length > 1;
+          const filtered = sides.filter((s) => {
+            if (s.id === '__side-left' && hasMultipleInputs) {
+              return false;
+            }
+            if (s.id === '__side-right' && hasMultipleOutputs) {
+              return false;
+            }
+            return true;
+          });
+          return filtered.map((s) => ({
             nodeId: d.id,
             nodeData: d,
             id: s.id,
@@ -2113,6 +2127,8 @@ function WorkflowCanvas({
           const inputHL = getPortHighlightClass(d.nodeId, d.id, 'input');
           const outputHL = getPortHighlightClass(d.nodeId, d.id, 'output');
           const classes = ['side-port-group', 'port-group'];
+          // Architecture mode rule update:
+          // - Always keep side-ports as 'side-port-group' only (no input-port-group/output-port-group)
           if (isConnected) {
             classes.push('connected');
           }
@@ -2191,10 +2207,7 @@ function WorkflowCanvas({
         .attr('height', 12)
         .attr('rx', 2)
         .attr('ry', 2)
-        .attr('fill', (d: any) => {
-          // Inputs (top/left) use one color, outputs (right/bottom) another
-          return d.kind === 'output' ? '#A8A9B4' : '#CCCCCC';
-        })
+        .attr('fill', '#CCCCCC')
         .attr('stroke', '#8d8d8d')
         .attr('stroke-width', 1.5)
         .style('pointer-events', 'all'); // allow hit-testing so group drag handlers receive events
@@ -2927,6 +2940,22 @@ function WorkflowCanvas({
           sourceNode: !!sourceNode,
           connectionPreview: !!connectionPreview,
         });
+      }
+    }
+
+    // Architecture mode: temporarily tag side-ports as input/output groups during connection
+    if (workflowContextState.designerMode === 'architecture') {
+      const sidePorts = svg.selectAll<SVGGElement, any>('.side-port-group');
+      // Clear any previous temporary tagging
+      sidePorts.classed('input-port-group', false).classed('output-port-group', false);
+      if (isConnecting && connectionStart) {
+        if (connectionStart.type === 'output') {
+          // Show input-like styling on input-kind side ports
+          sidePorts.filter((d: any) => d?.kind === 'input').classed('input-port-group', true);
+        } else if (connectionStart.type === 'input') {
+          // Show output-like styling on output-kind side ports
+          sidePorts.filter((d: any) => d?.kind === 'output').classed('output-port-group', true);
+        }
       }
     }
 

@@ -171,7 +171,9 @@ $breakpoints: (
     } @else {
       marker-end: url(#arrowhead-workflow);
     }
-    transition: stroke 0.2s ease, stroke-width 0.2s ease;
+    transition:
+      stroke 0.2s ease,
+      stroke-width 0.2s ease;
     cursor: pointer;
     @if $dash-pattern {
       @include opacity-state(strong);
@@ -545,11 +547,7 @@ $button-variants: (
       }
 
       &.connecting {
-        background: radial-gradient(
-          circle at center,
-          rgba(139, 92, 246, 0.05) 0%,
-          transparent 70%
-        );
+        background: radial-gradient(circle at center, rgba(139, 92, 246, 0.05) 0%, transparent 70%);
 
         // Enhanced grid visibility during connection mode
         .grid-layer .grid-pattern-rect {
@@ -564,11 +562,7 @@ $button-variants: (
     background: map.get($colors, background);
 
     .workflow-canvas.connecting {
-      background: radial-gradient(
-        circle at center,
-        rgba(33, 150, 243, 0.05) 0%,
-        transparent 70%
-      );
+      background: radial-gradient(circle at center, rgba(33, 150, 243, 0.05) 0%, transparent 70%);
 
       // Enhanced grid visibility during connection mode
       .grid-layer .grid-pattern-rect {
@@ -670,11 +664,7 @@ $button-variants: (
 // ===== MODE-SPECIFIC STYLES =====
 
 .canvas-container.workflow-mode {
-  @include connection-mode(
-    map.get($colors, workflow),
-    #1d4ed8,
-    map.get($colors, success)
-  );
+  @include connection-mode(map.get($colors, workflow), #1d4ed8, map.get($colors, success));
 
   .port-group {
     &:hover {
@@ -817,8 +807,7 @@ $button-variants: (
   .node .input-port-group,
   .node .output-port-group,
   .node.drag-hover .input-port-group:not(.can-dropped):not(.drop-target-port),
-  .node:not(.drag-hover)
-    .input-port-group:not(.can-dropped):not(.drop-target-port) {
+  .node:not(.drag-hover) .input-port-group:not(.can-dropped):not(.drop-target-port) {
     @include hidden-state;
     transition: var(--port-transition);
   }
@@ -1340,11 +1329,7 @@ $button-variants: (
 
 .architecture-dropdown-button {
   position: relative;
-  background: linear-gradient(
-    135deg,
-    map.get($colors, success) 0%,
-    #059669 100%
-  );
+  background: linear-gradient(135deg, map.get($colors, success) 0%, #059669 100%);
   border: none;
   color: white;
   font-weight: 500;
@@ -1391,7 +1376,9 @@ $button-variants: (
   background: white;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1), 0 4px 6px rgba(0, 0, 0, 0.05);
+  box-shadow:
+    0 10px 25px rgba(0, 0, 0, 0.1),
+    0 4px 6px rgba(0, 0, 0, 0.05);
   @include z-index(dropdown);
   padding: 8px;
   backdrop-filter: blur(12px);
@@ -1663,11 +1650,13 @@ $button-variants: (
   text-anchor: middle;
   dominant-baseline: middle;
   pointer-events: none;
-  text-shadow: 0 0 3px rgba(255, 255, 255, 0.8),
+  text-shadow:
+    0 0 3px rgba(255, 255, 255, 0.8),
     0 0 6px rgba(255, 255, 255, 0.6);
 
   .canvas-container.architecture-mode & {
-    text-shadow: 0 0 3px rgba(255, 255, 255, 0.9),
+    text-shadow:
+      0 0 3px rgba(255, 255, 255, 0.9),
       0 0 6px rgba(255, 255, 255, 0.7);
   }
 }

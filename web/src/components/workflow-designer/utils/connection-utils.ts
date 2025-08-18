@@ -233,9 +233,10 @@ function computeSourcePosForPreview(
 }
 
 // Helper: trim a point outward by side (architecture marker)
-function trimPointBySide(pt: { x: number; y: number }, side: SidePortId | undefined, sourcePos: PortPosition, HALF_MARKER = -5.5) {
+function trimPointBySide(pt: { x: number; y: number }, side: SidePortId | undefined, sourcePos: PortPosition, HALF_MARKER = 5.5) {
   if (side) {
     switch (side) {
+      // Inward trims so the arrow tip (center-anchored marker) lands on the edge
       case '__side-left': return { x: pt.x + HALF_MARKER, y: pt.y }
       case '__side-right': return { x: pt.x - HALF_MARKER, y: pt.y }
       case '__side-top': return { x: pt.x, y: pt.y + HALF_MARKER }
@@ -246,8 +247,10 @@ function trimPointBySide(pt: { x: number; y: number }, side: SidePortId | undefi
   const dx = pt.x - sourcePos.x
   const dy = pt.y - sourcePos.y
   if (Math.abs(dx) >= Math.abs(dy)) {
+    // Horizontal: if heading right (dx>0) trim left (inward), else trim right
     return { x: pt.x + (dx > 0 ? -HALF_MARKER : HALF_MARKER), y: pt.y }
   }
+  // Vertical: if heading down (dy>0) trim up (inward), else trim down
   return { x: pt.x, y: pt.y + (dy > 0 ? -HALF_MARKER : HALF_MARKER) }
 }
 
@@ -339,12 +342,13 @@ function maybeBottomUPathForPreview(args: {
   const safeClear = 16
   const minBelow = Math.max(sourcePos.y, targetBottomY) + FIXED_LEAD_LENGTH
   const midY = Math.max(boxesBottom + safeClear, minBelow)
-  const bottomUTrimmedEnd = { x: previewEnd.x, y: previewEnd.y - HALF_MARKER }
+  // For bottom side, push outward (increase y)
+  const bottomUTrimmedEndCorrected = { x: previewEnd.x, y: previewEnd.y + HALF_MARKER }
   return [
     `M ${sourcePos.x} ${sourcePos.y}`,
     `L ${sourcePos.x} ${midY}`,
-    `L ${bottomUTrimmedEnd.x} ${midY}`,
-    `L ${bottomUTrimmedEnd.x} ${bottomUTrimmedEnd.y}`
+    `L ${bottomUTrimmedEndCorrected.x} ${midY}`,
+    `L ${bottomUTrimmedEndCorrected.x} ${bottomUTrimmedEndCorrected.y}`
   ].join(' ')
 }
 
@@ -769,17 +773,32 @@ function generateArchitectureModeConnectionPath(
   }
 
   const targetSidePortId = chooseTargetSide()
-  const autoTargetPos = getVirtualSidePortPositionForMode(targetNode, targetSidePortId, 'architecture')
-  const endOrientation = sideToOrientation(detectPortSideModeAware(targetNode, targetSidePortId, autoTargetPos, 'architecture'))
+  // Align end point to the exact target port position, not just the side midpoint
+  // Use the selected side's axis for X/Y while preserving the port's orthogonal coordinate
+  const sideAnchor = getVirtualSidePortPositionForMode(targetNode, targetSidePortId, 'architecture')
+  const preciseEnd: { x: number; y: number } = ((): { x: number; y: number } => {
+    switch (targetSidePortId) {
+      case '__side-left':
+      case '__side-right':
+        return { x: sideAnchor.x, y: targetPos.y } // lock to side X, keep exact port Y
+      case '__side-top':
+      case '__side-bottom':
+      default:
+        // Use side anchor X (center of top/bottom edge) to match preview snap; Y is the side edge
+        return { x: sideAnchor.x, y: sideAnchor.y }
+    }
+  })()
+  const endOrientation = sideToOrientation(detectPortSideModeAware(targetNode, targetSidePortId, preciseEnd, 'architecture'))
 
-  const HALF_MARKER = -5.5
+  const HALF_MARKER = 5.5
   const trimBySide = (pt: { x: number; y: number }, side: SidePortId): { x: number; y: number } => {
-    if (side === '__side-left') { return { x: pt.x + HALF_MARKER, y: pt.y } }
+    // Inward trims for center-anchored markers
+    if (side === '__side-left') { return { x: pt.x - HALF_MARKER, y: pt.y } }
     if (side === '__side-right') { return { x: pt.x - HALF_MARKER, y: pt.y } }
-    if (side === '__side-top') { return { x: pt.x, y: pt.y + HALF_MARKER } }
+    if (side === '__side-top') { return { x: pt.x, y: pt.y - HALF_MARKER } }
     return { x: pt.x, y: pt.y - HALF_MARKER }
   }
-  const trimmedEnd = trimBySide(autoTargetPos, targetSidePortId)
+  const trimmedEnd = trimBySide(preciseEnd, targetSidePortId)
 
   // Bottom U-shape special-case
   if (isSourceBottom && targetSidePortId === '__side-bottom') {
@@ -787,9 +806,9 @@ function generateArchitectureModeConnectionPath(
     const tgtBox = cachedBuildNodeBoxModeAware(targetNode)
     const safeClear = 16
     const boxesBottom = Math.max(srcBox.y + srcBox.height, tgtBox.y + tgtBox.height)
-    const minBelow = Math.max(sourcePos.y, autoTargetPos.y) + FIXED_LEAD_LENGTH
+    const minBelow = Math.max(sourcePos.y, preciseEnd.y) + FIXED_LEAD_LENGTH
     const midY = Math.max(boxesBottom + safeClear, minBelow)
-    const bottomUTrimmedEnd = { x: autoTargetPos.x, y: autoTargetPos.y - HALF_MARKER }
+    const bottomUTrimmedEnd = { x: preciseEnd.x, y: preciseEnd.y + HALF_MARKER }
     return [
       `M ${sourcePos.x} ${sourcePos.y}`,
       `L ${sourcePos.x} ${midY}`,
@@ -810,7 +829,10 @@ function generateArchitectureModeConnectionPath(
     const boxesRight = Math.max(srcBox.x + srcBox.width, tgtBox.x + tgtBox.width)
     const minRight = Math.max(sourcePos.x, forcedRightPos.x) + FIXED_LEAD_LENGTH
     const midX = Math.max(boxesRight + safeClear, minRight)
-    const rightUTrimmedEnd = { x: forcedRightPos.x - HALF_MARKER, y: forcedRightPos.y }
+    // Align end to the exact target port Y
+    const rightAligned = { x: forcedRightPos.x, y: targetPos.y }
+    // For right side, push outward (increase x)
+    const rightUTrimmedEnd = { x: rightAligned.x + HALF_MARKER, y: rightAligned.y }
     return [
       `M ${sourcePos.x} ${sourcePos.y}`,
       `L ${midX} ${sourcePos.y}`,
@@ -831,7 +853,10 @@ function generateArchitectureModeConnectionPath(
     const boxesLeft = Math.min(srcBox.x, tgtBox.x)
     const minLeft = Math.min(sourcePos.x, forcedLeftPos.x) - FIXED_LEAD_LENGTH
     const midX = Math.min(boxesLeft - safeClear, minLeft)
-    const leftUTrimmedEnd = { x: forcedLeftPos.x + HALF_MARKER, y: forcedLeftPos.y }
+    // Align end to the exact target port Y
+    const leftAligned = { x: forcedLeftPos.x, y: targetPos.y }
+    // For left side, push outward (decrease x)
+    const leftUTrimmedEnd = { x: leftAligned.x - HALF_MARKER, y: leftAligned.y }
     return [
       `M ${sourcePos.x} ${sourcePos.y}`,
       `L ${midX} ${sourcePos.y}`,

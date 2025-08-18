@@ -3058,7 +3058,9 @@ function WorkflowCanvas({
       svg.selectAll('.output-port-group').classed('can-dropped', false);
       svg.selectAll('.port-group').classed('can-dropped', false);
 
-      dbg.warn('🧹 Cleaned up port highlighting after connection ended');
+      // Note: This is an expected, noise-only event; avoid warn-level logging to prevent React DevTools
+      // from printing a component stack for non-issues.
+      // (Intentionally silenced)
     }
   }, [isConnecting, isInitialized, svgRef, dbg]);
 

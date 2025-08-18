@@ -233,7 +233,7 @@ function computeSourcePosForPreview(
 }
 
 // Helper: trim a point outward by side (architecture marker)
-function trimPointBySide(pt: { x: number; y: number }, side: SidePortId | undefined, sourcePos: PortPosition, HALF_MARKER = 5.5) {
+function trimPointBySide(pt: { x: number; y: number }, side: SidePortId | undefined, sourcePos: PortPosition, HALF_MARKER = 7) {
   if (side) {
     switch (side) {
       // Inward trims so the arrow tip (center-anchored marker) lands on the edge
@@ -511,7 +511,7 @@ export function calculateConnectionPreviewPath(
   }
 ): string { // NOSONAR: readability prioritized over cognitive complexity metric here
   // Helpers extracted to reduce complexity
-  const HALF_MARKER = -5.5
+  const HALF_MARKER = -7
 
   const variant: NodeVariant = opts?.variant ?? 'standard'
   const config: PathConfig | undefined = opts?.config
@@ -790,13 +790,13 @@ function generateArchitectureModeConnectionPath(
   })()
   const endOrientation = sideToOrientation(detectPortSideModeAware(targetNode, targetSidePortId, preciseEnd, 'architecture'))
 
-  const HALF_MARKER = 5.5
+  const HALF_MARKER = 7
   const trimBySide = (pt: { x: number; y: number }, side: SidePortId): { x: number; y: number } => {
     // Inward trims for center-anchored markers
     if (side === '__side-left') { return { x: pt.x - HALF_MARKER, y: pt.y } }
     if (side === '__side-right') { return { x: pt.x - HALF_MARKER, y: pt.y } }
     if (side === '__side-top') { return { x: pt.x, y: pt.y - HALF_MARKER } }
-    return { x: pt.x, y: pt.y - HALF_MARKER }
+    return { x: pt.x, y: pt.y + HALF_MARKER }
   }
   const trimmedEnd = trimBySide(preciseEnd, targetSidePortId)
 

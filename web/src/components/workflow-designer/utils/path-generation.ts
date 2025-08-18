@@ -67,7 +67,7 @@ function projectPointToBoxSide(
   const pad = Math.min(Math.max(radius, 4), Math.min(box.width, box.height) / 2)
   
   // Add extra clearance for arrow markers to prevent overlap
-  const arrowClearance = 8; // Minimal space for arrow marker
+  const arrowClearance = 10; // Slightly increased space for arrow marker to avoid overlap
   
   if (absDx >= absDy) {
     if (dx >= 0) {

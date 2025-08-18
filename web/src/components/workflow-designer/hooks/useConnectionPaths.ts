@@ -79,7 +79,7 @@ export function useConnectionPaths(
       }
     }
     if (removed > 0 && process.env.NODE_ENV === 'development') {
-      console.debug('[useConnectionPaths] cache pruned by', removed)
+      console.warn('[useConnectionPaths] cache pruned by', removed)
     }
   }, [])
 
@@ -125,7 +125,7 @@ export function useConnectionPaths(
         nodeVariant,
         modeId || 'workflow',
         // Config is used by workflow (bezier) generator only.
-        modeId === 'workflow' ? { arrowOffset: 10 } : undefined
+  modeId === 'workflow' ? { arrowOffset: 12 } : undefined
       )
 
       const finalPath = path

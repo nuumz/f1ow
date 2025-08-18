@@ -40,6 +40,14 @@ export function createNodeElements<Datum = unknown, PElement extends d3.BaseType
         // Keep stroke-width in balance with our icon rendering
         .style('stroke-width', 1.8 as unknown as string)
 
+    // Persistent port containers (generated once per node)
+    // Port groups will be created inside these containers during updates
+    const ports = nodeEnter.append('g').attr('class', 'ports')
+    ports.append('g').attr('class', 'input-ports')
+    ports.append('g').attr('class', 'output-ports')
+    ports.append('g').attr('class', 'side-ports')
+    ports.append('g').attr('class', 'bottom-ports')
+
     // Primary label
     nodeEnter
         .append('text')

@@ -2450,6 +2450,7 @@ function WorkflowCanvas({
       // Render simple ports for both variants
       // Input ports - DISABLED drag/click interactions for connection creation
       const inputPortGroups = nodeGroups
+        .select("g.input-ports")
         .selectAll(".input-port-group")
         .data((d: any) =>
           d.inputs.map((input: any) => ({
@@ -2562,6 +2563,7 @@ function WorkflowCanvas({
 
       // Output ports
       const outputPortGroups = nodeGroups
+        .select("g.output-ports")
         .selectAll(".output-port-group")
         .data((d: any) =>
           d.outputs.map((output: any) => ({
@@ -2940,6 +2942,7 @@ function WorkflowCanvas({
       const isArchitectureMode =
         workflowContextState.designerMode === "architecture";
       const sidePortGroups = nodeGroups
+        .select("g.side-ports")
         .selectAll(".side-port-group")
         .data((d: any) => {
           if (!isArchitectureMode) return [];
@@ -3156,6 +3159,7 @@ function WorkflowCanvas({
       // Bottom ports - สำหรับ AI Agent nodes ที่มี bottomPorts
       const bottomPortGroups = nodeGroups
         .filter((d: any) => d.bottomPorts && d.bottomPorts.length > 0)
+        .select("g.bottom-ports")
         .selectAll(".bottom-port-group")
         .data((d: any) => {
           if (!d.bottomPorts) return [];

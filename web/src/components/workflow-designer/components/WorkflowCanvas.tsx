@@ -3,7 +3,6 @@ import type React from 'react';
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import * as d3 from 'd3';
 import { createNodeElements, createNodeGroups } from '../utils/node-elements';
-import { ensureArrowMarkers } from '../utils/arrow-markers';
 import { findNearestPortTarget, type PortDatum } from '../utils/ports-hit-test';
 import type { WorkflowNode, Connection, NodeVariant, NodePort, CanvasTransform } from '../types';
 import { getNodeTypeInfo } from '../types/nodes';
@@ -21,7 +20,10 @@ import {
 } from '../utils/node-utils';
 import { renderIconUse } from '../utils/icon-symbols';
 import { useConnectionPaths } from '../hooks/useConnectionPaths';
-import { getArrowMarkerForMode as getArrowMarkerForModeUtil } from '../utils/marker-utils';
+import {
+  getArrowMarkerForMode as getArrowMarkerForModeUtil,
+  ensureArrowMarkers,
+} from '../utils/marker-utils';
 import { GridPerformanceMonitor } from '../utils/performance-monitor';
 import { ensureDualGridPatterns, renderDualGridRects, GridUtils } from '../utils/grid-patterns';
 import {
@@ -2895,10 +2897,11 @@ function WorkflowCanvas({
           sourceNode,
           connectionStart.portId,
           connectionPreview,
-          nodeVariant,
-          undefined,
-          workflowContextState.designerMode || 'workflow',
-          hoverTargetBox
+          {
+            variant: nodeVariant,
+            modeId: workflowContextState.designerMode || 'workflow',
+            hoverTargetBox,
+          }
         );
 
         // Arrow clearance handled by preview path utilities; no manual trim needed

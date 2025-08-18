@@ -82,11 +82,26 @@ import {
   analyzeConnectionGroups as analyzeConnectionGroupsCore
 } from './connection-analysis'
 
-// Re-export types for backward compatibility
+// Façade exports for connection logic (single import point)
 export type { PortPosition } from '../types'
 export type { PathConfig, ConnectionFlow } from './path-generation'
-export { generateOrthogonalRoundedPath, generateAdaptiveOrthogonalRoundedPath } from './path-generation'
-export type { AnalyzableConnection, GroupedConnection, ConnectionGroupInfo } from './connection-analysis'
+export {
+  generateOrthogonalRoundedPath,
+  generateAdaptiveOrthogonalRoundedPath,
+  generateAdaptiveOrthogonalRoundedPathSmart,
+  FIXED_LEAD_LENGTH,
+} from './path-generation'
+export type {
+  AnalyzableConnection,
+  GroupedConnection,
+  ConnectionGroupInfo,
+  ConnectionGroupStats,
+} from './connection-analysis'
+export {
+  getConnectionGroupInfo as getConnectionGroupInfoFromList,
+  findConnectionsBetweenNodes,
+  findConnectionsForNode,
+} from './connection-analysis'
 
 // Local helpers -------------------------------------------------------------
 type PortSide = 'top' | 'bottom' | 'left' | 'right' | 'unknown'
@@ -115,10 +130,10 @@ function detectPortSideModeAware(
   pos: PortPosition,
   modeId?: string
 ): PortSide {
-  if (portId === '__side-top') {return 'top'}
-  if (portId === '__side-right') {return 'right'}
-  if (portId === '__side-bottom') {return 'bottom'}
-  if (portId === '__side-left') {return 'left'}
+  if (portId === '__side-top') { return 'top' }
+  if (portId === '__side-right') { return 'right' }
+  if (portId === '__side-bottom') { return 'bottom' }
+  if (portId === '__side-left') { return 'left' }
 
   const dims = getModeAwareDimensions(node, modeId)
   const halfW = dims.width / 2
@@ -129,10 +144,10 @@ function detectPortSideModeAware(
   const bottomY = node.y + halfH
   const eps = 0.5
 
-  if (Math.abs(pos.x - rightX) <= eps) {return 'right'}
-  if (Math.abs(pos.x - leftX) <= eps) {return 'left'}
-  if (Math.abs(pos.y - topY) <= eps) {return 'top'}
-  if (Math.abs(pos.y - bottomY) <= eps) {return 'bottom'}
+  if (Math.abs(pos.x - rightX) <= eps) { return 'right' }
+  if (Math.abs(pos.x - leftX) <= eps) { return 'left' }
+  if (Math.abs(pos.y - topY) <= eps) { return 'top' }
+  if (Math.abs(pos.y - bottomY) <= eps) { return 'bottom' }
 
   // Fallback: choose nearest side
   const dxLeft = Math.abs(pos.x - leftX)
@@ -141,12 +156,12 @@ function detectPortSideModeAware(
   const dyBottom = Math.abs(pos.y - bottomY)
   const minX = Math.min(dxLeft, dxRight)
   const minY = Math.min(dyTop, dyBottom)
-  if (minX < minY) {return dxLeft < dxRight ? 'left' : 'right'}
+  if (minX < minY) { return dxLeft < dxRight ? 'left' : 'right' }
   return dyTop < dyBottom ? 'top' : 'bottom'
 }
 
 function sideToOrientation(side: 'top' | 'bottom' | 'left' | 'right' | 'unknown'): 'vertical' | 'horizontal' {
-  if (side === 'top' || side === 'bottom') {return 'vertical'}
+  if (side === 'top' || side === 'bottom') { return 'vertical' }
   return 'horizontal'
 }
 
@@ -167,17 +182,218 @@ function chooseAutoTargetSide(
   return dy > 0 ? '__side-top' : '__side-bottom'
 }
 
-function chooseEndOrientationFromBox(
-  approachFrom: PortPosition,
-  box?: { x: number; y: number; width: number; height: number }
-): 'vertical' | 'horizontal' | undefined {
-  if (!box) {return undefined}
-  const cx = box.x + box.width / 2
-  const cy = box.y + box.height / 2
-  const dx = cx - approachFrom.x
-  const dy = cy - approachFrom.y
-  if (Math.abs(dx) >= Math.abs(dy)) {return 'horizontal'}
-  return 'vertical'
+// chooseEndOrientationFromBox removed (unused after refactor)
+
+// Helper: compute source port position for preview, mode-aware
+function computeSourcePosForPreview(
+  sourceNode: WorkflowNode,
+  sourcePortId: string,
+  portType: 'bottom' | 'output',
+  variant: NodeVariant,
+  modeId: string
+): PortPosition {
+  if (modeId !== 'architecture') {
+    return isVirtualSidePortId(sourcePortId)
+      ? getVirtualSidePortPosition(sourceNode, sourcePortId)
+      : calculatePortPositionCore(sourceNode, sourcePortId, portType, variant)
+  }
+  if (isVirtualSidePortId(sourcePortId)) {
+    return getVirtualSidePortPositionForMode(sourceNode, sourcePortId, modeId)
+  }
+  const dims = getModeAwareDimensions(sourceNode, modeId)
+  if (portType === 'bottom') {
+    const ports = sourceNode.bottomPorts || []
+    const idx = Math.max(0, ports.findIndex(p => p.id === sourcePortId))
+    const portCount = ports.length
+    const usableWidth = Math.min(dims.width * 0.8, dims.width - 70)
+    if (portCount === 2) {
+      const spacing = usableWidth / 3
+      const positions = [-spacing, spacing]
+      return { x: sourceNode.x + (positions[idx] || 0), y: sourceNode.y + dims.height / 2 }
+    }
+    if (portCount === 3) {
+      const halfWidth = usableWidth / 2
+      const positions = [-halfWidth, 0, halfWidth]
+      return { x: sourceNode.x + (positions[idx] || 0), y: sourceNode.y + dims.height / 2 }
+    }
+    if (portCount >= 4) {
+      const spacing = usableWidth / (portCount - 1)
+      const x = -usableWidth / 2 + spacing * idx
+      return { x: sourceNode.x + x, y: sourceNode.y + dims.height / 2 }
+    }
+    return { x: sourceNode.x, y: sourceNode.y + dims.height / 2 }
+  }
+  const ports = sourceNode.outputs
+  const idx = Math.max(0, ports.findIndex(p => p.id === sourcePortId))
+  const count = ports.length || 1
+  const spacing = dims.height / (count + 1)
+  const y = -dims.height / 2 + spacing * (idx + 1)
+  const x = dims.width / 2
+  return { x: sourceNode.x + x, y: sourceNode.y + y }
+}
+
+// Helper: trim a point outward by side (architecture marker)
+function trimPointBySide(pt: { x: number; y: number }, side: SidePortId | undefined, sourcePos: PortPosition, HALF_MARKER = -5.5) {
+  if (side) {
+    switch (side) {
+      case '__side-left': return { x: pt.x + HALF_MARKER, y: pt.y }
+      case '__side-right': return { x: pt.x - HALF_MARKER, y: pt.y }
+      case '__side-top': return { x: pt.x, y: pt.y + HALF_MARKER }
+      case '__side-bottom': return { x: pt.x, y: pt.y - HALF_MARKER }
+      default: return pt
+    }
+  }
+  const dx = pt.x - sourcePos.x
+  const dy = pt.y - sourcePos.y
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return { x: pt.x + (dx > 0 ? -HALF_MARKER : HALF_MARKER), y: pt.y }
+  }
+  return { x: pt.x, y: pt.y + (dy > 0 ? -HALF_MARKER : HALF_MARKER) }
+}
+
+// Helper: compute snap end for architecture preview
+type SnapResult = { previewEnd: { x: number; y: number }; chosenSide?: SidePortId; endOrientation?: 'vertical' | 'horizontal' }
+
+function snapToHoverTargetBox(args: {
+  hoverTargetBox: { x: number; y: number; width: number; height: number }
+  startSide: PortSide
+  isSourceBottomPort: boolean
+  sourcePos: PortPosition
+}): SnapResult | null {
+  const { hoverTargetBox, startSide, isSourceBottomPort, sourcePos } = args
+  const centerX = hoverTargetBox.x + hoverTargetBox.width / 2
+  const centerY = hoverTargetBox.y + hoverTargetBox.height / 2
+  const SNAP_THRESHOLD = FIXED_LEAD_LENGTH * 2
+  if (isSourceBottomPort) {
+    const topY = hoverTargetBox.y
+    const bottomY = hoverTargetBox.y + hoverTargetBox.height
+    const useBottom = (topY - sourcePos.y) < SNAP_THRESHOLD
+    return { previewEnd: { x: centerX, y: useBottom ? bottomY : topY }, chosenSide: useBottom ? '__side-bottom' : '__side-top', endOrientation: 'vertical' }
+  }
+  if (startSide === 'left' || startSide === 'right') {
+    const mockTarget: WorkflowNode = { id: 'mock-target', label: 'Mock Target', x: centerX, y: centerY, type: 'mock', inputs: [], outputs: [], config: {} }
+    const optimalSide = chooseAutoTargetSide(sourcePos, mockTarget)
+    let posBySide: { x: number; y: number }
+    switch (optimalSide) {
+      case '__side-left': posBySide = { x: hoverTargetBox.x, y: centerY }; break
+      case '__side-right': posBySide = { x: hoverTargetBox.x + hoverTargetBox.width, y: centerY }; break
+      case '__side-top': posBySide = { x: centerX, y: hoverTargetBox.y }; break
+      default: posBySide = { x: centerX, y: hoverTargetBox.y + hoverTargetBox.height }
+    }
+    return { previewEnd: posBySide, chosenSide: optimalSide, endOrientation: (optimalSide === '__side-left' || optimalSide === '__side-right') ? 'horizontal' : 'vertical' }
+  }
+  return null
+}
+
+function snapToAvailableNodes(args: {
+  availableNodes?: WorkflowNode[]
+  previewPosition: { x: number; y: number }
+  sourceNode: WorkflowNode
+  sourcePos: PortPosition
+}): SnapResult | null {
+  const { availableNodes, previewPosition, sourceNode, sourcePos } = args
+  if (!availableNodes || availableNodes.length === 0) { return null }
+  const snapTarget = findNearbySnapTargets(previewPosition, availableNodes, sourceNode, sourcePos, 50)
+  if (!snapTarget) { return null }
+  return {
+    previewEnd: { x: snapTarget.x, y: snapTarget.y },
+    chosenSide: snapTarget.targetSide,
+    endOrientation: (snapTarget.targetSide === '__side-left' || snapTarget.targetSide === '__side-right') ? 'horizontal' : 'vertical'
+  }
+}
+
+function computeArchitecturePreviewSnapEnd(params: {
+  hoverTargetBox?: { x: number; y: number; width: number; height: number }
+  availableNodes?: WorkflowNode[]
+  previewPosition: { x: number; y: number }
+  startSide: PortSide
+  isSourceBottomPort: boolean
+  sourcePos: PortPosition
+  sourceNode: WorkflowNode
+}): SnapResult {
+  const { hoverTargetBox, availableNodes, previewPosition, startSide, isSourceBottomPort, sourcePos, sourceNode } = params
+  const hoverSnap = hoverTargetBox
+    ? snapToHoverTargetBox({ hoverTargetBox, startSide, isSourceBottomPort, sourcePos })
+    : null
+  if (hoverSnap) { return hoverSnap }
+  const nodeSnap = snapToAvailableNodes({ availableNodes, previewPosition, sourceNode, sourcePos })
+  if (nodeSnap) { return nodeSnap }
+  const gridSize = 20
+  return { previewEnd: { x: Math.round(previewPosition.x / gridSize) * gridSize, y: Math.round(previewPosition.y / gridSize) * gridSize } }
+}
+
+// Helper: bottom U route for preview
+function maybeBottomUPathForPreview(args: {
+  isSourceBottomPort: boolean
+  hoverTargetBox?: { x: number; y: number; width: number; height: number }
+  previewEnd: { x: number; y: number }
+  sourceNode: WorkflowNode
+  sourcePos: PortPosition
+  HALF_MARKER: number
+}): string | null {
+  const { isSourceBottomPort, hoverTargetBox, previewEnd, sourceNode, sourcePos, HALF_MARKER } = args
+  if (!(isSourceBottomPort && hoverTargetBox && previewEnd.y === hoverTargetBox.y + hoverTargetBox.height)) { return null }
+  const srcBox = buildNodeBox(sourceNode)
+  const targetBottomY = hoverTargetBox.y + hoverTargetBox.height
+  const boxesBottom = Math.max(srcBox.y + srcBox.height, targetBottomY)
+  const safeClear = 16
+  const minBelow = Math.max(sourcePos.y, targetBottomY) + FIXED_LEAD_LENGTH
+  const midY = Math.max(boxesBottom + safeClear, minBelow)
+  const bottomUTrimmedEnd = { x: previewEnd.x, y: previewEnd.y - HALF_MARKER }
+  return [
+    `M ${sourcePos.x} ${sourcePos.y}`,
+    `L ${sourcePos.x} ${midY}`,
+    `L ${bottomUTrimmedEnd.x} ${midY}`,
+    `L ${bottomUTrimmedEnd.x} ${bottomUTrimmedEnd.y}`
+  ].join(' ')
+}
+
+// Helper: horizontal U route for preview
+function maybeHorizontalUPathForPreview(args: {
+  hoverTargetBox?: { x: number; y: number; width: number; height: number }
+  sourceNode: WorkflowNode
+  sourcePortId: string
+  sourcePos: PortPosition
+  modeId: string
+}): string | null {
+  const { hoverTargetBox, sourceNode, sourcePortId, sourcePos, modeId } = args
+  if (!hoverTargetBox) { return null }
+  const startSidePrev = detectPortSideModeAware(sourceNode, sourcePortId, sourcePos, modeId)
+  const srcBox = buildNodeBox(sourceNode)
+  const centerY = hoverTargetBox.y + hoverTargetBox.height / 2
+  const centerX = hoverTargetBox.x + hoverTargetBox.width / 2
+  const safeClear = 16
+  if (startSidePrev === 'right') {
+    const isCloseHorizontally = (centerX - sourcePos.x) < FIXED_LEAD_LENGTH
+    if (isCloseHorizontally) {
+      const rightEdgeCenter = { x: hoverTargetBox.x + hoverTargetBox.width, y: centerY }
+      const boxesRight = Math.max(srcBox.x + srcBox.width, hoverTargetBox.x + hoverTargetBox.width)
+      const minRight = Math.max(sourcePos.x, rightEdgeCenter.x) + FIXED_LEAD_LENGTH
+      const midX = Math.max(boxesRight + safeClear, minRight)
+      return [
+        `M ${sourcePos.x} ${sourcePos.y}`,
+        `L ${midX} ${sourcePos.y}`,
+        `L ${midX} ${rightEdgeCenter.y}`,
+        `L ${rightEdgeCenter.x} ${rightEdgeCenter.y}`
+      ].join(' ')
+    }
+  }
+  if (startSidePrev === 'left') {
+    const isCloseHorizontally = (sourcePos.x - centerX) < FIXED_LEAD_LENGTH
+    if (isCloseHorizontally) {
+      const leftEdgeCenter = { x: hoverTargetBox.x, y: centerY }
+      const boxesLeft = Math.min(srcBox.x, hoverTargetBox.x)
+      const minLeft = Math.min(sourcePos.x, leftEdgeCenter.x) - FIXED_LEAD_LENGTH
+      const midX = Math.min(boxesLeft - safeClear, minLeft)
+      return [
+        `M ${sourcePos.x} ${sourcePos.y}`,
+        `L ${midX} ${sourcePos.y}`,
+        `L ${midX} ${leftEdgeCenter.y}`,
+        `L ${leftEdgeCenter.x} ${leftEdgeCenter.y}`
+      ].join(' ')
+    }
+  }
+  return null
 }
 
 /**
@@ -239,12 +455,12 @@ function findNearbySnapTargets(
   }> = []
 
   for (const node of availableNodes) {
-    if (node.id === sourceNode.id) {continue} // Skip source node
+    if (node.id === sourceNode.id) { continue } // Skip source node
 
     const nodeDistance = Math.sqrt(
       Math.pow(mousePos.x - node.x, 2) + Math.pow(mousePos.y - node.y, 2)
     )
-    if (nodeDistance > snapDistance * 2) {continue} // Skip distant nodes for performance
+    if (nodeDistance > snapDistance * 2) { continue } // Skip distant nodes for performance
 
     // Use same target side selection logic as final connection
     const optimalTargetSide = chooseAutoTargetSide(sourcePos, node)
@@ -282,60 +498,28 @@ export function calculateConnectionPreviewPath(
   sourceNode: WorkflowNode,
   sourcePortId: string,
   previewPosition: { x: number; y: number },
-  variant: NodeVariant = 'standard',
-  config?: PathConfig,
-  modeId: string = 'workflow',
-  hoverTargetBox?: { x: number; y: number; width: number; height: number },
-  availableNodes?: WorkflowNode[]
+  opts?: {
+    variant?: NodeVariant
+    config?: PathConfig
+    modeId?: string
+    hoverTargetBox?: { x: number; y: number; width: number; height: number }
+    availableNodes?: WorkflowNode[]
+  }
 ): string { // NOSONAR: readability prioritized over cognitive complexity metric here
-  // Determine if this is a bottom port (include side-bottom)
+  // Helpers extracted to reduce complexity
+  const HALF_MARKER = -5.5
+
+  const variant: NodeVariant = opts?.variant ?? 'standard'
+  const config: PathConfig | undefined = opts?.config
+  const modeId: string = opts?.modeId ?? 'workflow'
+  const hoverTargetBox = opts?.hoverTargetBox
+  const availableNodes = opts?.availableNodes
+
   const isSourceBottomPort = isBottomPort(sourceNode, sourcePortId) || sourcePortId === '__side-bottom'
   const portType = isSourceBottomPort ? 'bottom' : 'output'
 
   // Mode-aware port position for accurate endpoint alignment
-  let sourcePos: PortPosition
-  if (modeId === 'architecture') {
-    if (isVirtualSidePortId(sourcePortId)) {
-      sourcePos = getVirtualSidePortPositionForMode(sourceNode, sourcePortId, modeId)
-    } else {
-      // Architecture: fixed rectangle spacing ports
-      const dims = getModeAwareDimensions(sourceNode, modeId)
-      if (portType === 'bottom') {
-        // Bottom port: find index and layout
-        const ports = sourceNode.bottomPorts || []
-        const idx = Math.max(0, ports.findIndex(p => p.id === sourcePortId))
-        const portCount = ports.length
-        const usableWidth = Math.min(dims.width * 0.8, dims.width - 70)
-        let x = 0
-        if (portCount === 2) {
-          const spacing = usableWidth / 3
-          const positions = [-spacing, spacing]
-          x = positions[idx] || 0
-        } else if (portCount === 3) {
-          const halfWidth = usableWidth / 2
-          const positions = [-halfWidth, 0, halfWidth]
-          x = positions[idx] || 0
-        } else if (portCount >= 4) {
-          const spacing = usableWidth / (portCount - 1)
-          x = -usableWidth / 2 + spacing * idx
-        }
-        sourcePos = { x: sourceNode.x + x, y: sourceNode.y + dims.height / 2 }
-      } else {
-        // Non-bottom preview always originates from an output port in this flow
-        const ports = sourceNode.outputs
-        const idx = Math.max(0, ports.findIndex(p => p.id === sourcePortId))
-        const count = ports.length || 1
-        const spacing = dims.height / (count + 1)
-        const y = -dims.height / 2 + spacing * (idx + 1)
-        const x = dims.width / 2
-        sourcePos = { x: sourceNode.x + x, y: sourceNode.y + y }
-      }
-    }
-  } else {
-    sourcePos = isVirtualSidePortId(sourcePortId)
-      ? getVirtualSidePortPosition(sourceNode, sourcePortId)
-      : calculatePortPositionCore(sourceNode, sourcePortId, portType, variant)
-  }
+  const sourcePos: PortPosition = computeSourcePosForPreview(sourceNode, sourcePortId, portType, variant, modeId)
 
   // Validate positions
   if (!validatePathInputs(sourcePos, previewPosition)) {
@@ -348,198 +532,31 @@ export function calculateConnectionPreviewPath(
 
   // Architecture mode should preview orthogonal (right‑angle) path with radius to match final rendering
   if (modeId === 'architecture') {
-    // Prefer adaptive path to better match final routing around obstacles
     const startSide = detectPortSideModeAware(sourceNode, sourcePortId, sourcePos, modeId)
     const startOrientation = sideToOrientation(startSide)
-    // Snap rules in architecture mode preview
-    // - Bottom start: snap to top/bottom edge center (existing)
-    // - Left/Right start: snap to nearest left/right edge center
-    const SNAP_THRESHOLD = FIXED_LEAD_LENGTH * 2
-    let previewEnd = previewPosition
-    let endOrientation: 'vertical' | 'horizontal' | undefined = chooseEndOrientationFromBox(sourcePos, hoverTargetBox)
-    // Track chosen target side (for consistent trimming)
-    let chosenSide: SidePortId | undefined
-    if (hoverTargetBox) {
-      const centerX = hoverTargetBox.x + hoverTargetBox.width / 2
-      const centerY = hoverTargetBox.y + hoverTargetBox.height / 2
-      if (isSourceBottomPort) {
-        const sourceY = sourcePos.y
-        const topY = hoverTargetBox.y
-        const bottomY = hoverTargetBox.y + hoverTargetBox.height
-        const useBottom = (topY - sourceY) < SNAP_THRESHOLD
-        previewEnd = { x: centerX, y: useBottom ? bottomY : topY }
-        chosenSide = useBottom ? '__side-bottom' : '__side-top'
-        endOrientation = 'vertical'
-      } else if (startSide === 'left' || startSide === 'right') {
-        // Use same target side selection logic as final connection for consistency
-        const mockTargetNode: WorkflowNode = {
-          id: 'mock-target',
-          label: 'Mock Target',
-          x: centerX,
-          y: centerY,
-          type: 'mock',
-          inputs: [],
-          outputs: [],
-          config: {}
-        }
+    const { previewEnd, chosenSide, endOrientation } = computeArchitecturePreviewSnapEnd({
+      hoverTargetBox,
+      availableNodes,
+      previewPosition,
+      startSide,
+      isSourceBottomPort,
+      sourcePos,
+      sourceNode
+    })
 
-        // Apply same chooseAutoTargetSide logic as final path
-        const optimalTargetSide = chooseAutoTargetSide(sourcePos, mockTargetNode)
-        const optimalTargetPos = (() => {
-          switch (optimalTargetSide) {
-            case '__side-left':
-              return { x: hoverTargetBox.x, y: centerY }
-            case '__side-right':
-              return { x: hoverTargetBox.x + hoverTargetBox.width, y: centerY }
-            case '__side-top':
-              return { x: centerX, y: hoverTargetBox.y }
-            case '__side-bottom':
-              return { x: centerX, y: hoverTargetBox.y + hoverTargetBox.height }
-            default:
-              return { x: centerX, y: centerY }
-          }
-        })()
+    const bottomU = maybeBottomUPathForPreview({ isSourceBottomPort, hoverTargetBox, previewEnd, sourceNode, sourcePos, HALF_MARKER })
+    if (bottomU) { return bottomU }
 
-        previewEnd = optimalTargetPos
-        chosenSide = optimalTargetSide
-        endOrientation = (optimalTargetSide === '__side-left' || optimalTargetSide === '__side-right')
-          ? 'horizontal' : 'vertical'
-      }
-    } else if (availableNodes && availableNodes.length > 0) {
-      // Not hovering a target box: try to snap to nearby nodes using final logic
-      const snapTarget = findNearbySnapTargets(previewPosition, availableNodes, sourceNode, sourcePos, 50)
-      if (snapTarget) {
-        previewEnd = { x: snapTarget.x, y: snapTarget.y }
-        chosenSide = snapTarget.targetSide
-        endOrientation = (snapTarget.targetSide === '__side-left' || snapTarget.targetSide === '__side-right')
-          ? 'horizontal' : 'vertical'
-      } else {
-        // Fallback grid snap for cleaner preview
-        const gridSize = 20
-        previewEnd = {
-          x: Math.round(previewPosition.x / gridSize) * gridSize,
-          y: Math.round(previewPosition.y / gridSize) * gridSize
-        }
-      }
-    } else {
-      // No hover and no availableNodes: snap to grid for stability
-      const gridSize = 20
-      previewEnd = {
-        x: Math.round(previewPosition.x / gridSize) * gridSize,
-        y: Math.round(previewPosition.y / gridSize) * gridSize
-      }
-    }
+    const horizontalU = maybeHorizontalUPathForPreview({ hoverTargetBox, sourceNode, sourcePortId, sourcePos, modeId })
+    if (horizontalU) { return horizontalU }
 
-    // If snapping to bottom in close range, draw a U-shape to avoid overlapping nodes:
-    // Down from source, across under both nodes, then up into target bottom.
-    if (
-      isSourceBottomPort && hoverTargetBox && previewEnd.y === hoverTargetBox.y + hoverTargetBox.height
-    ) {
-      // memoized source box for preview (shape-aware)
-      const srcBox = buildNodeBox(sourceNode)
-      const targetBottomY = hoverTargetBox.y + hoverTargetBox.height
-      const boxesBottom = Math.max(srcBox.y + srcBox.height, targetBottomY)
-      const safeClear = 16
-      // Enforce vertical leg min length of FIXED_LEAD_LENGTH for both sides
-      const minBelow = Math.max(sourcePos.y, targetBottomY) + FIXED_LEAD_LENGTH
-      const midY = Math.max(boxesBottom + safeClear, minBelow)
-      // Trim like final bottom U-shape (approach from above) using outward trim
-      const HALF_MARKER = -5.5
-      const bottomUTrimmedEnd = { x: previewEnd.x, y: previewEnd.y - HALF_MARKER }
-      return [
-        `M ${sourcePos.x} ${sourcePos.y}`,
-        `L ${sourcePos.x} ${midY}`,
-        `L ${bottomUTrimmedEnd.x} ${midY}`,
-        `L ${bottomUTrimmedEnd.x} ${bottomUTrimmedEnd.y}`
-      ].join(' ')
-    }
-
-    // U-shape logic should check if we need to route around using the calculated optimal target side
-    if (hoverTargetBox && previewEnd) {
-      const startSidePrev = detectPortSideModeAware(sourceNode, sourcePortId, sourcePos, modeId)
-      const srcBox = buildNodeBox(sourceNode)
-      const centerY = hoverTargetBox.y + hoverTargetBox.height / 2
-
-      // Determine if we need U-shape based on optimal target position and proximity
-      if (startSidePrev === 'right') {
-        // Use center distance like final path
-        const centerX = hoverTargetBox.x + hoverTargetBox.width / 2
-        const isCloseHorizontally = (centerX - sourcePos.x) < FIXED_LEAD_LENGTH
-
-        if (isCloseHorizontally) {
-          // Force right-side target for U-shape routing
-          const rightEdgeCenter = { x: hoverTargetBox.x + hoverTargetBox.width, y: centerY }
-          const boxesRight = Math.max(srcBox.x + srcBox.width, hoverTargetBox.x + hoverTargetBox.width)
-          const safeClear = 16
-          const minRight = Math.max(sourcePos.x, rightEdgeCenter.x) + FIXED_LEAD_LENGTH
-          const midX = Math.max(boxesRight + safeClear, minRight)
-          return [
-            `M ${sourcePos.x} ${sourcePos.y}`,
-            `L ${midX} ${sourcePos.y}`,
-            `L ${midX} ${rightEdgeCenter.y}`,
-            `L ${rightEdgeCenter.x} ${rightEdgeCenter.y}`
-          ].join(' ')
-        }
-      }
-
-      if (startSidePrev === 'left') {
-        // Use center distance like final path
-        const centerX = hoverTargetBox.x + hoverTargetBox.width / 2
-        const isCloseHorizontally = (sourcePos.x - centerX) < FIXED_LEAD_LENGTH
-
-        if (isCloseHorizontally) {
-          // Force left-side target for U-shape routing
-          const leftEdgeCenter = { x: hoverTargetBox.x, y: centerY }
-          const boxesLeft = Math.min(srcBox.x, hoverTargetBox.x)
-          const safeClear = 16
-          const minLeft = Math.min(sourcePos.x, leftEdgeCenter.x) - FIXED_LEAD_LENGTH
-          const midX = Math.min(boxesLeft - safeClear, minLeft)
-          return [
-            `M ${sourcePos.x} ${sourcePos.y}`,
-            `L ${midX} ${sourcePos.y}`,
-            `L ${midX} ${leftEdgeCenter.y}`,
-            `L ${leftEdgeCenter.x} ${leftEdgeCenter.y}`
-          ].join(' ')
-        }
-      }
-    }
-
-    // Trim the end by half marker size (center-anchored marker). Marker for architecture ~size 15.
-    // Use negative constant and mirror final path logic so trimming always goes outward from the node.
-    const HALF_MARKER = -5.5
-    const trimmedEndPreview = (() => {
-      if (chosenSide) {
-        switch (chosenSide) {
-          case '__side-left':
-            return { x: previewEnd.x + HALF_MARKER, y: previewEnd.y }
-          case '__side-right':
-            return { x: previewEnd.x - HALF_MARKER, y: previewEnd.y }
-          case '__side-top':
-            return { x: previewEnd.x, y: previewEnd.y + HALF_MARKER }
-          case '__side-bottom':
-            return { x: previewEnd.x, y: previewEnd.y - HALF_MARKER }
-        }
-      }
-      // Fallback by vector if side unknown
-      const dx = previewEnd.x - sourcePos.x
-      const dy = previewEnd.y - sourcePos.y
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        const right = dx > 0
-        // Right => x - HALF_MARKER (outward), Left => x + HALF_MARKER (outward)
-        return { x: previewEnd.x + (right ? -HALF_MARKER : HALF_MARKER), y: previewEnd.y }
-      }
-      const bottom = dy > 0
-      // Bottom => y - HALF_MARKER (outward), Top => y + HALF_MARKER (outward)
-      return { x: previewEnd.x, y: previewEnd.y + (bottom ? -HALF_MARKER : HALF_MARKER) }
-    })()
-
-    const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, trimmedEndPreview, 16, {
-      clearance: 10, // Minimal clearance for tight arrow positioning
+    const trimmedEndPreview = trimPointBySide(previewEnd, chosenSide, sourcePos, HALF_MARKER)
+    return generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, trimmedEndPreview, 16, {
+      clearance: 10,
       targetBox: hoverTargetBox,
       startOrientationOverride: startOrientation,
       endOrientationOverride: endOrientation
     })
-    return routed
   }
 
   // Generate curved preview path (default)
@@ -562,7 +579,7 @@ export function generateModeAwarePreviewPath(
   }
 ): string {
   const { modeId, variant = 'standard', config, hoverTargetBox, availableNodes } = options
-  return calculateConnectionPreviewPath(sourceNode, sourcePortId, previewPosition, variant, config, modeId, hoverTargetBox, availableNodes)
+  return calculateConnectionPreviewPath(sourceNode, sourcePortId, previewPosition, { variant, config, modeId, hoverTargetBox, availableNodes })
 }
 
 /**
@@ -646,7 +663,7 @@ export function generateModeAwareConnectionPath(
 ): string {
   const sourceNode = nodes.find(n => n.id === connection.sourceNodeId)
   const targetNode = nodes.find(n => n.id === connection.targetNodeId)
-  if (!sourceNode || !targetNode) {return ''}
+  if (!sourceNode || !targetNode) { return '' }
 
   if (modeId === 'architecture') {
     return generateArchitectureModeConnectionPath(sourceNode, targetNode, connection)
@@ -669,164 +686,110 @@ function generateArchitectureModeConnectionPath(
   targetNode: WorkflowNode,
   connection: { sourceNodeId: string; sourcePortId: string; targetNodeId: string; targetPortId: string }
 ): string {
-  // Use port positioning (including virtual side-port anchors) for start/end, then orthogonal path
-  // Per-call lightweight caches to reduce repeated geometry computations
+  // Lightweight caches
   const boxCache = new Map<WorkflowNode, { x: number; y: number; width: number; height: number }>()
   const portPosCache = new WeakMap<WorkflowNode, Map<string, { x: number; y: number }>>()
-  const cachedBuildNodeBoxModeAware = (node: WorkflowNode, mode: 'workflow' | 'architecture') => {
+  const cachedBuildNodeBoxModeAware = (node: WorkflowNode) => {
     const hit = boxCache.get(node)
-    if (hit) {return hit}
-    const box = buildNodeBoxModeAware(node, mode)
+    if (hit) { return hit }
+    const box = buildNodeBoxModeAware(node, 'architecture')
     boxCache.set(node, box)
     return box
   }
-  const cachedGetVirtualSidePortPositionForMode = (
-    node: WorkflowNode,
-    side: '__side-left' | '__side-right' | '__side-top' | '__side-bottom',
-    mode: 'workflow' | 'architecture'
-  ) => {
+  const cachedSidePort = (node: WorkflowNode, side: SidePortId) => {
     let inner = portPosCache.get(node)
-    if (!inner) {
-      inner = new Map<string, { x: number; y: number }>()
-      portPosCache.set(node, inner)
-    }
-    const key = `${side}|${mode}`
+    if (!inner) { inner = new Map<string, { x: number; y: number }>(); portPosCache.set(node, inner) }
+    const key = `${side}|architecture`
     const hit = inner.get(key)
-    if (hit) {return hit}
-    const pos = getVirtualSidePortPositionForMode(node, side, mode)
+    if (hit) { return hit }
+    const pos = getVirtualSidePortPositionForMode(node, side, 'architecture')
     inner.set(key, pos)
     return pos
   }
+
   const isSourceBottom = isBottomPort(sourceNode, connection.sourcePortId) || connection.sourcePortId === '__side-bottom'
   const isTargetBottom = isBottomPort(targetNode, connection.targetPortId) || connection.targetPortId === '__side-bottom'
   const sourceType = isSourceBottom ? 'bottom' : 'output'
   const targetType = isTargetBottom ? 'bottom' : 'input'
-  // ARCH: compute using fixed-size geometry so endpoints match port circles
   const sourceDims = getModeAwareDimensions(sourceNode, 'architecture')
   const targetDims = getModeAwareDimensions(targetNode, 'architecture')
-  const sourcePos: PortPosition = (() => {
-    if (isVirtualSidePortId(connection.sourcePortId)) {
-      return getVirtualSidePortPositionForMode(sourceNode, connection.sourcePortId, 'architecture')
-    }
-    if (sourceType === 'bottom') {
-      const ports = sourceNode.bottomPorts || []
-      const idx = Math.max(0, ports.findIndex(p => p.id === connection.sourcePortId))
+
+  const computeArchPortPos = (node: WorkflowNode, portId: string, portType: 'bottom' | 'input' | 'output', dims: { width: number; height: number }): PortPosition => {
+    if (isVirtualSidePortId(portId)) { return getVirtualSidePortPositionForMode(node, portId, 'architecture') }
+    if (portType === 'bottom') {
+      const ports = node.bottomPorts || []
+      const idx = Math.max(0, ports.findIndex(p => p.id === portId))
       const count = ports.length
-      const usableWidth = Math.min(sourceDims.width * 0.8, sourceDims.width - 70)
-      let relX = 0
+      const usableWidth = Math.min(dims.width * 0.8, dims.width - 70)
       if (count === 2) {
-        const spacing = usableWidth / 3
-        const positions = [-spacing, spacing]
-        relX = positions[idx] || 0
-      } else if (count === 3) {
-        const half = usableWidth / 2
-        const positions = [-half, 0, half]
-        relX = positions[idx] || 0
-      } else if (count >= 4) {
-        const spacing = usableWidth / (count - 1)
-        relX = -usableWidth / 2 + spacing * idx
+        const spacing = usableWidth / 3; const positions = [-spacing, spacing]
+        return { x: node.x + (positions[idx] || 0), y: node.y + dims.height / 2 }
       }
-      return { x: sourceNode.x + relX, y: sourceNode.y + sourceDims.height / 2 }
-    }
-    const ports = sourceNode.outputs
-    const idx = Math.max(0, ports.findIndex(p => p.id === connection.sourcePortId))
-    const count = ports.length || 1
-    const spacing = sourceDims.height / (count + 1)
-    const y = -sourceDims.height / 2 + spacing * (idx + 1)
-    const x = sourceDims.width / 2
-    return { x: sourceNode.x + x, y: sourceNode.y + y }
-  })()
-  const targetPos: PortPosition = (() => {
-    if (isVirtualSidePortId(connection.targetPortId)) {
-      return getVirtualSidePortPositionForMode(targetNode, connection.targetPortId, 'architecture')
-    }
-    if (targetType === 'bottom') {
-      const ports = targetNode.bottomPorts || []
-      const idx = Math.max(0, ports.findIndex(p => p.id === connection.targetPortId))
-      const count = ports.length
-      const usableWidth = Math.min(targetDims.width * 0.8, targetDims.width - 70)
-      let relX = 0
-      if (count === 2) {
-        const spacing = usableWidth / 3
-        const positions = [-spacing, spacing]
-        relX = positions[idx] || 0
-      } else if (count === 3) {
-        const half = usableWidth / 2
-        const positions = [-half, 0, half]
-        relX = positions[idx] || 0
-      } else if (count >= 4) {
-        const spacing = usableWidth / (count - 1)
-        relX = -usableWidth / 2 + spacing * idx
+      if (count === 3) {
+        const half = usableWidth / 2; const positions = [-half, 0, half]
+        return { x: node.x + (positions[idx] || 0), y: node.y + dims.height / 2 }
       }
-      return { x: targetNode.x + relX, y: targetNode.y + targetDims.height / 2 }
+      if (count >= 4) {
+        const spacing = usableWidth / (count - 1)
+        const relX = -usableWidth / 2 + spacing * idx
+        return { x: node.x + relX, y: node.y + dims.height / 2 }
+      }
+      return { x: node.x, y: node.y + dims.height / 2 }
     }
-    const ports = targetType === 'input' ? targetNode.inputs : targetNode.outputs
-    const idx = Math.max(0, ports.findIndex(p => p.id === connection.targetPortId))
+    const ports = portType === 'input' ? node.inputs : node.outputs
+    const idx = Math.max(0, ports.findIndex(p => p.id === portId))
     const count = ports.length || 1
-    const spacing = targetDims.height / (count + 1)
-    const y = -targetDims.height / 2 + spacing * (idx + 1)
-    const x = targetType === 'input' ? -targetDims.width / 2 : targetDims.width / 2
-    return { x: targetNode.x + x, y: targetNode.y + y }
-  })()
-  if (!validatePathInputs(sourcePos, targetPos)) {return ''}
-  // Build boxes and obstacles for adaptive routing
+    const spacing = dims.height / (count + 1)
+    const y = -dims.height / 2 + spacing * (idx + 1)
+    const x = portType === 'input' ? -dims.width / 2 : dims.width / 2
+    return { x: node.x + x, y: node.y + y }
+  }
+
+  const sourcePos = computeArchPortPos(sourceNode, connection.sourcePortId, sourceType, sourceDims)
+  const targetPos = computeArchPortPos(targetNode, connection.targetPortId, targetType, targetDims)
+  if (!validatePathInputs(sourcePos, targetPos)) { return '' }
+
   const startSide = detectPortSideModeAware(sourceNode, connection.sourcePortId, sourcePos, 'architecture')
   const startOrientation = sideToOrientation(startSide)
-  // Auto-select target side if targetPortId is not an explicit virtual side
-  type SidePortId = '__side-left' | '__side-right' | '__side-top' | '__side-bottom'
-  let targetSidePortId: SidePortId
-  if (isSourceBottom) {
-    // Architecture rule: when starting from bottom port, choose target side based on vertical proximity
-    // If target top is within 50px below the source Y, use target bottom; else use target top
-    const SNAP_THRESHOLD = FIXED_LEAD_LENGTH * 2
-    const tBox = buildNodeBoxModeAware(targetNode, 'architecture')
-    const sourceY = sourcePos.y
-    const topY = tBox.y
-    const useBottom = (topY - sourceY) < SNAP_THRESHOLD
-    targetSidePortId = useBottom ? '__side-bottom' : '__side-top'
-  } else if (isVirtualSidePortId(connection.targetPortId)) {
-    const tp = connection.targetPortId
-    // Narrow to side-port union (fallback to auto if unexpected id)
-    targetSidePortId = (tp === '__side-left' || tp === '__side-right' || tp === '__side-top' || tp === '__side-bottom')
-      ? tp
-      : chooseAutoTargetSide(sourcePos, targetNode)
-  } else {
-    targetSidePortId = chooseAutoTargetSide(sourcePos, targetNode)
+
+  const chooseTargetSide = (): SidePortId => {
+    if (isSourceBottom) {
+      const SNAP_THRESHOLD = FIXED_LEAD_LENGTH * 2
+      const tBox = cachedBuildNodeBoxModeAware(targetNode)
+      const useBottom = (tBox.y - sourcePos.y) < SNAP_THRESHOLD
+      return useBottom ? '__side-bottom' : '__side-top'
+    }
+    if (isVirtualSidePortId(connection.targetPortId)) {
+      const tp = connection.targetPortId
+      return (tp === '__side-left' || tp === '__side-right' || tp === '__side-top' || tp === '__side-bottom')
+        ? tp
+        : chooseAutoTargetSide(sourcePos, targetNode)
+    }
+    return chooseAutoTargetSide(sourcePos, targetNode)
   }
+
+  const targetSidePortId = chooseTargetSide()
   const autoTargetPos = getVirtualSidePortPositionForMode(targetNode, targetSidePortId, 'architecture')
   const endOrientation = sideToOrientation(detectPortSideModeAware(targetNode, targetSidePortId, autoTargetPos, 'architecture'))
 
-  // Trim the end by half marker size (center-anchored marker). Architecture marker size ≈ 15.
   const HALF_MARKER = -5.5
-  const trimmedEnd = (() => {
-    switch (targetSidePortId) {
-      case '__side-left':
-        return { x: autoTargetPos.x + HALF_MARKER, y: autoTargetPos.y }
-      case '__side-right':
-        return { x: autoTargetPos.x - HALF_MARKER, y: autoTargetPos.y }
-      case '__side-top':
-        return { x: autoTargetPos.x, y: autoTargetPos.y + HALF_MARKER }
-      case '__side-bottom':
-        return { x: autoTargetPos.x, y: autoTargetPos.y - HALF_MARKER }
-      default:
-        return autoTargetPos
-    }
-  })()
+  const trimBySide = (pt: { x: number; y: number }, side: SidePortId): { x: number; y: number } => {
+    if (side === '__side-left') { return { x: pt.x + HALF_MARKER, y: pt.y } }
+    if (side === '__side-right') { return { x: pt.x - HALF_MARKER, y: pt.y } }
+    if (side === '__side-top') { return { x: pt.x, y: pt.y + HALF_MARKER } }
+    return { x: pt.x, y: pt.y - HALF_MARKER }
+  }
+  const trimmedEnd = trimBySide(autoTargetPos, targetSidePortId)
 
-  // If we chose bottom due to close vertical proximity, draw a U-shape under both nodes to avoid overlap
+  // Bottom U-shape special-case
   if (isSourceBottom && targetSidePortId === '__side-bottom') {
-    const srcBox = buildNodeBoxModeAware(sourceNode, 'architecture')
-    const tgtBox = buildNodeBoxModeAware(targetNode, 'architecture')
+    const srcBox = cachedBuildNodeBoxModeAware(sourceNode)
+    const tgtBox = cachedBuildNodeBoxModeAware(targetNode)
     const safeClear = 16
     const boxesBottom = Math.max(srcBox.y + srcBox.height, tgtBox.y + tgtBox.height)
-    // Enforce vertical leg min length of FIXED_LEAD_LENGTH for both sides
     const minBelow = Math.max(sourcePos.y, autoTargetPos.y) + FIXED_LEAD_LENGTH
     const midY = Math.max(boxesBottom + safeClear, minBelow)
-
-    // For U-shape bottom: final vertical segment goes upward into bottom side.
-    // Trim outward (below the node) so arrowhead doesn't penetrate the node.
     const bottomUTrimmedEnd = { x: autoTargetPos.x, y: autoTargetPos.y - HALF_MARKER }
-
     return [
       `M ${sourcePos.x} ${sourcePos.y}`,
       `L ${sourcePos.x} ${midY}`,
@@ -835,65 +798,55 @@ function generateArchitectureModeConnectionPath(
     ].join(' ')
   }
 
-  // Horizontal U-shape: when starting from RIGHT and target is horizontally very close,
-  // route around the outer right side and terminate at the RIGHT port (same side as source).
-  if (startSide === 'right') {
-    const forcedRightPos = cachedGetVirtualSidePortPositionForMode(targetNode, '__side-right', 'architecture')
+  // Horizontal U-shapes for close proximity
+  const maybeRightU = (): string | null => {
+    if (startSide !== 'right') { return null }
+    const forcedRightPos = cachedSidePort(targetNode, '__side-right')
     const isCloseHorizontally = (targetNode.x - sourcePos.x) < FIXED_LEAD_LENGTH
-    if (isCloseHorizontally) {
-      const srcBox = cachedBuildNodeBoxModeAware(sourceNode, 'architecture')
-      const tgtBox = cachedBuildNodeBoxModeAware(targetNode, 'architecture')
-      const safeClear = 16
-      const boxesRight = Math.max(srcBox.x + srcBox.width, tgtBox.x + tgtBox.width)
-      // Enforce horizontal leg min length of FIXED_LEAD_LENGTH for both sides
-      const minRight = Math.max(sourcePos.x, forcedRightPos.x) + FIXED_LEAD_LENGTH
-      const midX = Math.max(boxesRight + safeClear, minRight)
-
-      // For U-shape right: final segment is horizontal (from right), so trim from right
-      const rightUTrimmedEnd = { x: forcedRightPos.x - HALF_MARKER, y: forcedRightPos.y }
-
-      return [
-        `M ${sourcePos.x} ${sourcePos.y}`,
-        `L ${midX} ${sourcePos.y}`,
-        `L ${midX} ${rightUTrimmedEnd.y}`,
-        `L ${rightUTrimmedEnd.x} ${rightUTrimmedEnd.y}`
-      ].join(' ')
-    }
+    if (!isCloseHorizontally) { return null }
+    const srcBox = cachedBuildNodeBoxModeAware(sourceNode)
+    const tgtBox = cachedBuildNodeBoxModeAware(targetNode)
+    const safeClear = 16
+    const boxesRight = Math.max(srcBox.x + srcBox.width, tgtBox.x + tgtBox.width)
+    const minRight = Math.max(sourcePos.x, forcedRightPos.x) + FIXED_LEAD_LENGTH
+    const midX = Math.max(boxesRight + safeClear, minRight)
+    const rightUTrimmedEnd = { x: forcedRightPos.x - HALF_MARKER, y: forcedRightPos.y }
+    return [
+      `M ${sourcePos.x} ${sourcePos.y}`,
+      `L ${midX} ${sourcePos.y}`,
+      `L ${midX} ${rightUTrimmedEnd.y}`,
+      `L ${rightUTrimmedEnd.x} ${rightUTrimmedEnd.y}`
+    ].join(' ')
   }
+  const rightU = maybeRightU(); if (rightU) { return rightU }
 
-  // Symmetric Horizontal U-shape: when starting from LEFT and target is horizontally very close,
-  // route around the outer left side and terminate at the LEFT port (same side as source).
-  if (startSide === 'left') {
-    const forcedLeftPos = cachedGetVirtualSidePortPositionForMode(targetNode, '__side-left', 'architecture')
+  const maybeLeftU = (): string | null => {
+    if (startSide !== 'left') { return null }
+    const forcedLeftPos = cachedSidePort(targetNode, '__side-left')
     const isCloseHorizontally = (sourcePos.x - targetNode.x) < FIXED_LEAD_LENGTH
-    if (isCloseHorizontally) {
-      const srcBox = cachedBuildNodeBoxModeAware(sourceNode, 'architecture')
-      const tgtBox = cachedBuildNodeBoxModeAware(targetNode, 'architecture')
-      const safeClear = 16
-      const boxesLeft = Math.min(srcBox.x, tgtBox.x)
-      // Enforce horizontal leg min length of FIXED_LEAD_LENGTH for both sides (to the left)
-      const minLeft = Math.min(sourcePos.x, forcedLeftPos.x) - FIXED_LEAD_LENGTH
-      const midX = Math.min(boxesLeft - safeClear, minLeft)
-
-      // For U-shape left: final segment is horizontal (from left), so trim from left
-      const leftUTrimmedEnd = { x: forcedLeftPos.x + HALF_MARKER, y: forcedLeftPos.y }
-
-      return [
-        `M ${sourcePos.x} ${sourcePos.y}`,
-        `L ${midX} ${sourcePos.y}`,
-        `L ${midX} ${leftUTrimmedEnd.y}`,
-        `L ${leftUTrimmedEnd.x} ${leftUTrimmedEnd.y}`
-      ].join(' ')
-    }
+    if (!isCloseHorizontally) { return null }
+    const srcBox = cachedBuildNodeBoxModeAware(sourceNode)
+    const tgtBox = cachedBuildNodeBoxModeAware(targetNode)
+    const safeClear = 16
+    const boxesLeft = Math.min(srcBox.x, tgtBox.x)
+    const minLeft = Math.min(sourcePos.x, forcedLeftPos.x) - FIXED_LEAD_LENGTH
+    const midX = Math.min(boxesLeft - safeClear, minLeft)
+    const leftUTrimmedEnd = { x: forcedLeftPos.x + HALF_MARKER, y: forcedLeftPos.y }
+    return [
+      `M ${sourcePos.x} ${sourcePos.y}`,
+      `L ${midX} ${sourcePos.y}`,
+      `L ${midX} ${leftUTrimmedEnd.y}`,
+      `L ${leftUTrimmedEnd.x} ${leftUTrimmedEnd.y}`
+    ].join(' ')
   }
+  const leftU = maybeLeftU(); if (leftU) { return leftU }
 
-  const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, trimmedEnd, 16, {
-    clearance: 10, // Minimal clearance for tight arrow positioning
-    targetBox: buildNodeBoxModeAware(targetNode, 'architecture'),
+  return generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, trimmedEnd, 16, {
+    clearance: 10,
+    targetBox: cachedBuildNodeBoxModeAware(targetNode),
     startOrientationOverride: startOrientation,
     endOrientationOverride: endOrientation
   })
-  return routed
 }
 
 /**

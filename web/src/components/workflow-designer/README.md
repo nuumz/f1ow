@@ -7,6 +7,7 @@ A comprehensive visual workflow designer implementation featuring adaptive conne
 The Workflow Designer is a modern, feature-rich visual editor for building and managing complex workflows. It includes:
 
 ### ✨ **Latest Features (2025)**
+
 - **Adaptive Connection Routing**: Smart path generation for nearby nodes with 25% proportional leads
 - **Architecture Mode**: Orthogonal connections with rounded corners for system diagrams
 - **Real-time Preview**: Live connection preview with hover target detection
@@ -14,6 +15,7 @@ The Workflow Designer is a modern, feature-rich visual editor for building and m
 - **Enhanced Performance**: Optimized rendering with D3.js integration and grid performance monitoring
 
 ### 🏗️ **Core Capabilities**
+
 - **Provider Pattern**: Centralized state management using React Context
 - **Visual Canvas**: SVG-based drawing surface with zoom, pan, and grid support
 - **Node System**: Drag-and-drop node creation with type validation
@@ -38,7 +40,7 @@ workflow-designer/
 │   ├── path-generation.ts         # Advanced path algorithms with adaptive routing
 │   ├── node-utils.ts             # Node positioning and shape utilities
 │   ├── canvas-utils.ts           # Canvas transformation and viewport utilities
-│   └── grid-performance.ts       # Performance optimization for large workflows
+│   └── performance-monitor.ts    # Performance optimization for large workflows
 ├── modes/
 │   └── README.md                 # Multi-mode system documentation
 ├── WorkflowDesigner.tsx           # Original component (legacy)
@@ -53,37 +55,42 @@ The `WorkflowCanvas` is the core rendering component that handles all visual asp
 ### **Key Features**
 
 #### 🎨 **Visual Rendering**
+
 - **SVG-based Architecture**: High-performance vector graphics for scalability
 - **D3.js Integration**: Advanced data visualization and interaction handling
 - **Multi-layer System**: Separate layers for grid, connections, nodes, and UI elements
 - **Dynamic Styling**: Context-aware colors, shapes, and visual feedback
 
 #### 🔗 **Advanced Connection System**
+
 - **Adaptive Path Generation**: Smart routing that adjusts for node proximity
   ```typescript
   // Nearby nodes (< 100px apart) use proportional leads
-  const adaptiveFixed = totalDistance < 100 ? totalDistance * 0.25 : 50
+  const adaptiveFixed = totalDistance < 100 ? totalDistance * 0.25 : 50;
   ```
 - **Multiple Path Types**: Bezier curves, orthogonal, and architectural routing
 - **Real-time Preview**: Live connection preview with hover detection
 - **Obstacle Avoidance**: Automatic path adjustment around nodes and boundaries
 
 #### 🏗️ **Architecture Mode**
+
 - **Orthogonal Connections**: Right-angle paths with rounded corners
 - **Virtual Side Ports**: Dynamic port positioning (`__side-top`, `__side-bottom`, etc.)
 - **Proximity Rules**: Smart attachment point selection based on node distance
   ```typescript
   // Architecture rule: < 30px horizontal distance → bottom attachment
-  const attachBottom = Math.abs(targetX - sourceX) < 30
+  const attachBottom = Math.abs(targetX - sourceX) < 30;
   ```
 
 #### 🎯 **Node Management**
+
 - **Shape-aware Positioning**: Automatic port positioning based on node geometry
 - **Multi-selection Support**: Rubber band selection and group operations
 - **Drag & Drop**: Smooth node movement with snap-to-grid and collision detection
 - **Z-index Management**: Dynamic layering for selected, dragging, and normal states
 
 #### ⚡ **Performance Optimizations**
+
 - **Grid Performance Monitoring**: Automatic optimization for large workflows
 - **Viewport Culling**: Only render visible elements during zoom/pan
 - **Memoized Calculations**: Cached path generation and position calculations
@@ -94,109 +101,103 @@ The `WorkflowCanvas` is the core rendering component that handles all visual asp
 ### Basic Implementation
 
 ```tsx
-import { WorkflowDesignerWithProvider } from './components/workflow-designer'
+import { WorkflowDesignerWithProvider } from './components/workflow-designer';
 
 export default function App() {
   return (
     <div className="app">
-      <WorkflowDesignerWithProvider 
+      <WorkflowDesignerWithProvider
         enableArchitectureMode={true}
         showGrid={true}
         optimizeForLargeWorkflows={true}
       />
     </div>
-  )
+  );
 }
 ```
 
 ### Advanced Canvas Configuration
 
 ```tsx
-import { WorkflowCanvas } from './components/workflow-designer'
-import { useWorkflowContext } from './components/workflow-designer/contexts'
+import { WorkflowCanvas } from './components/workflow-designer';
+import { useWorkflowContext } from './components/workflow-designer/contexts';
 
 function CustomWorkflowEditor() {
-  const { state, dispatch } = useWorkflowContext()
-  const svgRef = useRef<SVGSVGElement>(null)
-  
+  const { state, dispatch } = useWorkflowContext();
+  const svgRef = useRef<SVGSVGElement>(null);
+
   return (
     <WorkflowCanvas
       svgRef={svgRef}
       nodes={state.nodes}
       connections={state.connections}
-      
       // Canvas configuration
       showGrid={true}
       canvasTransform={state.canvasTransform}
       nodeVariant="standard" // or "compact", "detailed"
-      
       // Selection state
       selectedNodes={state.selectedNodes}
       selectedConnection={state.selectedConnection}
       isNodeSelected={(id) => state.selectedNodes.has(id)}
-      
       // Connection state with new adaptive routing
       isConnecting={state.connectionState.isConnecting}
       connectionStart={state.connectionState.connectionStart}
       connectionPreview={state.connectionState.preview}
-      
       // Event handlers with enhanced capabilities
       onNodeClick={(node, ctrlKey) => {
-        dispatch({ 
-          type: 'SELECT_NODE', 
-          payload: { nodeId: node.id, multiSelect: ctrlKey }
-        })
+        dispatch({
+          type: 'SELECT_NODE',
+          payload: { nodeId: node.id, multiSelect: ctrlKey },
+        });
       }}
       onConnectionClick={(connection) => {
-        dispatch({ 
-          type: 'SELECT_CONNECTION', 
-          payload: connection 
-        })
+        dispatch({
+          type: 'SELECT_CONNECTION',
+          payload: connection,
+        });
       }}
-      
       // Advanced port interaction
       onPortClick={(nodeId, portId, portType) => {
         // Starts connection with adaptive preview
         dispatch({
           type: 'START_CONNECTION',
-          payload: { nodeId, portId, portType }
-        })
+          payload: { nodeId, portId, portType },
+        });
       }}
-      
       // Drag & drop with proximity detection
       onPortDragEnd={(targetNodeId, targetPortId, canvasX, canvasY) => {
         // Creates connection with optimal path routing
         if (targetNodeId && targetPortId) {
           dispatch({
             type: 'CREATE_CONNECTION',
-            payload: { targetNodeId, targetPortId }
-          })
+            payload: { targetNodeId, targetPortId },
+          });
         }
       }}
     />
-  )
+  );
 }
 ```
 
 ### Architecture Mode Usage
 
 ```tsx
-import { useWorkflowContext } from './components/workflow-designer'
+import { useWorkflowContext } from './components/workflow-designer';
 
 function ArchitectureModeExample() {
-  const { state, operations } = useWorkflowContext()
-  
+  const { state, operations } = useWorkflowContext();
+
   // Enable architecture mode for system diagrams
   useEffect(() => {
-    operations.setDesignerMode('architecture')
-  }, [])
-  
+    operations.setDesignerMode('architecture');
+  }, []);
+
   // Architecture mode features:
   // - Orthogonal connections with rounded corners
   // - Virtual side ports (__side-top, __side-bottom, etc.)
   // - Smart proximity-based attachment (< 30px = bottom attachment)
   // - Adaptive lead lengths for nearby nodes
-  
+
   return (
     <div className="architecture-workflow">
       <WorkflowCanvas
@@ -204,57 +205,53 @@ function ArchitectureModeExample() {
         nodeVariant="architectural" // Optimized for system diagrams
       />
     </div>
-  )
+  );
 }
 ```
 
 ### With Initial Workflow Data
 
 ```tsx
-import { WorkflowDesignerWithProvider } from './components/workflow-designer'
+import { WorkflowDesignerWithProvider } from './components/workflow-designer';
 
 const initialWorkflow = {
-  name: "My Workflow",
+  name: 'My Workflow',
   nodes: [
     {
-      id: "node-1",
-      type: "start",
+      id: 'node-1',
+      type: 'start',
       x: 100,
       y: 100,
-      config: { name: "Start Node" }
-    }
+      config: { name: 'Start Node' },
+    },
   ],
-  connections: []
-}
+  connections: [],
+};
 
 export default function App() {
-  return (
-    <WorkflowDesignerWithProvider initialWorkflow={initialWorkflow} />
-  )
+  return <WorkflowDesignerWithProvider initialWorkflow={initialWorkflow} />;
 }
 ```
 
 ### Using Individual Components with Provider
 
 ```tsx
-import { 
-  WorkflowProvider, 
+import {
+  WorkflowProvider,
   useWorkflowContext,
-  useWorkflowOperations 
-} from './components/workflow-designer'
+  useWorkflowOperations,
+} from './components/workflow-designer';
 
 function CustomWorkflowComponent() {
-  const { state } = useWorkflowContext()
-  const operations = useWorkflowOperations()
+  const { state } = useWorkflowContext();
+  const operations = useWorkflowOperations();
 
   return (
     <div>
-      <button onClick={() => operations.addNode('http')}>
-        Add HTTP Node
-      </button>
+      <button onClick={() => operations.addNode('http')}>Add HTTP Node</button>
       <div>Nodes: {state.nodes.length}</div>
     </div>
-  )
+  );
 }
 
 export default function App() {
@@ -262,7 +259,7 @@ export default function App() {
     <WorkflowProvider>
       <CustomWorkflowComponent />
     </WorkflowProvider>
-  )
+  );
 }
 ```
 
@@ -273,69 +270,74 @@ The workflow designer includes a sophisticated connection routing system with ad
 ### **Connection Path Algorithms**
 
 #### 1. **Adaptive Lead Length Calculation**
+
 ```typescript
 // Smart lead length for nearby nodes
 function getAdaptiveLeadLength(totalDistance: number, requestedFixed: number): number {
   if (totalDistance < requestedFixed * 2) {
     // Use 25% of total distance for each lead, minimum 10px
-    return Math.max(10, totalDistance * 0.25)
+    return Math.max(10, totalDistance * 0.25);
   }
-  return requestedFixed // Standard 50px for normal spacing
+  return requestedFixed; // Standard 50px for normal spacing
 }
 ```
 
 #### 2. **Architecture Mode Routing**
+
 ```typescript
 // Proximity-based attachment rules
 const generateArchitectureConnection = (sourceNode, targetNode) => {
-  const dx = targetNode.x - sourceNode.x
-  
+  const dx = targetNode.x - sourceNode.x;
+
   // For bottom ports: < 30px apart → attach to bottom, else top
-  const targetSide = isSourceBottomPort && Math.abs(dx) < 30 
-    ? '__side-bottom' 
-    : '__side-top'
-    
+  const targetSide = isSourceBottomPort && Math.abs(dx) < 30 ? '__side-bottom' : '__side-top';
+
   return generateAdaptiveOrthogonalPath(sourcePos, targetPos, {
     startOrientation: 'vertical',
     endOrientation: 'vertical',
-    clearance: 10
-  })
-}
+    clearance: 10,
+  });
+};
 ```
 
 #### 3. **Real-time Preview**
+
 ```typescript
 // Live connection preview with hover detection
 const calculateConnectionPreview = (sourceNode, mousePos, hoverTarget) => {
   if (architectureMode && hoverTarget) {
     // Snap to target's edge based on proximity
-    const targetCenter = hoverTarget.x + hoverTarget.width / 2
-    const previewEnd = Math.abs(targetCenter - sourceNode.x) < 30
-      ? { x: targetCenter, y: hoverTarget.y + hoverTarget.height } // bottom
-      : { x: targetCenter, y: hoverTarget.y } // top
-      
-    return generateAdaptiveOrthogonalPath(sourcePos, previewEnd)
+    const targetCenter = hoverTarget.x + hoverTarget.width / 2;
+    const previewEnd =
+      Math.abs(targetCenter - sourceNode.x) < 30
+        ? { x: targetCenter, y: hoverTarget.y + hoverTarget.height } // bottom
+        : { x: targetCenter, y: hoverTarget.y }; // top
+
+    return generateAdaptiveOrthogonalPath(sourcePos, previewEnd);
   }
-  
-  return generatePreviewPath(sourcePos, mousePos) // Curved preview
-}
+
+  return generatePreviewPath(sourcePos, mousePos); // Curved preview
+};
 ```
 
 ### **Connection Features**
 
 #### ✨ **Smart Path Generation**
+
 - **Nearby Node Detection**: Automatically adjusts path for nodes < 100px apart
 - **Proportional Leads**: Uses 25% of available distance for tight spacing
 - **Minimum Clearance**: Ensures 10px minimum lead length for visibility
 - **Obstacle Avoidance**: Routes around nodes and boundaries
 
 #### 🏗️ **Architecture Mode**
+
 - **Orthogonal Paths**: Right-angle connections with rounded corners
 - **Virtual Ports**: Dynamic side port positioning (`__side-*`)
 - **Proximity Rules**: Smart attachment based on 30px threshold
 - **Bottom-to-Bottom**: Special routing for closely spaced vertical flows
 
 #### ⚡ **Performance**
+
 - **Memoized Calculations**: Cached path generation for repeated connections
 - **Optimized Algorithms**: Efficient pathfinding with minimal CPU usage
 - **Viewport Culling**: Only process visible connections during interactions
@@ -343,47 +345,52 @@ const calculateConnectionPreview = (sourceNode, mousePos, hoverTarget) => {
 ### **Usage Examples**
 
 #### Custom Connection Validation
+
 ```typescript
 const useConnectionValidation = () => {
-  const canCreateConnection = useCallback((
-    sourceNode: WorkflowNode,
-    sourcePort: string,
-    targetNode: WorkflowNode,
-    targetPort: string
-  ) => {
-    // Prevent self-connections
-    if (sourceNode.id === targetNode.id) return false
-    
-    // Check type compatibility
-    const sourceOutput = sourceNode.outputs.find(p => p.id === sourcePort)
-    const targetInput = targetNode.inputs.find(p => p.id === targetPort)
-    
-    if (!sourceOutput || !targetInput) return false
-    
-    // Type system validation
-    return isTypeCompatible(sourceOutput.type, targetInput.type)
-  }, [])
-  
-  return { canCreateConnection }
-}
+  const canCreateConnection = useCallback(
+    (
+      sourceNode: WorkflowNode,
+      sourcePort: string,
+      targetNode: WorkflowNode,
+      targetPort: string
+    ) => {
+      // Prevent self-connections
+      if (sourceNode.id === targetNode.id) return false;
+
+      // Check type compatibility
+      const sourceOutput = sourceNode.outputs.find((p) => p.id === sourcePort);
+      const targetInput = targetNode.inputs.find((p) => p.id === targetPort);
+
+      if (!sourceOutput || !targetInput) return false;
+
+      // Type system validation
+      return isTypeCompatible(sourceOutput.type, targetInput.type);
+    },
+    []
+  );
+
+  return { canCreateConnection };
+};
 ```
 
 #### Custom Path Styling
+
 ```typescript
 const useConnectionStyling = () => {
   const getConnectionStyle = useCallback((connection: Connection) => {
-    const groupInfo = getConnectionGroupInfo(connection.id, allConnections)
-    
+    const groupInfo = getConnectionGroupInfo(connection.id, allConnections);
+
     return {
       stroke: connection.selected ? '#0066cc' : '#666',
       strokeWidth: groupInfo.isMultiple ? 3 : 2,
       strokeDasharray: connection.conditional ? '5,5' : 'none',
-      opacity: connection.disabled ? 0.5 : 1
-    }
-  }, [])
-  
-  return { getConnectionStyle }
-}
+      opacity: connection.disabled ? 0.5 : 1,
+    };
+  }, []);
+
+  return { getConnectionStyle };
+};
 ```
 
 ## 🎛️ Available Hooks
@@ -393,25 +400,25 @@ const useConnectionStyling = () => {
 Core operations for managing workflows:
 
 ```tsx
-const operations = useWorkflowOperations()
+const operations = useWorkflowOperations();
 
 // Node operations
-operations.addNode('http', { x: 100, y: 100 })
-operations.updateNode('node-1', { config: { name: 'Updated' } })
-operations.deleteNode('node-1')
+operations.addNode('http', { x: 100, y: 100 });
+operations.updateNode('node-1', { config: { name: 'Updated' } });
+operations.deleteNode('node-1');
 
 // Connection operations
-operations.createConnection('node-1', 'output-1', 'node-2', 'input-1')
-operations.deleteConnection('connection-1')
+operations.createConnection('node-1', 'output-1', 'node-2', 'input-1');
+operations.deleteConnection('connection-1');
 
 // Selection operations
-operations.selectNode('node-1', false)
-operations.clearSelection()
+operations.selectNode('node-1', false);
+operations.clearSelection();
 
 // Workflow operations
-operations.saveWorkflow()
-operations.executeWorkflow()
-operations.exportWorkflow()
+operations.saveWorkflow();
+operations.executeWorkflow();
+operations.exportWorkflow();
 ```
 
 ### useWorkflowCanvas
@@ -419,19 +426,19 @@ operations.exportWorkflow()
 Canvas transformation and navigation:
 
 ```tsx
-const canvas = useWorkflowCanvas()
+const canvas = useWorkflowCanvas();
 
 // Zoom operations
-canvas.zoomIn()
-canvas.zoomOut()
-canvas.setZoomLevel(1.5)
+canvas.zoomIn();
+canvas.zoomOut();
+canvas.setZoomLevel(1.5);
 
 // Navigation
-canvas.fitToScreen()
-canvas.resetCanvasPosition()
+canvas.fitToScreen();
+canvas.resetCanvasPosition();
 
 // Transform handling
-canvas.saveCanvasTransform({ x: 0, y: 0, k: 1 })
+canvas.saveCanvasTransform({ x: 0, y: 0, k: 1 });
 ```
 
 ### useWorkflowEventHandlers
@@ -442,11 +449,11 @@ Pre-configured event handlers:
 const handlers = useWorkflowEventHandlers()
 
 // Use in components
-<div 
+<div
   onDrop={handlers.handleCanvasDrop}
   onDragOver={handlers.handleCanvasDragOver}
 >
-  <WorkflowCanvas 
+  <WorkflowCanvas
     onNodeClick={handlers.handleNodeClick}
     onConnectionClick={handlers.handleConnectionClick}
     // ... other handlers
@@ -461,25 +468,25 @@ const handlers = useWorkflowEventHandlers()
 ```typescript
 interface WorkflowState {
   // Core data
-  workflowName: string
-  nodes: WorkflowNode[]
-  connections: Connection[]
-  
+  workflowName: string;
+  nodes: WorkflowNode[];
+  connections: Connection[];
+
   // Selection state
-  selectedNodes: Set<string>
-  selectedNode: WorkflowNode | null
-  
+  selectedNodes: Set<string>;
+  selectedNode: WorkflowNode | null;
+
   // Canvas state
-  canvasTransform: CanvasTransform
-  
+  canvasTransform: CanvasTransform;
+
   // Connection state
-  connectionState: ConnectionState
-  
+  connectionState: ConnectionState;
+
   // Execution state
-  executionState: ExecutionState
-  
+  executionState: ExecutionState;
+
   // UI state
-  uiState: UIState
+  uiState: UIState;
 }
 ```
 
@@ -506,21 +513,25 @@ dispatch({ type: 'SET_CANVAS_TRANSFORM', payload: { x: 0, y: 0, k: 1 } })
 ## 🎨 Features
 
 ### ✅ State Management
+
 - Centralized state with React Context
 - Immutable state updates with reducer pattern
 - Type-safe actions and state
 
 ### ✅ Performance Optimized
+
 - Memoized context values
 - Optimized re-renders
 - Efficient state updates
 
 ### ✅ Developer Experience
+
 - Comprehensive TypeScript support
 - Custom hooks for common operations
 - Clear separation of concerns
 
 ### ✅ Workflow Operations
+
 - Node CRUD operations
 - Connection management
 - Canvas transformation
@@ -528,6 +539,7 @@ dispatch({ type: 'SET_CANVAS_TRANSFORM', payload: { x: 0, y: 0, k: 1 } })
 - Execution simulation
 
 ### ✅ UI Features
+
 - Drag & drop support
 - Multi-selection
 - Keyboard shortcuts
@@ -542,30 +554,30 @@ Create custom hooks that use the workflow context:
 
 ```tsx
 function useWorkflowValidation() {
-  const { state } = useWorkflowContext()
-  
+  const { state } = useWorkflowContext();
+
   const validateWorkflow = useCallback(() => {
-    const issues = []
-    
+    const issues = [];
+
     // Check for orphaned nodes
-    const connectedNodes = new Set()
-    state.connections.forEach(conn => {
-      connectedNodes.add(conn.sourceNodeId)
-      connectedNodes.add(conn.targetNodeId)
-    })
-    
-    const orphanedNodes = state.nodes.filter(node => 
-      !connectedNodes.has(node.id) && node.type !== 'start'
-    )
-    
+    const connectedNodes = new Set();
+    state.connections.forEach((conn) => {
+      connectedNodes.add(conn.sourceNodeId);
+      connectedNodes.add(conn.targetNodeId);
+    });
+
+    const orphanedNodes = state.nodes.filter(
+      (node) => !connectedNodes.has(node.id) && node.type !== 'start'
+    );
+
     if (orphanedNodes.length > 0) {
-      issues.push(`Found ${orphanedNodes.length} orphaned nodes`)
+      issues.push(`Found ${orphanedNodes.length} orphaned nodes`);
     }
-    
-    return issues
-  }, [state.nodes, state.connections])
-  
-  return { validateWorkflow }
+
+    return issues;
+  }, [state.nodes, state.connections]);
+
+  return { validateWorkflow };
 }
 ```
 
@@ -575,13 +587,13 @@ Build custom components that integrate with the workflow:
 
 ```tsx
 function WorkflowMinimap() {
-  const { state } = useWorkflowContext()
-  const canvas = useWorkflowCanvas()
-  
+  const { state } = useWorkflowContext();
+  const canvas = useWorkflowCanvas();
+
   return (
     <div className="workflow-minimap">
       <svg width="200" height="150">
-        {state.nodes.map(node => (
+        {state.nodes.map((node) => (
           <circle
             key={node.id}
             cx={node.x * 0.1}
@@ -593,7 +605,7 @@ function WorkflowMinimap() {
         ))}
       </svg>
     </div>
-  )
+  );
 }
 ```
 
@@ -602,31 +614,34 @@ function WorkflowMinimap() {
 To migrate from the original WorkflowDesigner:
 
 1. **Replace the import:**
+
 ```tsx
 // Before
-import WorkflowDesigner from './components/workflow-designer/WorkflowDesigner'
+import WorkflowDesigner from './components/workflow-designer/WorkflowDesigner';
 
 // After
-import { WorkflowDesignerWithProvider } from './components/workflow-designer'
+import { WorkflowDesignerWithProvider } from './components/workflow-designer';
 ```
 
 2. **Update props (if any):**
+
 ```tsx
 // Before
 <WorkflowDesigner />
 
-// After  
+// After
 <WorkflowDesignerWithProvider initialWorkflow={initialData} />
 ```
 
 3. **Use new hooks for custom functionality:**
+
 ```tsx
 // Before - direct state manipulation
-const [nodes, setNodes] = useState([])
+const [nodes, setNodes] = useState([]);
 
 // After - use provider hooks
-const { state } = useWorkflowContext()
-const operations = useWorkflowOperations()
+const { state } = useWorkflowContext();
+const operations = useWorkflowOperations();
 ```
 
 ## 📝 Type Definitions
@@ -634,18 +649,19 @@ const operations = useWorkflowOperations()
 All types are fully exported for use in your application:
 
 ```tsx
-import type { 
-  WorkflowState, 
-  WorkflowAction, 
+import type {
+  WorkflowState,
+  WorkflowAction,
   ExecutionState,
   WorkflowNode,
-  Connection
-} from './components/workflow-designer'
+  Connection,
+} from './components/workflow-designer';
 ```
 
 ## 🎯 Benefits
 
 ### 🚀 **2025 Feature Improvements**
+
 1. **Adaptive Connection Routing**: Intelligent path generation for complex workflows
 2. **Architecture Mode**: Professional system diagram capabilities
 3. **Enhanced Performance**: Optimized for large-scale workflows (1000+ nodes)
@@ -653,6 +669,7 @@ import type {
 5. **Advanced Visual Feedback**: Proximity detection and smart previews
 
 ### 🏗️ **Technical Architecture**
+
 1. **Maintainability**: Modular architecture with dedicated utility modules
 2. **Scalability**: Performance-optimized for enterprise-scale workflows
 3. **Performance**: Advanced caching, memoization, and viewport optimization
@@ -661,6 +678,7 @@ import type {
 6. **Extensibility**: Plugin-based architecture for custom node types and behaviors
 
 ### 📊 **Production Ready**
+
 - **Tested at Scale**: Handles workflows with 1000+ nodes smoothly
 - **Memory Efficient**: Optimized rendering with viewport culling
 - **Type Safe**: Full TypeScript coverage with strict typing
@@ -671,6 +689,7 @@ import type {
 ## 🔄 Recent Updates (2025)
 
 ### **v3.0 - Advanced Connection System**
+
 - ✅ Adaptive lead length calculation for nearby nodes
 - ✅ Architecture mode with orthogonal routing
 - ✅ Real-time connection preview with hover detection
@@ -678,6 +697,7 @@ import type {
 - ✅ Performance optimizations for large workflows
 
 ### **v2.5 - Enhanced Canvas**
+
 - ✅ Grid performance monitoring and optimization
 - ✅ Multi-layer rendering system
 - ✅ Advanced zoom and pan controls
@@ -685,6 +705,7 @@ import type {
 - ✅ Dynamic z-index management
 
 ### **v2.0 - Provider Architecture**
+
 - ✅ React Context-based state management
 - ✅ Custom hooks for workflow operations
 - ✅ Modular component architecture

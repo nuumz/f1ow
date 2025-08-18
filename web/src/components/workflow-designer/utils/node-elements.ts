@@ -1,11 +1,12 @@
 import * as d3 from 'd3'
+import type { WorkflowNode, NodePort } from '../types'
 
 /**
  * Core function to generate the base DOM structure for a node.
  * Appends the standard children and baseline styles, leaving data-driven
  * updates and event bindings to the caller.
  */
-export function createNodeElements<Datum = unknown, PElement extends d3.BaseType = SVGGElement, PDatum = unknown, PNode extends d3.BaseType = HTMLElement>(
+export function createNodeElements<Datum extends Partial<WorkflowNode> = WorkflowNode, PElement extends d3.BaseType = SVGGElement, PDatum = unknown, PNode extends d3.BaseType = HTMLElement>(
     nodeEnter: d3.Selection<PElement, Datum, PNode, PDatum>,
     nodeGroups?: d3.Selection<SVGGElement, Datum, SVGGElement, unknown>
 ) {
@@ -49,6 +50,55 @@ export function createNodeElements<Datum = unknown, PElement extends d3.BaseType
     ports.append('g').attr('class', 'side-ports')
     ports.append('g').attr('class', 'bottom-ports')
 
+    // Generate initial per-port groups based on node data (idempotent for enter selection)
+    // These groups will be updated/positioned later by higher-level logic
+    nodeEnter.each(function (d) {
+        const nodeData = d as unknown as { id?: string; inputs?: Array<{ id: string }>; outputs?: Array<{ id: string }>; bottomPorts?: Array<{ id: string }> }
+        const g = d3.select(this)
+
+        // Input port groups
+        const inputContainer = g.select<SVGGElement>('g.input-ports')
+        if (!inputContainer.empty()) {
+            const inputSel = inputContainer
+                .selectAll<SVGGElement, NodePort>('g.input-port-group')
+                .data((nodeData.inputs || []) as NodePort[], (p: NodePort) => p.id)
+
+            inputSel.enter()
+                .append('g')
+                .attr('class', 'port-group input-port-group')
+                .attr('data-port-id', (p: NodePort) => p.id)
+                .attr('data-node-id', nodeData.id || '')
+        }
+
+        // Output port groups
+        const outputContainer = g.select<SVGGElement>('g.output-ports')
+        if (!outputContainer.empty()) {
+            const outputSel = outputContainer
+                .selectAll<SVGGElement, NodePort>('g.output-port-group')
+                .data((nodeData.outputs || []) as NodePort[], (p: NodePort) => p.id)
+
+            outputSel.enter()
+                .append('g')
+                .attr('class', 'port-group output-port-group')
+                .attr('data-port-id', (p: NodePort) => p.id)
+                .attr('data-node-id', nodeData.id || '')
+        }
+
+        // Bottom port groups (if any)
+        const bottomContainer = g.select<SVGGElement>('g.bottom-ports')
+        if (!bottomContainer.empty()) {
+            const bottomSel = bottomContainer
+                .selectAll<SVGGElement, NodePort>('g.bottom-port-group')
+                .data((nodeData.bottomPorts || []) as NodePort[], (p: NodePort) => p.id)
+
+            bottomSel.enter()
+                .append('g')
+                .attr('class', 'port-group bottom-port-group')
+                .attr('data-port-id', (p: NodePort) => p.id)
+                .attr('data-node-id', nodeData.id || '')
+        }
+    })
+
     // Primary label
     nodeEnter
         .append('text')
@@ -72,15 +122,13 @@ export function createNodeElements<Datum = unknown, PElement extends d3.BaseType
  * Core function to ensure a node has all required child containers/elements.
  * Safe to call repeatedly; will only append missing elements.
  */
-export function ensureNodeElementContainers(
-    nodeGroups: d3.Selection<SVGGElement, unknown, SVGGElement, unknown>
+export function ensureNodeElementContainers<D>(
+    nodeGroups: d3.Selection<SVGGElement, D, SVGGElement, unknown>
 ) {
-    type D3Sel = d3.Selection<d3.BaseType, unknown, d3.BaseType, unknown>
-
-    const ensure = (
-        sel: D3Sel,
+    const ensure = <E extends d3.BaseType, P extends d3.BaseType | null, PD>(
+        sel: d3.Selection<E, unknown, P, PD>,
         selector: string,
-        create: (parent: D3Sel) => void
+        create: (parent: d3.Selection<E, unknown, P, PD>) => void
     ) => {
         const sub = sel.select(selector)
         if (sub.empty()) {
@@ -88,8 +136,8 @@ export function ensureNodeElementContainers(
         }
     }
 
-    nodeGroups.each(function () {
-        const g = d3.select(this as SVGGElement) as unknown as D3Sel
+    nodeGroups.each(function (this: SVGGElement) {
+        const g = d3.select<SVGGElement, unknown>(this)
 
         // Background
         ensure(g, '.node-background', (p) => {
@@ -129,14 +177,14 @@ export function ensureNodeElementContainers(
 
         // Ports containers
         ensure(g, 'g.ports', (p) => {
-            const ports = p.append('g').attr('class', 'ports') as unknown as D3Sel
+            const ports = p.append('g').attr('class', 'ports')
             ports.append('g').attr('class', 'input-ports')
             ports.append('g').attr('class', 'output-ports')
             ports.append('g').attr('class', 'side-ports')
             ports.append('g').attr('class', 'bottom-ports')
         })
         // If g.ports already exists, ensure sub-groups exist too
-        const ports = (g.select('g.ports') as unknown) as D3Sel
+        const ports = g.select('g.ports')
         if (!ports.empty()) {
             ensure(ports, 'g.input-ports', (p) => { p.append('g').attr('class', 'input-ports') })
             ensure(ports, 'g.output-ports', (p) => { p.append('g').attr('class', 'output-ports') })
@@ -178,7 +226,7 @@ export function createNodeGroups<Datum>(
     const safeGetId = (d: Datum, i: number): string => {
         if (getId) { return getId(d) }
         const rec = d as unknown as Record<string, unknown>
-        const idVal = rec && (rec['id'] as unknown)
+        const idVal = rec?.['id']
         if (typeof idVal === 'string') { return idVal }
         return String(i)
     }
@@ -186,8 +234,8 @@ export function createNodeGroups<Datum>(
     const safeGetTransform = (d: Datum): string => {
         if (getTransform) { return getTransform(d) }
         const rec = d as unknown as Record<string, unknown>
-        const x = typeof rec['x'] === 'number' ? (rec['x'] as number) : 0
-        const y = typeof rec['y'] === 'number' ? (rec['y'] as number) : 0
+        const x = typeof rec['x'] === 'number' ? rec['x'] : 0
+        const y = typeof rec['y'] === 'number' ? rec['y'] : 0
         return `translate(${x}, ${y})`
     }
 
@@ -219,7 +267,7 @@ export function createNodeGroups<Datum>(
         nodeEnter.call(dragBehavior)
     }
 
-    const nodeGroups = nodeEnter.merge(nodeSelection as d3.Selection<SVGGElement, Datum, SVGGElement, unknown>)
+    const nodeGroups = nodeEnter.merge(nodeSelection)
 
     return { nodeSelection, nodeEnter, nodeGroups }
 }

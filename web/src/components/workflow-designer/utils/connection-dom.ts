@@ -37,7 +37,7 @@ export function renderConnectionsLayer(opts: RenderConnectionsOptions) {
     } = opts
 
     const connectionLayer = svg.select<SVGGElement>('g.connection-layer')
-    if (connectionLayer.empty()) {return}
+    if (connectionLayer.empty()) { return }
 
     // Data-join by id
     const selection = connectionLayer
@@ -134,7 +134,7 @@ export function renderConnectionsLayer(opts: RenderConnectionsOptions) {
             if (groupInfo.isMultiple) {
                 // Allow CSS styling for grouped connections
                 classes += ' connection-multi'
-                if (groupInfo.index === 0) {classes += ' connection-multi-primary'}
+                if (groupInfo.index === 0) { classes += ' connection-multi-primary' }
             }
             return classes
         })
@@ -143,38 +143,61 @@ export function renderConnectionsLayer(opts: RenderConnectionsOptions) {
     merged
         .select<SVGTextElement>('.connection-label')
         .style('display', (d: Connection) => {
-            if (workflowMode !== 'architecture') {return 'none'}
+            if (workflowMode !== 'architecture') { return 'none' }
             const gi = getConnectionGroupInfo(d.id, connections)
             return gi.isMultiple && gi.index === 0 ? 'block' : 'none'
         })
-        .attr('x', (d: Connection) => {
+        .attr('x', function (this: SVGTextElement, d: Connection) {
+            // In architecture mode, place label at the midpoint of the actual path geometry
             if (workflowMode === 'architecture') {
-                // When needed, label positioning can be improved to follow Manhattan segments.
-                const s = nodeMap.get(d.sourceNodeId)
-                const t = nodeMap.get(d.targetNodeId)
-                if (!s || !t) {return 0}
-                return (s.x + t.x) / 2
+                const group = d3.select(this.parentNode as SVGGElement)
+                const pathEl = group.select<SVGPathElement>('.connection-path').node()
+                if (pathEl) {
+                    try {
+                        const len = pathEl.getTotalLength()
+                        const pt = pathEl.getPointAtLength(len / 2)
+                        return pt.x
+                    } catch {
+                        // fall through to node-midpoint fallback
+                    }
+                }
             }
+            // Fallback: midpoint between node centers
             const s = nodeMap.get(d.sourceNodeId)
             const t = nodeMap.get(d.targetNodeId)
-            if (!s || !t) {return 0}
+            if (!s || !t) { return 0 }
             return (s.x + t.x) / 2
         })
-        .attr('y', (d: Connection) => {
+        .attr('y', function (this: SVGTextElement, d: Connection) {
+            // In architecture mode, place label at the midpoint of the actual path geometry
             if (workflowMode === 'architecture') {
-                const s = nodeMap.get(d.sourceNodeId)
-                const t = nodeMap.get(d.targetNodeId)
-                if (!s || !t) {return 0}
-                return (s.y + t.y) / 2 - 8
+                const group = d3.select(this.parentNode as SVGGElement)
+                const pathEl = group.select<SVGPathElement>('.connection-path').node()
+                if (pathEl) {
+                    try {
+                        const len = pathEl.getTotalLength()
+                        const pt = pathEl.getPointAtLength(len / 2)
+                        return pt.y - 8 // slight upward offset for readability
+                    } catch {
+                        // fall through to node-midpoint fallback
+                    }
+                }
             }
+            // Fallback: midpoint between node centers
             const s = nodeMap.get(d.sourceNodeId)
             const t = nodeMap.get(d.targetNodeId)
-            if (!s || !t) {return 0}
+            if (!s || !t) { return 0 }
             return (s.y + t.y) / 2 - 8
         })
-        .text(() => {
-            const gi = connections.length
-            // Keep minimal label content; customize upstream if needed
-            return gi > 0 ? '' : ''
+        .text((d: Connection) => {
+            if (workflowMode !== 'architecture') {
+                return ''
+            }
+            const gi = getConnectionGroupInfo(d.id, connections)
+            // Show label only for primary connection in multi-connection groups
+            if (gi.isMultiple && gi.index === 0) {
+                return `${gi.total} connections`
+            }
+            return ''
         })
 }

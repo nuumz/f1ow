@@ -568,8 +568,7 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
       gridPerformanceRef.current?.recordCacheMiss();
 
       // Use GridOptimizer for intelligent dot properties calculation
-      const dotProperties = GridOptimizer.calculateDotProperties(transform.k);
-      const { radius: dotRadius, opacity: dotOpacity } = dotProperties;
+  const dotProperties = GridOptimizer.calculateDotProperties(transform.k);
 
       // Get or create the pattern definition
       const svg = gridLayer.node()?.closest("svg");
@@ -588,48 +587,85 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
         defs = svgSelection.insert<SVGDefsElement>("defs", ":first-child");
       }
 
-      // Use GridOptimizer for intelligent pattern ID generation
-      const patternId = GridOptimizer.generatePatternId(transform.k);
-      const pattern = defs.select(`#${patternId}`);
+      // Dual-layer grid patterns: base dots (original id) + subtle major overlay
+      // Keep original base id for compatibility with other modules/styles
+      const patternId = "workflow-grid"; // base dots (original id)
+      const majorPatternId = "workflow-grid-major"; // overlay dots
 
-      // Create new pattern for this zoom level if doesn't exist
-      if (pattern.empty()) {
-        const newPattern = defs
-          .append("pattern")
+      const size = baseGridSize; // base spacing (e.g., 20)
+      const majorStep = 5; // show a slightly larger dot every N dots
+      const baseColor = "#d1d5db";
+      const majorColor = "#d1d5db";
+  // Derive radii from optimizer; keep opacities as requested (0.8 / 0.9)
+  const { radius: dotRadius } = dotProperties;
+  const baseOpacity = 0.8;
+  const majorOpacity = 0.9;
+      const baseRadius = Math.max(0.1, dotRadius / Math.max(0.0001, transform.k));
+      const majorRadius = Math.max(
+        0.1,
+        (dotRadius * 1.5) / Math.max(0.0001, transform.k)
+      );
+
+      // Ensure base pattern exists and is updated
+      let patternSel = defs.select<SVGPatternElement>(`#${patternId}`);
+      if (patternSel.empty()) {
+        patternSel = defs
+          .append<SVGPatternElement>("pattern")
           .attr("id", patternId)
           .attr("patternUnits", "userSpaceOnUse")
-          .attr("width", baseGridSize)
-          .attr("height", baseGridSize);
-
-        newPattern
-          .append("circle")
-          .attr("cx", baseGridSize / 2)
-          .attr("cy", baseGridSize / 2)
-          .attr("class", "pattern-dot")
-          .attr("r", dotRadius / transform.k)
-          .attr("fill", "#d1d5db")
-          .attr("opacity", dotOpacity);
-      } else {
-        // Update existing pattern
-        defs
-          .select(`#${patternId}`)
-          .attr("width", baseGridSize)
-          .attr("height", baseGridSize)
-          .select(".pattern-dot")
-          .attr("r", dotRadius / transform.k)
-          .attr("opacity", dotOpacity);
+          .attr("width", size)
+          .attr("height", size);
       }
-
-      // PERFORMANCE: Selective clearing - only remove grid elements, preserve other content
-      gridLayer.selectAll(".grid-pattern-rect").remove();
-
-      // Clean up unused patterns to prevent memory leaks
-      if (cached && cached.pattern && cached.pattern !== patternId) {
-        const oldPattern = svgSelection.select(`#${cached.pattern}`);
-        if (!oldPattern.empty()) {
-          oldPattern.remove();
-        }
+      // Always update attributes to reflect any runtime changes
+      patternSel.attr("width", size).attr("height", size);
+      let baseCircle = patternSel.select<SVGCircleElement>("circle.base-dot");
+      if (baseCircle.empty()) {
+        baseCircle = patternSel
+          .append<SVGCircleElement>("circle")
+          .attr("class", "base-dot");
       }
+      baseCircle
+        .attr("cx", size / 2)
+        .attr("cy", size / 2)
+        .attr("r", baseRadius)
+        .attr("fill", baseColor)
+        .attr("opacity", baseOpacity);
+
+      // Ensure major overlay pattern exists and is updated
+      let majorPatternSel = defs.select<SVGPatternElement>(
+        `#${majorPatternId}`
+      );
+      if (majorPatternSel.empty()) {
+        majorPatternSel = defs
+          .append<SVGPatternElement>("pattern")
+          .attr("id", majorPatternId)
+          .attr("patternUnits", "userSpaceOnUse")
+          .attr("width", size * majorStep)
+          .attr("height", size * majorStep);
+      }
+      majorPatternSel
+        .attr("width", size * majorStep)
+        .attr("height", size * majorStep);
+      let majorCircle = majorPatternSel.select<SVGCircleElement>(
+        "circle.major-dot"
+      );
+      if (majorCircle.empty()) {
+        majorCircle = majorPatternSel
+          .append<SVGCircleElement>("circle")
+          .attr("class", "major-dot");
+      }
+      majorCircle
+        .attr("cx", (size * majorStep) / 2)
+        .attr("cy", (size * majorStep) / 2)
+        .attr("r", majorRadius)
+        .attr("fill", majorColor)
+        .attr("opacity", majorOpacity);
+
+  // PERFORMANCE: Selective clearing - only remove grid elements, preserve other content
+  gridLayer.selectAll(".grid-pattern-rect").remove();
+
+  // Note: We intentionally do NOT remove the global base/major patterns.
+  // They are reused across renders and modes; removing would cause churn.
 
       // Enhanced bounds calculation with intelligent padding using GridOptimizer
       const padding = GridOptimizer.calculateIntelligentPadding(transform.k);
@@ -646,15 +682,27 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
         return;
       }
 
-      // Create optimized single rectangle with pattern
+      // Render base dots
       gridLayer
         .append("rect")
-        .attr("class", "grid-pattern-rect")
+        .attr("class", "grid-pattern-rect base")
         .attr("x", bounds.minX)
         .attr("y", bounds.minY)
         .attr("width", bounds.width)
         .attr("height", bounds.height)
         .attr("fill", `url(#${patternId})`)
+        .style("pointer-events", "none")
+        .style("will-change", "transform");
+
+      // Render major dots overlay
+      gridLayer
+        .append("rect")
+        .attr("class", "grid-pattern-rect major")
+        .attr("x", bounds.minX)
+        .attr("y", bounds.minY)
+        .attr("width", bounds.width)
+        .attr("height", bounds.height)
+        .attr("fill", `url(#${majorPatternId})`)
         .style("pointer-events", "none")
         .style("will-change", "transform");
 
@@ -664,9 +712,15 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
       // Update performance tracking using centralized monitor
       gridPerformanceRef.current?.recordRender(renderTime);
 
+      // Store current viewport size for debugging/inspection
+      gridLayer.attr(
+        "data-grid-size",
+        `${Math.round(viewportWidth)}x${Math.round(viewportHeight)}`
+      );
+
       gridCacheRef.current = {
         transform: cacheKey,
-        pattern: patternId,
+  pattern: `${patternId},${majorPatternId}`,
         lastRenderTime: now,
         viewport: { width: viewportWidth, height: viewportHeight },
         bounds: bounds,

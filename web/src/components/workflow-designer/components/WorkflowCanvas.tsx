@@ -7,6 +7,9 @@ import React, {
   useMemo,
 } from "react";
 import * as d3 from "d3";
+import { createNodeElements, createNodeGroups } from "../utils/node-elements";
+import { ensureArrowMarkers } from "../utils/arrow-markers";
+import { findNearestPortTarget, type PortDatum } from "../utils/ports-hit-test";
 import type {
   WorkflowNode,
   Connection,
@@ -35,10 +38,12 @@ import {
   getArrowMarkerForMode as getArrowMarkerForModeUtil,
   getLeftArrowMarker as getLeftArrowMarkerUtil,
 } from "../utils/marker-utils";
+import { GridPerformanceMonitor } from "../utils/performance-monitor";
 import {
-  GridPerformanceMonitor,
-} from "../utils/performance-monitor";
-import { ensureDualGridPatterns, renderDualGridRects, GridUtils } from "../utils/grid-patterns";
+  ensureDualGridPatterns,
+  renderDualGridRects,
+  GridUtils,
+} from "../utils/grid-patterns";
 import {
   PERFORMANCE_CONSTANTS,
   GRID_CONSTANTS,
@@ -153,7 +158,7 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
     endDragging,
   } = useWorkflowContext();
 
-  // Local state and refs missing earlier
+  // Local state and refs
   const [isInitialized, setIsInitialized] = useState(false);
   const d3SelectionCacheRef = useRef<{
     svg?: d3.Selection<SVGSVGElement, unknown, null, undefined>;
@@ -171,14 +176,18 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
   const visualUpdateQueueRef = useRef<Set<string>>(new Set());
   const connectionUpdateQueueRef = useRef<Set<string>>(new Set());
 
-  // Icon symbols are provided via utils/icon-symbols.ensureIconSymbol
-
   // Helper: show architecture outline only for nodes in group "Services"
   const isServicesArchitectureNode = useCallback((node: any) => {
-    return node?.group === "Services";
+    // Assume nodes can have a category or group field; fallback to type prefix
+    if (node?.group) return String(node.group).toLowerCase() === "services";
+    if (node?.category)
+      return String(node.category).toLowerCase() === "services";
+    // Fallback heuristic
+    return String(node?.type || "")
+      .toLowerCase()
+      .includes("service");
   }, []);
 
-  // ========== DRAG STATE REFS ==========
   // Store drag connection data independent of React state
   const dragConnectionDataRef = useRef<{
     nodeId: string;
@@ -187,7 +196,6 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
   } | null>(null);
 
   // ========== PORT HIGHLIGHTING REFS ==========
-  // Debounce port highlighting to prevent flickering
   const lastPortHighlightStateRef = useRef<Map<string, boolean>>(new Map());
   const pendingPortHighlightsRef = useRef<
     Array<{
@@ -202,17 +210,24 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
   const flushPortHighlights = useCallback(() => {
     const items = pendingPortHighlightsRef.current;
     if (items.length === 0) return;
-    for (const item of items) {
-      item.group.classed("can-dropped", item.canDrop);
-      lastPortHighlightStateRef.current.set(item.key, item.canDrop);
+    for (const { key, canDrop, group } of items) {
+      const prev = lastPortHighlightStateRef.current.get(key);
+      if (prev === canDrop) continue;
+      group.classed("can-dropped", !!canDrop);
+      lastPortHighlightStateRef.current.set(key, !!canDrop);
     }
     pendingPortHighlightsRef.current = [];
-    highlightRafRef.current = null;
+    if (highlightRafRef.current) {
+      cancelAnimationFrame(highlightRafRef.current);
+      highlightRafRef.current = null;
+    }
   }, []);
 
   const scheduleHighlightFlush = useCallback(() => {
     if (highlightRafRef.current != null) return;
-    highlightRafRef.current = requestAnimationFrame(flushPortHighlights);
+    highlightRafRef.current = requestAnimationFrame(() => {
+      flushPortHighlights();
+    });
   }, [flushPortHighlights]);
 
   const updatePortHighlighting = useCallback(
@@ -221,8 +236,6 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
       canDrop: boolean,
       portGroup: d3.Selection<any, any, any, any>
     ) => {
-      const lastState = lastPortHighlightStateRef.current.get(portKey);
-      if (lastState === canDrop) return;
       pendingPortHighlightsRef.current.push({
         key: portKey,
         canDrop,
@@ -371,9 +384,10 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
 
       if (!sourceNode || !targetNode) return "url(#arrowhead)";
 
-  // Default to workflow styling unless mode is explicitly 'architecture'.
-  // This prevents accidental purple (architecture) arrows when mode is undefined or other.
-  const isWorkflowMode = workflowContextState.designerMode !== "architecture";
+      // Default to workflow styling unless mode is explicitly 'architecture'.
+      // This prevents accidental purple (architecture) arrows when mode is undefined or other.
+      const isWorkflowMode =
+        workflowContextState.designerMode !== "architecture";
       // Use a single auto-oriented marker per mode to ensure consistent arrowhead position
       return getArrowMarkerForMode(isWorkflowMode, state);
     },
@@ -534,7 +548,7 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
       // Cache miss - regenerate grid
       gridPerformanceRef.current?.recordCacheMiss();
 
-  // Use utility to ensure dot patterns are consistent with current zoom
+      // Use utility to ensure dot patterns are consistent with current zoom
 
       // Get or create the pattern definition
       const svg = gridLayer.node()?.closest("svg");
@@ -560,11 +574,11 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
         baseGridSize
       );
 
-  // PERFORMANCE: Selective clearing - only remove grid elements, preserve other content
-  gridLayer.selectAll(".grid-pattern-rect").remove();
+      // PERFORMANCE: Selective clearing - only remove grid elements, preserve other content
+      gridLayer.selectAll(".grid-pattern-rect").remove();
 
-  // Note: We intentionally do NOT remove the global base/major patterns.
-  // They are reused across renders and modes; removing would cause churn.
+      // Note: We intentionally do NOT remove the global base/major patterns.
+      // They are reused across renders and modes; removing would cause churn.
 
       // Enhanced bounds calculation with intelligent padding using GridUtils
       const padding = GridUtils.calculateIntelligentPadding(transform.k);
@@ -581,8 +595,8 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
         return;
       }
 
-  // Render layered rects via utility
-  renderDualGridRects(gridLayer, bounds, patternId, majorPatternId);
+      // Render layered rects via utility
+      renderDualGridRects(gridLayer, bounds, patternId, majorPatternId);
 
       // Enhanced cache with all necessary data and performance tracking
       const renderTime = performance.now() - startTime;
@@ -598,7 +612,7 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
 
       gridCacheRef.current = {
         transform: cacheKey,
-  pattern: `${patternId},${majorPatternId}`,
+        pattern: `${patternId},${majorPatternId}`,
         lastRenderTime: now,
         viewport: { width: viewportWidth, height: viewportHeight },
         bounds: bounds,
@@ -1591,69 +1605,15 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
       bg.attr("width", "100%").attr("height", "100%").attr("fill", "#f7f7f7");
 
       // Arrow markers with direction-aware positioning and optimized refX
-  const createArrowMarker = (
-        id: string,
-        color: string,
-        size = 10,
-        direction: 'right' | 'left' = 'right'
-      ) => {
-        const marker = defs
-          .append("marker")
-          .attr("id", id)
-          .attr("markerWidth", size)
-          .attr("markerHeight", size)
-          .attr("viewBox", `0 0 ${size} ${size}`)
-          .attr("orient", "auto")
-          .attr("markerUnits", "userSpaceOnUse");
-
-  // Pad so the arrow tip stays BEFORE the path end to avoid overlapping into nodes
-  // For architecture markers: anchor the CENTER of the triangle at the path end.
-  // We'll trim the path by half the marker size in path-utils so the tip touches the node edge.
-  const isArchitectureMarker = id.includes('architecture');
-  const pad = isArchitectureMarker ? 0 : -4;
-        if (direction === "right") {
-    // Right-pointing arrow (tip at x=size).
-    // Architecture: refX=size/2 (center anchored). Workflow/others: size+pad (tip anchored with small backoff).
-          marker
-  .attr("refX", isArchitectureMarker ? size / 2 : size + pad)
-            .attr("refY", size / 2)
-            .append("polygon")
-            .attr("points", `0,0 ${size},${size / 2} 0,${size}`)
-            .attr("fill", color)
-            .attr("stroke", "none");
-        } else {
-    // Left-pointing arrow (tip at x=0).
-    // Architecture: refX=size/2 (center anchored). Workflow/others: -pad (tip anchored with small backoff).
-          marker
-  .attr("refX", isArchitectureMarker ? size / 2 : -pad)
-            .attr("refY", size / 2)
-            .append("polygon")
-            .attr("points", `${size},0 0,${size / 2} ${size},${size}`)
-            .attr("fill", color)
-            .attr("stroke", "none");
-        }
-      };
-
       // Create directional arrow markers once (skip if already present)
-      const markersInitialized = !defs.select("#arrowhead").empty();
-      if (!markersInitialized) {
-        createArrowMarker("arrowhead", "#666");
-        createArrowMarker("arrowhead-selected", "#2196F3");
-        createArrowMarker("arrowhead-hover", "#1976D2", 12);
-        createArrowMarker("arrowhead-left", "#666", 10, "left");
-        createArrowMarker("arrowhead-left-selected", "#2196F3", 10, "left");
-        createArrowMarker("arrowhead-left-hover", "#1976D2", 12, "left");
-
-        // Mode-specific arrow markers for workflow mode
-        createArrowMarker("arrowhead-workflow", "#2563eb", 14);
-        createArrowMarker("arrowhead-workflow-selected", "#059669", 16);
-        createArrowMarker("arrowhead-workflow-hover", "#1d4ed8", 16);
-
-        // Mode-specific arrow markers for architecture mode
-        createArrowMarker("arrowhead-architecture", "#7c3aed", 10);
-        createArrowMarker("arrowhead-architecture-selected", "#dc2626", 12);
-        createArrowMarker("arrowhead-architecture-hover", "#6d28d9", 12);
-      }
+      ensureArrowMarkers(
+        defs as unknown as d3.Selection<
+          SVGDefsElement,
+          unknown,
+          d3.BaseType,
+          unknown
+        >
+      );
 
       // Layer hierarchy (ensure single instances)
       let g = svg.select<SVGGElement>("g.canvas-root");
@@ -1895,49 +1855,45 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
       // Connections are rendered in the dedicated connections-only effect.
       // Connection preview is also handled in the connection state effect.
 
-      // Render nodes
-      const nodeSelection = mainNodeLayer
-        .selectAll(".node")
-        .data(nodes, (d: any) => d.id);
+      // Render nodes via core function
+      const dragBehavior = d3
+        .drag<SVGGElement, WorkflowNode>()
+        .container(g.node() as any)
+        .clickDistance(5)
+        .on("start", dragStarted)
+        .on("drag", dragged)
+        .on("end", dragEnded);
 
-      nodeSelection
-        .exit()
-        .each(function (d: any) {
-          // Clean up from our centralized management
-          allNodeElementsRef.current.delete(d.id);
-        })
-        .remove();
+      const { nodeEnter, nodeGroups } = createNodeGroups<WorkflowNode>(
+        mainNodeLayer as unknown as d3.Selection<
+          SVGGElement,
+          unknown,
+          SVGGElement,
+          unknown
+        >,
+        nodes,
+        {
+          getId: (d) => d.id,
+          getTransform: (d) => `translate(${d.x}, ${d.y})`,
+          cursor: "move",
+          onExit: (d) => {
+            allNodeElementsRef.current.delete(d.id);
+          },
+          onEnterEach: (d, el) => {
+            // Register node element in our centralized management
+            allNodeElementsRef.current.set(d.id, el);
+            if (isDragging && draggedNodeId === d.id) {
+              const nodeElement = d3.select(el);
+              nodeElement.classed("dragging", true);
+              draggedElementRef.current = nodeElement;
+            }
+          },
+          dragBehavior,
+        }
+      );
 
-      const nodeEnter = nodeSelection
-        .enter()
-        .append("g")
-        .attr("class", "node")
-        .attr("data-node-id", (d: any) => d.id)
-        .attr("transform", (d: any) => `translate(${d.x}, ${d.y})`)
-        .style("cursor", "move")
-        .each(function (d: any) {
-          // Register node element in our centralized management
-          allNodeElementsRef.current.set(d.id, this);
-
-          // Essential: Preserve dragging state for newly created elements
-          if (isDragging && draggedNodeId === d.id) {
-            const nodeElement = d3.select(this);
-            nodeElement.classed("dragging", true);
-            // Update draggedElementRef to point to the new element
-            draggedElementRef.current = nodeElement;
-          }
-        })
-        .call(
-          d3
-            .drag<any, WorkflowNode>()
-            .container(g.node() as any)
-            .clickDistance(5) // Increase click distance for better click detection
-            .on("start", dragStarted)
-            .on("drag", dragged)
-            .on("end", dragEnded) as any
-        );
-
-      const nodeGroups = nodeEnter.merge(nodeSelection as any);
+      // Create baseline node children elements once
+      createNodeElements(nodeEnter as any);
 
       // Enhanced: Immediately preserve dragging state after merge operation
       // This must happen before any other node operations to prevent class removal
@@ -1973,10 +1929,9 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
         })
         .attr("transform", (d: any) => `translate(${d.x}, ${d.y})`);
 
-      // Node background (shape-aware)
+      // Node background (shape-aware) — events on existing element
       nodeEnter
-        .append("path")
-        .attr("class", "node-background")
+        .select(".node-background")
         .on("click", (event: any, d: WorkflowNode) => {
           // Fallback click handler for node background
           if (!isDragging) {
@@ -2064,16 +2019,9 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
           }
         });
 
-      // Architecture-mode dashed outline (hover/focus ring style)
+      // Architecture-mode dashed outline (hover/focus ring style) — update existing element
       nodeEnter
-        .append("rect")
-        .attr("class", "node-arch-outline")
-        .style("pointer-events", "none")
-        .style("fill", "none")
-        .style("stroke", "#3b82f6")
-        .style("stroke-width", 2)
-        .style("stroke-dasharray", "6,6")
-        .style("opacity", 0.8)
+        .select(".node-arch-outline")
         .style("display", (d: any) =>
           workflowContextState.designerMode === "architecture" &&
           isServicesArchitectureNode(d)
@@ -2271,18 +2219,7 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
         }, 0);
       }
 
-      // Node icon
-      nodeEnter
-        .append("text")
-        .attr("class", "node-icon")
-        .style("pointer-events", "none");
-
-      // Architecture-mode SVG icon container
-      nodeEnter
-        .append("g")
-        .attr("class", "node-icon-svg")
-        .style("pointer-events", "none")
-        .style("stroke-width", 1.8 as unknown as string);
+      // Node icon containers are created in createNodeElements
 
       nodeGroups
         .select(".node-icon")
@@ -2344,19 +2281,7 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
           }
         });
 
-      // Node label
-      nodeEnter
-        .append("text")
-        .attr("class", "node-label")
-        .style("pointer-events", "none");
-
-      // Architecture-mode sublabel (smaller text under main label)
-      nodeEnter
-        .append("text")
-        .attr("class", "node-sublabel")
-        .style("pointer-events", "none")
-        .style("opacity", 0.8);
-
+      // Node labels are created in createNodeElements; only update attributes here
       // Legacy badge removed - it was visual clutter without adding meaningful value
 
       nodeGroups
@@ -2488,7 +2413,7 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
                 onPortDrag(canvasX, canvasY);
               })
               .on("end", (event: any) => {
-                // End hit-testing: include input, output, bottom, and side ports
+                // End hit-testing: use shared utility for ports
                 const svgElement = event.sourceEvent.target.ownerSVGElement;
                 const svgSelection = d3.select(svgElement);
                 const currentTransform = d3.zoomTransform(svgElement);
@@ -2500,186 +2425,14 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
                   screenX,
                   screenY,
                 ]);
-                let targetNodeId: string | undefined;
-                let targetPortId: string | undefined;
-                const allInputPorts =
-                  svgSelection.selectAll(".input-port-circle");
-                const allOutputPorts = svgSelection.selectAll(
-                  ".output-port-circle"
+                const portHit = findNearestPortTarget(
+                  svgSelection as any,
+                  canvasX,
+                  canvasY,
+                  (pd: PortDatum) =>
+                    getConfigurableDimensions(pd.nodeData).portRadius || 6
                 );
-                const allBottomPorts = svgSelection.selectAll(
-                  ".bottom-port-diamond"
-                );
-                const allSidePorts = svgSelection.selectAll(".side-port-rect");
-                let minDistance = Infinity;
-
-                // Input circles
-                allInputPorts.each(function (portData: any) {
-                  const circle = d3.select(this);
-                  const element = this as SVGElement;
-                  const portGroup = d3.select(element.parentNode as SVGElement);
-                  const nodeGroup = d3.select(
-                    portGroup.node()?.closest("g[data-node-id]") as SVGElement
-                  );
-                  if (nodeGroup.empty()) return;
-                  const nodeId = nodeGroup.attr("data-node-id");
-                  const transform = nodeGroup.attr("transform");
-                  let nodeSvgX = 0,
-                    nodeSvgY = 0;
-                  if (transform) {
-                    const match = /translate\(([^,]+),([^)]+)\)/.exec(
-                      transform
-                    );
-                    if (match) {
-                      nodeSvgX = parseFloat(match[1]);
-                      nodeSvgY = parseFloat(match[2]);
-                    }
-                  }
-                  const cx = parseFloat(circle.attr("cx") || "0");
-                  const cy = parseFloat(circle.attr("cy") || "0");
-                  const r = parseFloat(circle.attr("r") || "8");
-                  const portCanvasX = nodeSvgX + cx;
-                  const portCanvasY = nodeSvgY + cy;
-                  const distance = Math.sqrt(
-                    (canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2
-                  );
-                  const tolerance = r + 5;
-                  if (distance <= tolerance && distance < minDistance) {
-                    minDistance = distance;
-                    targetNodeId = nodeId;
-                    targetPortId = portData.id;
-                  }
-                });
-
-                // Output circles
-                allOutputPorts.each(function (portData: any) {
-                  const circle = d3.select(this);
-                  const element = this as SVGElement;
-                  const portGroup = d3.select(element.parentNode as SVGElement);
-                  const nodeGroup = d3.select(
-                    portGroup.node()?.closest("g[data-node-id]") as SVGElement
-                  );
-                  if (nodeGroup.empty()) return;
-                  const nodeId = nodeGroup.attr("data-node-id");
-                  const transform = nodeGroup.attr("transform");
-                  let nodeSvgX = 0,
-                    nodeSvgY = 0;
-                  if (transform) {
-                    const match = /translate\(([^,]+),([^)]+)\)/.exec(
-                      transform
-                    );
-                    if (match) {
-                      nodeSvgX = parseFloat(match[1]);
-                      nodeSvgY = parseFloat(match[2]);
-                    }
-                  }
-                  const cx = parseFloat(circle.attr("cx") || "0");
-                  const cy = parseFloat(circle.attr("cy") || "0");
-                  const r = parseFloat(circle.attr("r") || "8");
-                  const portCanvasX = nodeSvgX + cx;
-                  const portCanvasY = nodeSvgY + cy;
-                  const distance = Math.sqrt(
-                    (canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2
-                  );
-                  const tolerance = r + 5;
-                  if (distance <= tolerance && distance < minDistance) {
-                    minDistance = distance;
-                    targetNodeId = nodeId;
-                    targetPortId = portData.id;
-                  }
-                });
-
-                // Bottom diamonds
-                allBottomPorts.each(function (portData: any) {
-                  const diamond = d3.select(this);
-                  const element = this as SVGElement;
-                  const portGroup = d3.select(element.parentNode as SVGElement);
-                  const nodeGroup = d3.select(
-                    portGroup.node()?.closest("g[data-node-id]") as SVGElement
-                  );
-                  if (nodeGroup.empty()) return;
-                  const nodeId = nodeGroup.attr("data-node-id");
-                  const nodeTransform = nodeGroup.attr("transform");
-                  let nodeSvgX = 0,
-                    nodeSvgY = 0;
-                  if (nodeTransform) {
-                    const match = /translate\(([^,]+),([^)]+)\)/.exec(
-                      nodeTransform
-                    );
-                    if (match) {
-                      nodeSvgX = parseFloat(match[1]);
-                      nodeSvgY = parseFloat(match[2]);
-                    }
-                  }
-                  const diamondTransform = diamond.attr("transform");
-                  let diamondX = 0,
-                    diamondY = 0;
-                  if (diamondTransform) {
-                    const match = /translate\(([^,]+),([^)]+)\)/.exec(
-                      diamondTransform
-                    );
-                    if (match) {
-                      diamondX = parseFloat(match[1]);
-                      diamondY = parseFloat(match[2]);
-                    }
-                  }
-                  const portCanvasX = nodeSvgX + diamondX;
-                  const portCanvasY = nodeSvgY + diamondY;
-                  const distance = Math.sqrt(
-                    (canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2
-                  );
-                  const diamondSize =
-                    getConfigurableDimensions(portData.nodeData).portRadius ||
-                    6;
-                  const tolerance = diamondSize + 5;
-                  if (distance <= tolerance && distance < minDistance) {
-                    minDistance = distance;
-                    targetNodeId = nodeId;
-                    targetPortId = portData.id;
-                  }
-                });
-
-                // Side rectangles
-                allSidePorts.each(function (portData: any) {
-                  const rect = d3.select(this);
-                  const element = this as SVGElement;
-                  const portGroup = d3.select(element.parentNode as SVGElement);
-                  const nodeGroup = d3.select(
-                    portGroup.node()?.closest("g[data-node-id]") as SVGElement
-                  );
-                  if (nodeGroup.empty()) return;
-                  const nodeId = nodeGroup.attr("data-node-id");
-                  const transform = nodeGroup.attr("transform");
-                  let nodeSvgX = 0,
-                    nodeSvgY = 0;
-                  if (transform) {
-                    const match = /translate\(([^,]+),([^)]+)\)/.exec(
-                      transform
-                    );
-                    if (match) {
-                      nodeSvgX = parseFloat(match[1]);
-                      nodeSvgY = parseFloat(match[2]);
-                    }
-                  }
-                  const x = parseFloat(rect.attr("x") || "0");
-                  const y = parseFloat(rect.attr("y") || "0");
-                  const w = parseFloat(rect.attr("width") || "10");
-                  const h = parseFloat(rect.attr("height") || "10");
-                  const portCanvasX = nodeSvgX + x + w / 2;
-                  const portCanvasY = nodeSvgY + y + h / 2;
-                  const size = Math.max(w, h);
-                  const distance = Math.sqrt(
-                    (canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2
-                  );
-                  const tolerance = size / 2 + 5;
-                  if (distance <= tolerance && distance < minDistance) {
-                    minDistance = distance;
-                    targetNodeId = nodeId;
-                    targetPortId = portData.id;
-                  }
-                });
-
-                onPortDragEnd(targetNodeId, targetPortId);
+                onPortDragEnd(portHit?.nodeId, portHit?.portId);
               })
           );
         });
@@ -2814,247 +2567,17 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
               let targetNodeId: string | undefined;
               let targetPortId: string | undefined;
 
-              // Find target input port by checking input circles, bottom diamonds, and side rectangles
-              const allInputPorts =
-                svgSelection.selectAll(".input-port-circle");
-              const allBottomPorts = svgSelection.selectAll(
-                ".bottom-port-diamond"
+              const portHit = findNearestPortTarget(
+                svgSelection as any,
+                canvasX,
+                canvasY,
+                (pd: PortDatum) =>
+                  getConfigurableDimensions(pd.nodeData).portRadius || 6
               );
-              const allSidePorts = svgSelection.selectAll(".side-port-rect");
-              let minDistance = Infinity;
-
-              console.log(
-                "🔍 Found",
-                allInputPorts.size(),
-                "input ports and",
-                allBottomPorts.size(),
-                "bottom ports to check"
-              );
-
-              allInputPorts.each(function (portData: any) {
-                const circle = d3.select(this);
-                const element = this as SVGElement;
-
-                // Get port position in SVG coordinates
-                const portGroup = d3.select(element.parentNode as SVGElement);
-                const nodeGroup = d3.select(
-                  portGroup.node()?.closest("g[data-node-id]") as SVGElement
-                );
-
-                if (nodeGroup.empty()) {
-                  console.log("⚠️ Could not find parent node group for port");
-                  return;
-                }
-
-                const nodeId = nodeGroup.attr("data-node-id");
-                const transform = nodeGroup.attr("transform");
-                let nodeSvgX = 0,
-                  nodeSvgY = 0;
-
-                if (transform) {
-                  const match = /translate\(([^,]+),([^)]+)\)/.exec(transform);
-                  if (match) {
-                    nodeSvgX = parseFloat(match[1]);
-                    nodeSvgY = parseFloat(match[2]);
-                  }
-                }
-
-                const cx = parseFloat(circle.attr("cx") || "0");
-                const cy = parseFloat(circle.attr("cy") || "0");
-                const r = parseFloat(circle.attr("r") || "8");
-
-                // Port position in SVG coordinates (this is already in canvas space)
-                const portCanvasX = nodeSvgX + cx;
-                const portCanvasY = nodeSvgY + cy;
-
-                // Calculate distance directly in canvas coordinates
-                const distance = Math.sqrt(
-                  (canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2
-                );
-                const tolerance = r + 5; // FIXED: Port circle radius + 5px only
-
-                console.log("🎯 Checking port:", {
-                  nodeId,
-                  portId: portData.id,
-                  portCanvasPos: { x: portCanvasX, y: portCanvasY },
-                  mouseCanvasPos: { x: canvasX, y: canvasY },
-                  distance,
-                  tolerance,
-                  isWithinRange: distance <= tolerance,
-                });
-
-                // Use closest valid input port with tolerance
-                if (distance <= tolerance && distance < minDistance) {
-                  minDistance = distance;
-                  targetNodeId = nodeId;
-                  targetPortId = portData.id;
-                  console.log(
-                    "🎯✅ Found best input port target:",
-                    targetNodeId,
-                    targetPortId,
-                    "distance:",
-                    distance
-                  );
-                }
-              });
-
-              // Also check bottom ports (diamond shapes)
-              allBottomPorts.each(function (portData: any) {
-                const diamond = d3.select(this);
-                const element = this as SVGElement;
-
-                // Get port position in SVG coordinates
-                const portGroup = d3.select(element.parentNode as SVGElement);
-                const nodeGroup = d3.select(
-                  portGroup.node()?.closest("g[data-node-id]") as SVGElement
-                );
-
-                if (nodeGroup.empty()) {
-                  console.log(
-                    "⚠️ Could not find parent node group for bottom port"
-                  );
-                  return;
-                }
-
-                const nodeId = nodeGroup.attr("data-node-id");
-                const nodeTransform = nodeGroup.attr("transform");
-                let nodeSvgX = 0,
-                  nodeSvgY = 0;
-
-                if (nodeTransform) {
-                  const match = /translate\(([^,]+),([^)]+)\)/.exec(
-                    nodeTransform
-                  );
-                  if (match) {
-                    nodeSvgX = parseFloat(match[1]);
-                    nodeSvgY = parseFloat(match[2]);
-                  }
-                }
-
-                // Get diamond position from its transform
-                const diamondTransform = diamond.attr("transform");
-                let diamondX = 0,
-                  diamondY = 0;
-
-                if (diamondTransform) {
-                  const match = /translate\(([^,]+),([^)]+)\)/.exec(
-                    diamondTransform
-                  );
-                  if (match) {
-                    diamondX = parseFloat(match[1]);
-                    diamondY = parseFloat(match[2]);
-                  }
-                }
-
-                // Port position in SVG coordinates (this is already in canvas space)
-                const portCanvasX = nodeSvgX + diamondX;
-                const portCanvasY = nodeSvgY + diamondY;
-
-                // Calculate distance directly in canvas coordinates
-                const distance = Math.sqrt(
-                  (canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2
-                );
-                // FIXED: Use diamond size (port radius) + 5px for consistent behavior with input ports
-                const diamondSize =
-                  getConfigurableDimensions(portData.nodeData).portRadius || 6;
-                const tolerance = diamondSize + 5;
-
-                console.log("🎯 Checking bottom port (diamond):", {
-                  nodeId,
-                  portId: portData.id,
-                  portCanvasPos: { x: portCanvasX, y: portCanvasY },
-                  mouseCanvasPos: { x: canvasX, y: canvasY },
-                  distance,
-                  tolerance,
-                  isWithinRange: distance <= tolerance,
-                });
-
-                // Use closest valid bottom port with tolerance
-                if (distance <= tolerance && distance < minDistance) {
-                  minDistance = distance;
-                  targetNodeId = nodeId;
-                  targetPortId = portData.id;
-                  console.log(
-                    "🎯✅ Found best bottom port target:",
-                    targetNodeId,
-                    targetPortId,
-                    "distance:",
-                    distance
-                  );
-                }
-              });
-
-              // Also check side ports (rectangles)
-              allSidePorts.each(function (portData: any) {
-                const rect = d3.select(this);
-                const element = this as SVGElement;
-
-                // Get port position in SVG coordinates
-                const portGroup = d3.select(element.parentNode as SVGElement);
-                const nodeGroup = d3.select(
-                  portGroup.node()?.closest("g[data-node-id]") as SVGElement
-                );
-
-                if (nodeGroup.empty()) {
-                  console.log(
-                    "⚠️ Could not find parent node group for side port"
-                  );
-                  return;
-                }
-
-                const nodeId = nodeGroup.attr("data-node-id");
-                const transform = nodeGroup.attr("transform");
-                let nodeSvgX = 0,
-                  nodeSvgY = 0;
-
-                if (transform) {
-                  const match = /translate\(([^,]+),([^)]+)\)/.exec(transform);
-                  if (match) {
-                    nodeSvgX = parseFloat(match[1]);
-                    nodeSvgY = parseFloat(match[2]);
-                  }
-                }
-
-                const x = parseFloat(rect.attr("x") || "0");
-                const y = parseFloat(rect.attr("y") || "0");
-                const w = parseFloat(rect.attr("width") || "10");
-                const h = parseFloat(rect.attr("height") || "10");
-
-                // Port position in SVG coordinates (already in canvas space)
-                const portCanvasX = nodeSvgX + x + w / 2;
-                const portCanvasY = nodeSvgY + y + h / 2;
-
-                // Calculate distance directly in canvas coordinates
-                const size = Math.max(w, h);
-                const distance = Math.sqrt(
-                  (canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2
-                );
-                const tolerance = size / 2 + 5;
-
-                console.log("🎯 Checking side port (rect):", {
-                  nodeId,
-                  portId: portData.id,
-                  portCanvasPos: { x: portCanvasX, y: portCanvasY },
-                  mouseCanvasPos: { x: canvasX, y: canvasY },
-                  distance,
-                  tolerance,
-                  isWithinRange: distance <= tolerance,
-                });
-
-                // Use closest valid side port with tolerance
-                if (distance <= tolerance && distance < minDistance) {
-                  minDistance = distance;
-                  targetNodeId = nodeId;
-                  targetPortId = portData.id;
-                  console.log(
-                    "🎯✅ Found best side port target:",
-                    targetNodeId,
-                    targetPortId,
-                    "distance:",
-                    distance
-                  );
-                }
-              });
+              if (portHit) {
+                targetNodeId = portHit.nodeId;
+                targetPortId = portHit.portId;
+              }
 
               // If no port target found, check for node background drop areas
               if (!targetNodeId) {
@@ -3281,7 +2804,6 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
               console.log("🏁 Final target result:", {
                 targetNodeId,
                 targetPortId,
-                minDistance,
               });
               onPortDragEnd(targetNodeId, targetPortId);
 
@@ -3413,180 +2935,24 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
                 screenX,
                 screenY,
               ]);
+
               let targetNodeId: string | undefined;
               let targetPortId: string | undefined;
-              const allInputPorts =
-                svgSelection.selectAll(".input-port-circle");
-              const allBottomPorts = svgSelection.selectAll(
-                ".bottom-port-diamond"
+
+              const portHit = findNearestPortTarget(
+                svgSelection as any,
+                canvasX,
+                canvasY,
+                (pd: PortDatum) =>
+                  getConfigurableDimensions(pd.nodeData).portRadius || 6
               );
-              const allSidePorts = svgSelection.selectAll(".side-port-rect");
-              let minDistance = Infinity;
+              if (portHit) {
+                targetNodeId = portHit.nodeId;
+                targetPortId = portHit.portId;
+              }
 
               // Use stored drag start for background/can-drop logic
               const capturedConnectionStart = dragConnectionDataRef.current;
-
-              // Input circles
-              allInputPorts.each(function (portData: any) {
-                const circle = d3.select(this);
-                const element = this as SVGElement;
-                const portGroup = d3.select(element.parentNode as SVGElement);
-                const nodeGroup = d3.select(
-                  portGroup.node()?.closest("g[data-node-id]") as SVGElement
-                );
-                if (nodeGroup.empty()) return;
-                const nodeId = nodeGroup.attr("data-node-id");
-                const transform = nodeGroup.attr("transform");
-                let nodeSvgX = 0,
-                  nodeSvgY = 0;
-                if (transform) {
-                  const match = /translate\(([^,]+),([^)]+)\)/.exec(transform);
-                  if (match) {
-                    nodeSvgX = parseFloat(match[1]);
-                    nodeSvgY = parseFloat(match[2]);
-                  }
-                }
-                const cx = parseFloat(circle.attr("cx") || "0");
-                const cy = parseFloat(circle.attr("cy") || "0");
-                const r = parseFloat(circle.attr("r") || "8");
-                const portCanvasX = nodeSvgX + cx;
-                const portCanvasY = nodeSvgY + cy;
-                const distance = Math.sqrt(
-                  (canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2
-                );
-                const tolerance = r + 5;
-                if (distance <= tolerance && distance < minDistance) {
-                  minDistance = distance;
-                  targetNodeId = nodeId;
-                  targetPortId = portData.id;
-                }
-              });
-
-              // Bottom diamonds
-              allBottomPorts.each(function (portData: any) {
-                const diamond = d3.select(this);
-                const element = this as SVGElement;
-                const portGroup = d3.select(element.parentNode as SVGElement);
-                const nodeGroup = d3.select(
-                  portGroup.node()?.closest("g[data-node-id]") as SVGElement
-                );
-                if (nodeGroup.empty()) return;
-                const nodeId = nodeGroup.attr("data-node-id");
-                const nodeTransform = nodeGroup.attr("transform");
-                let nodeSvgX = 0,
-                  nodeSvgY = 0;
-                if (nodeTransform) {
-                  const match = /translate\(([^,]+),([^)]+)\)/.exec(
-                    nodeTransform
-                  );
-                  if (match) {
-                    nodeSvgX = parseFloat(match[1]);
-                    nodeSvgY = parseFloat(match[2]);
-                  }
-                }
-                const diamondTransform = diamond.attr("transform");
-                let diamondX = 0,
-                  diamondY = 0;
-                if (diamondTransform) {
-                  const match = /translate\(([^,]+),([^)]+)\)/.exec(
-                    diamondTransform
-                  );
-                  if (match) {
-                    diamondX = parseFloat(match[1]);
-                    diamondY = parseFloat(match[2]);
-                  }
-                }
-                const portCanvasX = nodeSvgX + diamondX;
-                const portCanvasY = nodeSvgY + diamondY;
-                const distance = Math.sqrt(
-                  (canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2
-                );
-                const diamondSize =
-                  getConfigurableDimensions(portData.nodeData).portRadius || 6;
-                const tolerance = diamondSize + 5;
-                if (distance <= tolerance && distance < minDistance) {
-                  minDistance = distance;
-                  targetNodeId = nodeId;
-                  targetPortId = portData.id;
-                }
-              });
-
-              // Output circles (omni-mode: allow connecting into outputs too, like input-port-group)
-              const allOutputPorts = svgSelection.selectAll(
-                ".output-port-circle"
-              );
-              allOutputPorts.each(function (this: any, portData: any) {
-                const circle = d3.select(this);
-                const element = this as SVGElement;
-                const portGroup = d3.select(element.parentNode as SVGElement);
-                const nodeGroup = d3.select(
-                  portGroup.node()?.closest("g[data-node-id]") as SVGElement
-                );
-                if (nodeGroup.empty()) return;
-                const nodeId = nodeGroup.attr("data-node-id");
-                const transform = nodeGroup.attr("transform");
-                let nodeSvgX = 0,
-                  nodeSvgY = 0;
-                if (transform) {
-                  const match = /translate\(([^,]+),([^)]+)\)/.exec(transform);
-                  if (match) {
-                    nodeSvgX = parseFloat(match[1]);
-                    nodeSvgY = parseFloat(match[2]);
-                  }
-                }
-                const cx = parseFloat(circle.attr("cx") || "0");
-                const cy = parseFloat(circle.attr("cy") || "0");
-                const r = parseFloat(circle.attr("r") || "8");
-                const portCanvasX = nodeSvgX + cx;
-                const portCanvasY = nodeSvgY + cy;
-                const distance = Math.sqrt(
-                  (canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2
-                );
-                const tolerance = r + 5;
-                if (distance <= tolerance && distance < minDistance) {
-                  minDistance = distance;
-                  targetNodeId = nodeId;
-                  targetPortId = portData.id;
-                }
-              });
-
-              // Side rectangles (top/left act as inputs)
-              allSidePorts.each(function (portData: any) {
-                const rect = d3.select(this);
-                const element = this as SVGElement;
-                const portGroup = d3.select(element.parentNode as SVGElement);
-                const nodeGroup = d3.select(
-                  portGroup.node()?.closest("g[data-node-id]") as SVGElement
-                );
-                if (nodeGroup.empty()) return;
-                const nodeId = nodeGroup.attr("data-node-id");
-                const transform = nodeGroup.attr("transform");
-                let nodeSvgX = 0,
-                  nodeSvgY = 0;
-                if (transform) {
-                  const match = /translate\(([^,]+),([^)]+)\)/.exec(transform);
-                  if (match) {
-                    nodeSvgX = parseFloat(match[1]);
-                    nodeSvgY = parseFloat(match[2]);
-                  }
-                }
-                const x = parseFloat(rect.attr("x") || "0");
-                const y = parseFloat(rect.attr("y") || "0");
-                const w = parseFloat(rect.attr("width") || "10");
-                const h = parseFloat(rect.attr("height") || "10");
-                const portCanvasX = nodeSvgX + x + w / 2;
-                const portCanvasY = nodeSvgY + y + h / 2;
-                const size = Math.max(w, h);
-                const distance = Math.sqrt(
-                  (canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2
-                );
-                const tolerance = size / 2 + 5;
-                if (distance <= tolerance && distance < minDistance) {
-                  minDistance = distance;
-                  targetNodeId = nodeId;
-                  targetPortId = portData.id;
-                }
-              });
 
               // Node background fallback (like output/input behavior)
               if (!targetNodeId) {
@@ -3770,171 +3136,25 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
               let targetNodeId: string | undefined;
               let targetPortId: string | undefined;
 
-              // Find target input port by checking input circles, bottom diamonds, and side rectangles
-              const allInputPorts =
-                svgSelection.selectAll(".input-port-circle");
-              const allBottomPorts = svgSelection.selectAll(
-                ".bottom-port-diamond"
+              const portHit = findNearestPortTarget(
+                svgSelection as unknown as d3.Selection<
+                  SVGSVGElement,
+                  unknown,
+                  d3.BaseType,
+                  unknown
+                >,
+                canvasX,
+                canvasY,
+                (pd: PortDatum) =>
+                  getConfigurableDimensions(pd.nodeData).portRadius || 6
               );
-              const allSidePorts = svgSelection.selectAll(".side-port-rect");
-              let minDistance = Infinity;
-
-              // Check input ports
-              allInputPorts.each(function (portData: any) {
-                const circle = d3.select(this);
-                const element = this as SVGElement;
-
-                // Get port position in SVG coordinates
-                const portGroup = d3.select(element.parentNode as SVGElement);
-                const nodeGroup = d3.select(
-                  portGroup.node()?.closest("g[data-node-id]") as SVGElement
-                );
-
-                if (nodeGroup.empty()) return;
-
-                const nodeId = nodeGroup.attr("data-node-id");
-                const transform = nodeGroup.attr("transform");
-                let nodeSvgX = 0,
-                  nodeSvgY = 0;
-
-                if (transform) {
-                  const match = /translate\(([^,]+),([^)]+)\)/.exec(transform);
-                  if (match) {
-                    nodeSvgX = parseFloat(match[1]);
-                    nodeSvgY = parseFloat(match[2]);
-                  }
-                }
-
-                const cx = parseFloat(circle.attr("cx") || "0");
-                const cy = parseFloat(circle.attr("cy") || "0");
-                const r = parseFloat(circle.attr("r") || "8");
-
-                // Port position in SVG coordinates (this is already in canvas space)
-                const portCanvasX = nodeSvgX + cx;
-                const portCanvasY = nodeSvgY + cy;
-
-                // Calculate distance directly in canvas coordinates
-                const distance = Math.sqrt(
-                  (canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2
-                );
-                const tolerance = r + 5; // FIXED: Port circle radius + 5px only
-
-                // Use closest valid input port with tolerance
-                if (distance <= tolerance && distance < minDistance) {
-                  minDistance = distance;
-                  targetNodeId = nodeId;
-                  targetPortId = portData.id;
-                }
-              });
-
-              // Also check bottom ports (diamond shapes)
-              allBottomPorts.each(function (portData: any) {
-                const diamond = d3.select(this);
-                const element = this as SVGElement;
-
-                // Get port position in SVG coordinates
-                const portGroup = d3.select(element.parentNode as SVGElement);
-                const nodeGroup = d3.select(
-                  portGroup.node()?.closest("g[data-node-id]") as SVGElement
-                );
-
-                if (nodeGroup.empty()) return;
-
-                const nodeId = nodeGroup.attr("data-node-id");
-                const nodeTransform = nodeGroup.attr("transform");
-                let nodeSvgX = 0,
-                  nodeSvgY = 0;
-
-                if (nodeTransform) {
-                  const match = /translate\(([^,]+),([^)]+)\)/.exec(
-                    nodeTransform
-                  );
-                  if (match) {
-                    nodeSvgX = parseFloat(match[1]);
-                    nodeSvgY = parseFloat(match[2]);
-                  }
-                }
-
-                // Get diamond position from its transform
-                const diamondTransform = diamond.attr("transform");
-                let diamondX = 0,
-                  diamondY = 0;
-
-                if (diamondTransform) {
-                  const match = /translate\(([^,]+),([^)]+)\)/.exec(
-                    diamondTransform
-                  );
-                  if (match) {
-                    diamondX = parseFloat(match[1]);
-                    diamondY = parseFloat(match[2]);
-                  }
-                }
-
-                // Port position in SVG coordinates (this is already in canvas space)
-                const portCanvasX = nodeSvgX + diamondX;
-                const portCanvasY = nodeSvgY + diamondY;
-
-                // Calculate distance directly in canvas coordinates
-                const distance = Math.sqrt(
-                  (canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2
-                );
-                // FIXED: Use diamond size (port radius) + 5px for consistent behavior
-                const diamondSize =
-                  getConfigurableDimensions(portData.nodeData).portRadius || 6;
-                const tolerance = diamondSize + 5;
-
-                // Use closest valid bottom port with tolerance
-                if (distance <= tolerance && distance < minDistance) {
-                  minDistance = distance;
-                  targetNodeId = nodeId;
-                  targetPortId = portData.id;
-                }
-              });
-
-              // Also check side ports (rectangles)
-              allSidePorts.each(function (portData: any) {
-                const rect = d3.select(this);
-                const element = this as SVGElement;
-                const portGroup = d3.select(element.parentNode as SVGElement);
-                const nodeGroup = d3.select(
-                  portGroup.node()?.closest("g[data-node-id]") as SVGElement
-                );
-                if (nodeGroup.empty()) {
-                  return;
-                }
-                const nodeId = nodeGroup.attr("data-node-id");
-                const transform = nodeGroup.attr("transform");
-                let nodeSvgX = 0,
-                  nodeSvgY = 0;
-                if (transform) {
-                  const match = /translate\(([^,]+),([^)]+)\)/.exec(transform);
-                  if (match) {
-                    nodeSvgX = parseFloat(match[1]);
-                    nodeSvgY = parseFloat(match[2]);
-                  }
-                }
-                const x = parseFloat(rect.attr("x") || "0");
-                const y = parseFloat(rect.attr("y") || "0");
-                const w = parseFloat(rect.attr("width") || "10");
-                const h = parseFloat(rect.attr("height") || "10");
-                const portCanvasX = nodeSvgX + x + w / 2;
-                const portCanvasY = nodeSvgY + y + h / 2;
-                const size = Math.max(w, h);
-                const distance = Math.sqrt(
-                  (canvasX - portCanvasX) ** 2 + (canvasY - portCanvasY) ** 2
-                );
-                const tolerance = size / 2 + 5;
-                if (distance <= tolerance && distance < minDistance) {
-                  minDistance = distance;
-                  targetNodeId = nodeId;
-                  targetPortId = portData.id;
-                }
-              });
-
+              if (portHit) {
+                targetNodeId = portHit.nodeId;
+                targetPortId = portHit.portId;
+              }
               console.log("🏁 Bottom port diamond drag final target:", {
                 targetNodeId,
                 targetPortId,
-                minDistance,
               });
               onPortDragEnd(targetNodeId, targetPortId);
             })
@@ -4527,11 +3747,11 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
       // Update visible path
       merged
         .select<SVGPathElement>(".connection-path")
-  .attr("d", (d: any) => getConnectionPath(d))
+        .attr("d", (d: any) => getConnectionPath(d))
         .attr("stroke", "white")
         .attr("stroke-width", 2)
-  .attr("marker-end", (d: any) => getConnectionMarker(d, "default"))
-  .style("marker-end", (d: any) => getConnectionMarker(d, "default"))
+        .attr("marker-end", (d: any) => getConnectionMarker(d, "default"))
+        .style("marker-end", (d: any) => getConnectionMarker(d, "default"))
         .style("display", (d: any) => {
           const groupInfo = getConnectionGroupInfo(d.id, connections);
           return groupInfo.isMultiple && groupInfo.index > 0 ? "none" : "block";
@@ -4747,14 +3967,15 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
     if (!svgRef.current || !isInitialized) return;
 
     const svg = d3.select(svgRef.current);
-  // Always operate on the main canvas root / connection layer
-  const canvasRoot = svg.select<SVGGElement>("g.canvas-root");
-  if (canvasRoot.empty()) return;
-  const connectionLayer = canvasRoot.select<SVGGElement>("g.connection-layer");
-  const targetLayer = connectionLayer.empty() ? canvasRoot : connectionLayer;
+    // Always operate on the main canvas root / connection layer
+    const canvasRoot = svg.select<SVGGElement>("g.canvas-root");
+    if (canvasRoot.empty()) return;
+    const connectionLayer =
+      canvasRoot.select<SVGGElement>("g.connection-layer");
+    const targetLayer = connectionLayer.empty() ? canvasRoot : connectionLayer;
 
     // Handle connection preview
-  targetLayer.selectAll(".connection-preview").remove();
+    targetLayer.selectAll(".connection-preview").remove();
 
     if (isConnecting && connectionStart) {
       console.log("🔄 Connection effect - preview update:", {
@@ -4814,7 +4035,8 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
         const isWorkflowMode = workflowContextState.designerMode === "workflow";
         const previewMarker = getArrowMarkerForMode(isWorkflowMode, "default");
 
-  targetLayer.append("path")
+        targetLayer
+          .append("path")
           .attr("class", "connection-preview")
           .attr("d", previewPath)
           .attr("stroke", "#2196F3")

@@ -10,50 +10,50 @@
 
 Main workflow designer component ที่รวมทุกฟีเจอร์ไว้ในที่เดียว
 
-```typescript
+````typescript
 interface WorkflowDesignerProps {
   /** Workflow data to load and edit */
-  workflow?: Workflow
-  
+  workflow?: Workflow;
+
   /** Operating mode: workflow automation or architecture design */
-  mode?: 'workflow' | 'architecture'
-  
+  mode?: "workflow" | "architecture";
+
   /** Disable editing capabilities */
-  readOnly?: boolean
-  
+  readOnly?: boolean;
+
   /** Custom CSS classes */
-  className?: string
-  
+  className?: string;
+
   /** Initial canvas position and zoom */
   initialView?: {
-    x: number
-    y: number
-    zoom: number
-  }
-  
+    x: number;
+    y: number;
+    zoom: number;
+  };
+
   // Event handlers
   /** Called when workflow is saved */
-  onSave?: (workflow: Workflow) => void | Promise<void>
-  
+  onSave?: (workflow: Workflow) => void | Promise<void>;
+
   /** Called when workflow execution is requested */
-  onExecute?: (workflow: Workflow) => void | Promise<void>
-  
+  onExecute?: (workflow: Workflow) => void | Promise<void>;
+
   /** Called when workflow structure changes */
-  onChange?: (workflow: Workflow) => void
-  
+  onChange?: (workflow: Workflow) => void;
+
   /** Called when nodes are selected */
-  onSelectionChange?: (nodeIds: string[]) => void
-  
+  onSelectionChange?: (nodeIds: string[]) => void;
+
   /** Called when canvas view changes */
-  onViewChange?: (view: CanvasView) => void
-  
+  onViewChange?: (view: CanvasView) => void;
+
   /** Error handler for async operations */
-  onError?: (error: Error) => void
+  onError?: (error: Error) => void;
 }
 
 /**
  * Main workflow designer component
- * 
+ *
  * @example
  * ```tsx
  * <WorkflowDesigner
@@ -67,53 +67,53 @@ interface WorkflowDesignerProps {
  * />
  * ```
  */
-export const WorkflowDesigner: React.FC<WorkflowDesignerProps>
-```
+export const WorkflowDesigner: React.FC<WorkflowDesignerProps>;
+````
 
 ### NodePalette
 
 Unified node palette สำหรับทั้ง workflow และ architecture modes
 
-```typescript
+````typescript
 interface NodePaletteProps {
   /** Current mode determines available nodes */
-  mode: 'workflow' | 'architecture'
-  
+  mode: "workflow" | "architecture";
+
   /** Filter nodes by search term */
-  searchTerm?: string
-  
+  searchTerm?: string;
+
   /** Selected category filter */
-  selectedCategory?: string
-  
+  selectedCategory?: string;
+
   /** Custom CSS classes */
-  className?: string
-  
+  className?: string;
+
   /** Show category headers */
-  showCategories?: boolean
-  
+  showCategories?: boolean;
+
   /** Enable search functionality */
-  searchEnabled?: boolean
-  
+  searchEnabled?: boolean;
+
   /** Custom node renderer */
-  nodeRenderer?: (node: NodeType) => React.ReactNode
-  
+  nodeRenderer?: (node: NodeType) => React.ReactNode;
+
   // Event handlers
   /** Called when node drag starts */
-  onNodeDragStart?: (nodeType: string, event: DragEvent) => void
-  
+  onNodeDragStart?: (nodeType: string, event: DragEvent) => void;
+
   /** Called when node is selected/clicked */
-  onNodeSelect?: (nodeType: string) => void
-  
+  onNodeSelect?: (nodeType: string) => void;
+
   /** Called when category is changed */
-  onCategoryChange?: (category: string) => void
-  
+  onCategoryChange?: (category: string) => void;
+
   /** Called when search term changes */
-  onSearchChange?: (searchTerm: string) => void
+  onSearchChange?: (searchTerm: string) => void;
 }
 
 /**
  * Unified node palette with 22 node types per mode
- * 
+ *
  * @example
  * ```tsx
  * <NodePalette
@@ -125,69 +125,69 @@ interface NodePaletteProps {
  * />
  * ```
  */
-export const NodePalette: React.FC<NodePaletteProps>
-```
+export const NodePalette: React.FC<NodePaletteProps>;
+````
 
 ### WorkflowCanvas
 
 Main canvas component สำหรับ rendering และ interaction
 
-```typescript
+````typescript
 interface WorkflowCanvasProps {
   /** Nodes to render */
-  nodes: WorkflowNode[]
-  
+  nodes: WorkflowNode[];
+
   /** Connections between nodes */
-  connections: Connection[]
-  
+  connections: Connection[];
+
   /** Current operating mode */
-  mode: 'workflow' | 'architecture'
-  
+  mode: "workflow" | "architecture";
+
   /** Canvas dimensions */
-  width?: number
-  height?: number
-  
+  width?: number;
+  height?: number;
+
   /** Disable interactions */
-  readOnly?: boolean
-  
+  readOnly?: boolean;
+
   /** Show grid background */
-  showGrid?: boolean
-  
+  showGrid?: boolean;
+
   /** Grid size in pixels */
-  gridSize?: number
-  
+  gridSize?: number;
+
   /** Snap to grid */
-  snapToGrid?: boolean
-  
+  snapToGrid?: boolean;
+
   /** Custom CSS classes */
-  className?: string
-  
+  className?: string;
+
   // Event handlers
   /** Called when node position changes */
-  onNodeMove?: (nodeId: string, position: Position) => void
-  
+  onNodeMove?: (nodeId: string, position: Position) => void;
+
   /** Called when node is selected */
-  onNodeSelect?: (nodeId: string | null) => void
-  
+  onNodeSelect?: (nodeId: string | null) => void;
+
   /** Called when nodes are deleted */
-  onNodesDelete?: (nodeIds: string[]) => void
-  
+  onNodesDelete?: (nodeIds: string[]) => void;
+
   /** Called when connection is created */
-  onConnection?: (connection: Partial<Connection>) => void
-  
+  onConnection?: (connection: Partial<Connection>) => void;
+
   /** Called when connection is deleted */
-  onConnectionDelete?: (connectionId: string) => void
-  
+  onConnectionDelete?: (connectionId: string) => void;
+
   /** Called when canvas is clicked (deselect) */
-  onCanvasClick?: (event: React.MouseEvent) => void
-  
+  onCanvasClick?: (event: React.MouseEvent) => void;
+
   /** Called when multiple nodes are selected */
-  onMultiSelect?: (nodeIds: string[]) => void
+  onMultiSelect?: (nodeIds: string[]) => void;
 }
 
 /**
  * Main canvas for workflow and architecture diagrams
- * 
+ *
  * @example
  * ```tsx
  * <WorkflowCanvas
@@ -201,51 +201,51 @@ interface WorkflowCanvasProps {
  * />
  * ```
  */
-export const WorkflowCanvas: React.FC<WorkflowCanvasProps>
-```
+export const WorkflowCanvas: React.FC<WorkflowCanvasProps>;
+````
 
 ### CanvasToolbar
 
 Canvas control toolbar พร้อม zoom และ view controls
 
-```typescript
+````typescript
 interface CanvasToolbarProps {
   /** Current zoom level (0.1 to 5.0) */
-  currentZoom?: number
-  
+  currentZoom?: number;
+
   /** Current view/fit mode */
-  currentView?: 'fit' | 'actual' | 'custom'
-  
+  currentView?: "fit" | "actual" | "custom";
+
   /** Show zoom percentage */
-  showZoomLevel?: boolean
-  
+  showZoomLevel?: boolean;
+
   /** Custom CSS classes */
-  className?: string
-  
+  className?: string;
+
   /** Hide specific controls */
-  hiddenControls?: Array<'zoom-in' | 'zoom-out' | 'reset' | 'fit'>
-  
+  hiddenControls?: Array<"zoom-in" | "zoom-out" | "reset" | "fit">;
+
   // Event handlers
   /** Called when zoom in is requested */
-  onZoomIn?: () => void
-  
+  onZoomIn?: () => void;
+
   /** Called when zoom out is requested */
-  onZoomOut?: () => void
-  
+  onZoomOut?: () => void;
+
   /** Called when canvas reset is requested */
-  onReset?: () => void
-  
+  onReset?: () => void;
+
   /** Called when fit to screen is requested */
-  onFit?: () => void
-  
+  onFit?: () => void;
+
   /** Called when actual size is requested */
-  onActualSize?: () => void
+  onActualSize?: () => void;
 }
 
 /**
  * Canvas toolbar with zoom and view controls
  * Icons are 16px for better visibility
- * 
+ *
  * @example
  * ```tsx
  * <CanvasToolbar
@@ -256,8 +256,8 @@ interface CanvasToolbarProps {
  * />
  * ```
  */
-export const CanvasToolbar: React.FC<CanvasToolbarProps>
-```
+export const CanvasToolbar: React.FC<CanvasToolbarProps>;
+````
 
 ## 🎣 Hooks API
 
@@ -265,63 +265,66 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps>
 
 Main context hook สำหรับ workflow state management
 
-```typescript
+````typescript
 interface WorkflowContextType {
   // State
-  state: WorkflowState
-  dispatch: React.Dispatch<WorkflowAction>
-  
+  state: WorkflowState;
+  dispatch: React.Dispatch<WorkflowAction>;
+
   // Dragging state (prevents stale closures)
-  draggingState: DraggingState
-  isDragging: () => boolean
-  getDraggedNodeId: () => string | null
-  startDragging: (nodeId: string, position: Position) => void
-  endDragging: () => void
-  
+  draggingState: DraggingState;
+  isDragging: () => boolean;
+  getDraggedNodeId: () => string | null;
+  startDragging: (nodeId: string, position: Position) => void;
+  endDragging: () => void;
+
   // Node operations
-  addNode: (node: WorkflowNode) => void
-  updateNode: (nodeId: string, updates: Partial<WorkflowNode>) => void
-  deleteNode: (nodeId: string) => void
-  duplicateNode: (nodeId: string) => WorkflowNode | null
-  selectNode: (nodeId: string | null) => void
-  
+  addNode: (node: WorkflowNode) => void;
+  updateNode: (nodeId: string, updates: Partial<WorkflowNode>) => void;
+  deleteNode: (nodeId: string) => void;
+  duplicateNode: (nodeId: string) => WorkflowNode | null;
+  selectNode: (nodeId: string | null) => void;
+
   // Connection operations
-  addConnection: (connection: Connection) => void
-  updateConnection: (connectionId: string, updates: Partial<Connection>) => void
-  deleteConnection: (connectionId: string) => void
-  
+  addConnection: (connection: Connection) => void;
+  updateConnection: (
+    connectionId: string,
+    updates: Partial<Connection>
+  ) => void;
+  deleteConnection: (connectionId: string) => void;
+
   // Workflow operations
-  loadWorkflow: (workflow: Workflow) => void
-  saveWorkflow: () => Promise<void>
-  clearWorkflow: () => void
-  
+  loadWorkflow: (workflow: Workflow) => void;
+  saveWorkflow: () => Promise<void>;
+  clearWorkflow: () => void;
+
   // Mode operations
-  setMode: (mode: 'workflow' | 'architecture') => void
-  
+  setMode: (mode: "workflow" | "architecture") => void;
+
   // Selection operations
-  setSelectedNodes: (nodeIds: string[]) => void
-  clearSelection: () => void
-  
+  setSelectedNodes: (nodeIds: string[]) => void;
+  clearSelection: () => void;
+
   // Undo/Redo
-  undo: () => void
-  redo: () => void
-  canUndo: boolean
-  canRedo: boolean
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 /**
  * Main workflow context hook
- * 
+ *
  * @example
  * ```tsx
  * const MyComponent = () => {
- *   const { 
- *     state, 
- *     addNode, 
- *     updateNode, 
- *     isDragging 
+ *   const {
+ *     state,
+ *     addNode,
+ *     updateNode,
+ *     isDragging
  *   } = useWorkflowContext()
- *   
+ *
  *   const handleAddNode = () => {
  *     const newNode = {
  *       id: crypto.randomUUID(),
@@ -334,7 +337,7 @@ interface WorkflowContextType {
  *     }
  *     addNode(newNode)
  *   }
- *   
+ *
  *   return (
  *     <div>
  *       <p>Nodes: {state.nodes.length}</p>
@@ -345,62 +348,62 @@ interface WorkflowContextType {
  * }
  * ```
  */
-export const useWorkflowContext: () => WorkflowContextType
-```
+export const useWorkflowContext: () => WorkflowContextType;
+````
 
 ### useWorkflowCanvas
 
 Canvas-specific operations และ zoom management
 
-```typescript
+````typescript
 interface CanvasControls {
   // Zoom operations
-  zoomIn: (factor?: number) => void
-  zoomOut: (factor?: number) => void
-  setZoom: (zoom: number) => void
-  currentZoom: number
-  
+  zoomIn: (factor?: number) => void;
+  zoomOut: (factor?: number) => void;
+  setZoom: (zoom: number) => void;
+  currentZoom: number;
+
   // View operations
-  resetCanvasPosition: (nodes?: WorkflowNode[]) => void
-  fitToScreen: (nodes?: WorkflowNode[]) => void
-  centerOn: (position: Position) => void
-  panTo: (position: Position) => void
-  
+  resetCanvasPosition: (nodes?: WorkflowNode[]) => void;
+  fitToScreen: (nodes?: WorkflowNode[]) => void;
+  centerOn: (position: Position) => void;
+  panTo: (position: Position) => void;
+
   // View state
-  canvasTransform: CanvasTransform
-  viewBox: ViewBox
-  
+  canvasTransform: CanvasTransform;
+  viewBox: ViewBox;
+
   // Canvas utilities
-  screenToCanvas: (screenPoint: Position) => Position
-  canvasToScreen: (canvasPoint: Position) => Position
-  getVisibleNodes: (nodes: WorkflowNode[]) => WorkflowNode[]
-  
+  screenToCanvas: (screenPoint: Position) => Position;
+  canvasToScreen: (canvasPoint: Position) => Position;
+  getVisibleNodes: (nodes: WorkflowNode[]) => WorkflowNode[];
+
   // Event handlers
-  setupCanvasEvents: (svg: SVGSVGElement) => void
-  cleanupCanvasEvents: () => void
+  setupCanvasEvents: (svg: SVGSVGElement) => void;
+  cleanupCanvasEvents: () => void;
 }
 
 /**
  * Canvas operations and zoom management
  * Includes conditional reset logic: 1 node = center, >1 nodes = 30%/40%
- * 
+ *
  * @example
  * ```tsx
  * const CanvasComponent = () => {
- *   const { 
- *     zoomIn, 
- *     zoomOut, 
- *     resetCanvasPosition, 
- *     currentZoom 
+ *   const {
+ *     zoomIn,
+ *     zoomOut,
+ *     resetCanvasPosition,
+ *     currentZoom
  *   } = useWorkflowCanvas()
- *   
+ *
  *   const { state } = useWorkflowContext()
- *   
+ *
  *   const handleReset = () => {
  *     // Conditional logic based on node count
  *     resetCanvasPosition(state.nodes)
  *   }
- *   
+ *
  *   return (
  *     <div>
  *       <button onClick={() => zoomIn()}>Zoom In</button>
@@ -412,49 +415,64 @@ interface CanvasControls {
  * }
  * ```
  */
-export const useWorkflowCanvas: () => CanvasControls
-```
+export const useWorkflowCanvas: () => CanvasControls;
+````
 
 ### useNodeOperations
 
 High-level node operations และ utilities
 
-```typescript
+````typescript
 interface NodeOperations {
   // Node creation
-  createNode: (type: string, position: Position) => WorkflowNode
-  createNodeFromTemplate: (template: NodeTemplate, position: Position) => WorkflowNode
-  
+  createNode: (type: string, position: Position) => WorkflowNode;
+  createNodeFromTemplate: (
+    template: NodeTemplate,
+    position: Position
+  ) => WorkflowNode;
+
   // Node manipulation
-  duplicateNode: (nodeId: string, offset?: Position) => WorkflowNode | null
-  moveNodes: (nodeIds: string[], delta: Position) => void
-  alignNodes: (nodeIds: string[], alignment: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => void
-  distributeNodes: (nodeIds: string[], direction: 'horizontal' | 'vertical') => void
-  
+  duplicateNode: (nodeId: string, offset?: Position) => WorkflowNode | null;
+  moveNodes: (nodeIds: string[], delta: Position) => void;
+  alignNodes: (
+    nodeIds: string[],
+    alignment: "left" | "center" | "right" | "top" | "middle" | "bottom"
+  ) => void;
+  distributeNodes: (
+    nodeIds: string[],
+    direction: "horizontal" | "vertical"
+  ) => void;
+
   // Node validation
-  validateNode: (node: WorkflowNode) => ValidationResult
-  validateConnections: (node: WorkflowNode, connections: Connection[]) => ValidationResult
-  
+  validateNode: (node: WorkflowNode) => ValidationResult;
+  validateConnections: (
+    node: WorkflowNode,
+    connections: Connection[]
+  ) => ValidationResult;
+
   // Node queries
-  getNodesByType: (type: string) => WorkflowNode[]
-  getConnectedNodes: (nodeId: string) => { incoming: WorkflowNode[], outgoing: WorkflowNode[] }
-  findNodePath: (fromNodeId: string, toNodeId: string) => WorkflowNode[] | null
-  
+  getNodesByType: (type: string) => WorkflowNode[];
+  getConnectedNodes: (nodeId: string) => {
+    incoming: WorkflowNode[];
+    outgoing: WorkflowNode[];
+  };
+  findNodePath: (fromNodeId: string, toNodeId: string) => WorkflowNode[] | null;
+
   // Node dependencies
-  getDependencies: (nodeId: string) => string[]
-  getDependents: (nodeId: string) => string[]
-  hasCircularDependency: (fromNodeId: string, toNodeId: string) => boolean
+  getDependencies: (nodeId: string) => string[];
+  getDependents: (nodeId: string) => string[];
+  hasCircularDependency: (fromNodeId: string, toNodeId: string) => boolean;
 }
 
 /**
  * High-level node operations
- * 
+ *
  * @example
  * ```tsx
  * const NodeManager = () => {
  *   const { createNode, duplicateNode, alignNodes } = useNodeOperations()
  *   const { state, selectNode } = useWorkflowContext()
- *   
+ *
  *   const handleDuplicate = () => {
  *     if (state.selectedNodeId) {
  *       const newNode = duplicateNode(state.selectedNodeId)
@@ -463,14 +481,14 @@ interface NodeOperations {
  *       }
  *     }
  *   }
- *   
+ *
  *   const handleAlignLeft = () => {
  *     const selectedIds = state.selectedNodes || []
  *     if (selectedIds.length > 1) {
  *       alignNodes(selectedIds, 'left')
  *     }
  *   }
- *   
+ *
  *   return (
  *     <div>
  *       <button onClick={handleDuplicate}>Duplicate</button>
@@ -480,77 +498,77 @@ interface NodeOperations {
  * }
  * ```
  */
-export const useNodeOperations: () => NodeOperations
-```
+export const useNodeOperations: () => NodeOperations;
+````
 
 ### useKeyboardShortcuts
 
 Keyboard shortcuts management
 
-```typescript
+````typescript
 interface KeyboardShortcuts {
   // Shortcut registration
   registerShortcut: (
-    key: string, 
-    handler: () => void, 
+    key: string,
+    handler: () => void,
     options?: ShortcutOptions
-  ) => void
-  
-  unregisterShortcut: (key: string) => void
-  
+  ) => void;
+
+  unregisterShortcut: (key: string) => void;
+
   // Predefined shortcuts
-  setupDefaultShortcuts: () => void
-  
+  setupDefaultShortcuts: () => void;
+
   // Shortcut state
-  activeShortcuts: Record<string, ShortcutHandler>
-  isEnabled: boolean
-  setEnabled: (enabled: boolean) => void
+  activeShortcuts: Record<string, ShortcutHandler>;
+  isEnabled: boolean;
+  setEnabled: (enabled: boolean) => void;
 }
 
 interface ShortcutOptions {
   /** Prevent default browser behavior */
-  preventDefault?: boolean
-  
+  preventDefault?: boolean;
+
   /** Stop event propagation */
-  stopPropagation?: boolean
-  
+  stopPropagation?: boolean;
+
   /** Only trigger when specific element is focused */
-  target?: HTMLElement | null
-  
+  target?: HTMLElement | null;
+
   /** Require specific modifier keys */
   modifiers?: {
-    ctrl?: boolean
-    shift?: boolean
-    alt?: boolean
-    meta?: boolean
-  }
+    ctrl?: boolean;
+    shift?: boolean;
+    alt?: boolean;
+    meta?: boolean;
+  };
 }
 
 /**
  * Keyboard shortcuts management
- * 
+ *
  * @example
  * ```tsx
  * const ShortcutManager = () => {
  *   const { registerShortcut, setupDefaultShortcuts } = useKeyboardShortcuts()
  *   const { addNode } = useWorkflowContext()
- *   
+ *
  *   useEffect(() => {
  *     // Setup default shortcuts (Ctrl+Z, Ctrl+Y, Delete, etc.)
  *     setupDefaultShortcuts()
- *     
+ *
  *     // Custom shortcut
  *     registerShortcut('ctrl+shift+h', () => {
  *       addNode(createHTTPNode())
  *     }, { preventDefault: true })
  *   }, [])
- *   
+ *
  *   return null
  * }
  * ```
  */
-export const useKeyboardShortcuts: () => KeyboardShortcuts
-```
+export const useKeyboardShortcuts: () => KeyboardShortcuts;
+````
 
 ## 🏗️ Types & Interfaces
 
@@ -558,82 +576,82 @@ export const useKeyboardShortcuts: () => KeyboardShortcuts
 
 ```typescript
 interface Workflow {
-  id: string
-  name: string
-  description?: string
-  version: string
-  createdAt: string
-  updatedAt: string
-  
+  id: string;
+  name: string;
+  description?: string;
+  version: string;
+  createdAt: string;
+  updatedAt: string;
+
   // Workflow content
-  nodes: WorkflowNode[]
-  connections: Connection[]
-  
+  nodes: WorkflowNode[];
+  connections: Connection[];
+
   // Configuration
-  config: WorkflowConfig
-  metadata: WorkflowMetadata
-  
+  config: WorkflowConfig;
+  metadata: WorkflowMetadata;
+
   // Execution
-  triggers: WorkflowTrigger[]
-  variables: Record<string, any>
+  triggers: WorkflowTrigger[];
+  variables: Record<string, any>;
 }
 
 interface WorkflowNode {
-  id: string
-  type: string
-  name: string
-  description?: string
-  
+  id: string;
+  type: string;
+  name: string;
+  description?: string;
+
   // Visual properties
-  position: Position
-  size?: Size
-  
+  position: Position;
+  size?: Size;
+
   // Node configuration
-  config: Record<string, any>
-  
+  config: Record<string, any>;
+
   // Input/Output definitions
-  inputs: NodeInput[]
-  outputs: NodeOutput[]
-  
+  inputs: NodeInput[];
+  outputs: NodeOutput[];
+
   // Visual styling
-  style?: NodeStyle
-  
+  style?: NodeStyle;
+
   // Metadata
-  metadata?: Record<string, any>
+  metadata?: Record<string, any>;
 }
 
 interface Connection {
-  id: string
-  
+  id: string;
+
   // Connection points
   from: {
-    nodeId: string
-    outputId: string
-  }
+    nodeId: string;
+    outputId: string;
+  };
   to: {
-    nodeId: string
-    inputId: string
-  }
-  
+    nodeId: string;
+    inputId: string;
+  };
+
   // Connection properties
-  condition?: string
-  label?: string
-  
+  condition?: string;
+  label?: string;
+
   // Visual styling
-  style?: ConnectionStyle
-  
+  style?: ConnectionStyle;
+
   // Metadata
-  metadata?: Record<string, any>
+  metadata?: Record<string, any>;
 }
 
 interface Position {
-  x: number
-  y: number
+  x: number;
+  y: number;
 }
 
 interface Size {
-  width: number
-  height: number
+  width: number;
+  height: number;
 }
 ```
 
@@ -641,52 +659,52 @@ interface Size {
 
 ```typescript
 interface NodeInput {
-  id: string
-  name: string
-  type: DataType
-  required: boolean
-  multiple: boolean
-  description?: string
-  defaultValue?: any
+  id: string;
+  name: string;
+  type: DataType;
+  required: boolean;
+  multiple: boolean;
+  description?: string;
+  defaultValue?: any;
 }
 
 interface NodeOutput {
-  id: string
-  name: string
-  type: DataType
-  description?: string
+  id: string;
+  name: string;
+  type: DataType;
+  description?: string;
 }
 
-type DataType = 
-  | 'any'
-  | 'string'
-  | 'number'
-  | 'boolean'
-  | 'object'
-  | 'array'
-  | 'file'
-  | 'image'
-  | 'json'
-  | 'xml'
-  | 'csv'
+type DataType =
+  | "any"
+  | "string"
+  | "number"
+  | "boolean"
+  | "object"
+  | "array"
+  | "file"
+  | "image"
+  | "json"
+  | "xml"
+  | "csv";
 
 interface NodeStyle {
-  backgroundColor?: string
-  borderColor?: string
-  borderWidth?: number
-  borderRadius?: number
-  textColor?: string
-  fontSize?: number
-  icon?: string
-  iconColor?: string
+  backgroundColor?: string;
+  borderColor?: string;
+  borderWidth?: number;
+  borderRadius?: number;
+  textColor?: string;
+  fontSize?: number;
+  icon?: string;
+  iconColor?: string;
 }
 
 interface ConnectionStyle {
-  stroke?: string
-  strokeWidth?: number
-  strokeDasharray?: string
-  animated?: boolean
-  color?: string
+  stroke?: string;
+  strokeWidth?: number;
+  strokeDasharray?: string;
+  animated?: boolean;
+  color?: string;
 }
 ```
 
@@ -694,37 +712,37 @@ interface ConnectionStyle {
 
 ```typescript
 interface CanvasTransform {
-  x: number
-  y: number
-  zoom: number
+  x: number;
+  y: number;
+  zoom: number;
 }
 
 interface ViewBox {
-  x: number
-  y: number
-  width: number
-  height: number
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 interface DraggingState {
-  isDragging: boolean
-  draggedNodeId?: string
-  startPosition?: Position
-  currentPosition?: Position
-  offset?: Position
+  isDragging: boolean;
+  draggedNodeId?: string;
+  startPosition?: Position;
+  currentPosition?: Position;
+  offset?: Position;
 }
 
 interface SelectionState {
-  selectedNodeIds: string[]
-  selectionBox?: BoundingBox
-  multiSelectMode: boolean
+  selectedNodeIds: string[];
+  selectionBox?: BoundingBox;
+  multiSelectMode: boolean;
 }
 
 interface BoundingBox {
-  x: number
-  y: number
-  width: number
-  height: number
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 ```
 
@@ -733,56 +751,59 @@ interface BoundingBox {
 ```typescript
 interface WorkflowState {
   // Core data
-  workflow: Workflow | null
-  nodes: WorkflowNode[]
-  connections: Connection[]
-  
+  workflow: Workflow | null;
+  nodes: WorkflowNode[];
+  connections: Connection[];
+
   // UI state
-  mode: 'workflow' | 'architecture'
-  selectedNodeId: string | null
-  selectedNodeIds: string[]
-  
+  mode: "workflow" | "architecture";
+  selectedNodeId: string | null;
+  selectedNodeIds: string[];
+
   // Interaction state
-  draggingState: DraggingState
-  selectionState: SelectionState
-  
+  draggingState: DraggingState;
+  selectionState: SelectionState;
+
   // Canvas state
-  canvasTransform: CanvasTransform
-  
+  canvasTransform: CanvasTransform;
+
   // Editor state
-  showGrid: boolean
-  snapToGrid: boolean
-  readOnly: boolean
-  
+  showGrid: boolean;
+  snapToGrid: boolean;
+  readOnly: boolean;
+
   // History
-  history: WorkflowState[]
-  historyIndex: number
-  
+  history: WorkflowState[];
+  historyIndex: number;
+
   // Loading state
-  isLoading: boolean
-  isSaving: boolean
-  
+  isLoading: boolean;
+  isSaving: boolean;
+
   // Errors
-  errors: Record<string, string>
+  errors: Record<string, string>;
 }
 
 type WorkflowAction =
-  | { type: 'LOAD_WORKFLOW'; payload: Workflow }
-  | { type: 'SET_MODE'; payload: 'workflow' | 'architecture' }
-  | { type: 'ADD_NODE'; payload: WorkflowNode }
-  | { type: 'UPDATE_NODE'; payload: { nodeId: string; updates: Partial<WorkflowNode> } }
-  | { type: 'DELETE_NODE'; payload: string }
-  | { type: 'SELECT_NODE'; payload: string | null }
-  | { type: 'SET_SELECTED_NODES'; payload: string[] }
-  | { type: 'START_DRAGGING'; payload: { nodeId: string; position: Position } }
-  | { type: 'END_DRAGGING' }
-  | { type: 'ADD_CONNECTION'; payload: Connection }
-  | { type: 'DELETE_CONNECTION'; payload: string }
-  | { type: 'SET_CANVAS_TRANSFORM'; payload: CanvasTransform }
-  | { type: 'UNDO' }
-  | { type: 'REDO' }
-  | { type: 'SET_ERROR'; payload: { key: string; message: string } }
-  | { type: 'CLEAR_ERROR'; payload: string }
+  | { type: "LOAD_WORKFLOW"; payload: Workflow }
+  | { type: "SET_MODE"; payload: "workflow" | "architecture" }
+  | { type: "ADD_NODE"; payload: WorkflowNode }
+  | {
+      type: "UPDATE_NODE";
+      payload: { nodeId: string; updates: Partial<WorkflowNode> };
+    }
+  | { type: "DELETE_NODE"; payload: string }
+  | { type: "SELECT_NODE"; payload: string | null }
+  | { type: "SET_SELECTED_NODES"; payload: string[] }
+  | { type: "START_DRAGGING"; payload: { nodeId: string; position: Position } }
+  | { type: "END_DRAGGING" }
+  | { type: "ADD_CONNECTION"; payload: Connection }
+  | { type: "DELETE_CONNECTION"; payload: string }
+  | { type: "SET_CANVAS_TRANSFORM"; payload: CanvasTransform }
+  | { type: "UNDO" }
+  | { type: "REDO" }
+  | { type: "SET_ERROR"; payload: { key: string; message: string } }
+  | { type: "CLEAR_ERROR"; payload: string };
 ```
 
 ## 🛠️ Utility Functions API
@@ -797,7 +818,7 @@ export function screenToCanvas(
   screenPoint: Position,
   transform: CanvasTransform,
   containerElement: HTMLElement
-): Position
+): Position;
 
 /**
  * Convert canvas coordinates to screen coordinates
@@ -806,17 +827,17 @@ export function canvasToScreen(
   canvasPoint: Position,
   transform: CanvasTransform,
   containerElement: HTMLElement
-): Position
+): Position;
 
 /**
  * Calculate bounding box for a set of nodes
  */
-export function calculateBoundingBox(nodes: WorkflowNode[]): BoundingBox
+export function calculateBoundingBox(nodes: WorkflowNode[]): BoundingBox;
 
 /**
  * Check if a point is inside a bounding box
  */
-export function isPointInBounds(point: Position, bounds: BoundingBox): boolean
+export function isPointInBounds(point: Position, bounds: BoundingBox): boolean;
 
 /**
  * Calculate the optimal zoom level to fit nodes in viewport
@@ -825,7 +846,7 @@ export function calculateFitZoom(
   nodes: WorkflowNode[],
   viewportSize: Size,
   padding?: number
-): number
+): number;
 
 /**
  * Calculate connection path between two points
@@ -833,8 +854,8 @@ export function calculateFitZoom(
 export function calculateConnectionPath(
   from: Position,
   to: Position,
-  pathType?: 'straight' | 'curved' | 'orthogonal'
-): string
+  pathType?: "straight" | "curved" | "orthogonal"
+): string;
 ```
 
 ### Node Utilities
@@ -843,17 +864,17 @@ export function calculateConnectionPath(
 /**
  * Generate unique node ID
  */
-export function generateNodeId(): string
+export function generateNodeId(): string;
 
 /**
  * Get default configuration for node type
  */
-export function getDefaultNodeConfig(nodeType: string): Record<string, any>
+export function getDefaultNodeConfig(nodeType: string): Record<string, any>;
 
 /**
  * Get node schema for dynamic form generation
  */
-export function getNodeSchema(nodeType: string): NodeSchema
+export function getNodeSchema(nodeType: string): NodeSchema;
 
 /**
  * Validate node configuration against schema
@@ -861,12 +882,14 @@ export function getNodeSchema(nodeType: string): NodeSchema
 export function validateNodeConfig(
   config: Record<string, any>,
   schema: NodeSchema
-): ValidationResult
+): ValidationResult;
 
 /**
  * Get available node types for current mode
  */
-export function getAvailableNodeTypes(mode: 'workflow' | 'architecture'): NodeType[]
+export function getAvailableNodeTypes(
+  mode: "workflow" | "architecture"
+): NodeType[];
 
 /**
  * Check if two node types are compatible for connection
@@ -876,7 +899,7 @@ export function areNodesCompatible(
   fromOutput: NodeOutput,
   toNode: WorkflowNode,
   toInput: NodeInput
-): boolean
+): boolean;
 ```
 
 ### Layout Utilities
@@ -888,57 +911,122 @@ export function areNodesCompatible(
 export function autoLayoutNodes(
   nodes: WorkflowNode[],
   connections: Connection[],
-  algorithm: 'hierarchical' | 'force-directed' | 'grid'
-): Record<string, Position>
+  algorithm: "hierarchical" | "force-directed" | "grid"
+): Record<string, Position>;
 
 /**
  * Align nodes to specified alignment
  */
 export function alignNodes(
   nodes: WorkflowNode[],
-  alignment: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'
-): Record<string, Position>
+  alignment: "left" | "center" | "right" | "top" | "middle" | "bottom"
+): Record<string, Position>;
 
 /**
  * Distribute nodes evenly in specified direction
  */
 export function distributeNodes(
   nodes: WorkflowNode[],
-  direction: 'horizontal' | 'vertical',
+  direction: "horizontal" | "vertical",
   spacing?: number
-): Record<string, Position>
+): Record<string, Position>;
 
 /**
  * Snap position to grid
  */
-export function snapToGrid(position: Position, gridSize: number): Position
+export function snapToGrid(position: Position, gridSize: number): Position;
 ```
+
+### Connection Path API (Designer)
+
+```typescript
+// Mode-aware connection path for saved connections
+export function generateModeAwareConnectionPath(
+  connection: {
+    sourceNodeId: string;
+    sourcePortId: string;
+    targetNodeId: string;
+    targetPortId: string;
+  },
+  nodes: WorkflowNode[],
+  variant?: NodeVariant,
+  modeId?: "workflow" | "architecture",
+  config?: PathConfig
+): string;
+
+// Mode-aware preview path while dragging from a source port
+export function generateModeAwarePreviewPath(
+  sourceNode: WorkflowNode,
+  sourcePortId: string,
+  previewPosition: { x: number; y: number },
+  options: {
+    modeId: "workflow" | "architecture";
+    variant?: NodeVariant;
+    config?: PathConfig;
+    hoverTargetBox?: { x: number; y: number; width: number; height: number };
+    availableNodes?: WorkflowNode[];
+  }
+): string;
+
+// Multiple-connection path (bundled in architecture mode)
+export function generateMultipleConnectionPath(opts: {
+  sourceNode: WorkflowNode;
+  sourcePortId: string;
+  targetNode: WorkflowNode;
+  targetPortId: string;
+  connectionIndex?: number;
+  totalConnections?: number;
+  variant?: NodeVariant;
+  mode?: "workflow" | "architecture";
+  config?: PathConfig;
+}): string;
+
+// Optimized memoized generator
+export function createOptimizedPathGenerator(config?: PathConfig): {
+  generatePath(
+    sourceNode: WorkflowNode,
+    sourcePortId: string,
+    targetNode: WorkflowNode,
+    targetPortId: string,
+    variant?: NodeVariant
+  ): string;
+  clearCache(): void;
+  getCacheSize(): number;
+};
+```
+
+Notes
+
+- Architecture mode uses an adaptive orthogonal router with rounded corners for both final and preview paths.
+- Target side selection uses an approach-vector heuristic (chooseAutoTargetSide) and snaps to virtual side-port anchors.
+- Arrowhead trimming is applied outward from the node by ~5.5px depending on side to avoid marker overlap.
+- U-shape routing is triggered for short horizontal spans or bottom-to-bottom approaches with a unified `safeClear = 16`.
 
 ### Validation Utilities
 
 ```typescript
 interface ValidationResult {
-  isValid: boolean
-  errors: ValidationError[]
-  warnings: ValidationWarning[]
+  isValid: boolean;
+  errors: ValidationError[];
+  warnings: ValidationWarning[];
 }
 
 interface ValidationError {
-  field: string
-  message: string
-  code: string
+  field: string;
+  message: string;
+  code: string;
 }
 
 interface ValidationWarning {
-  field: string
-  message: string
-  suggestion?: string
+  field: string;
+  message: string;
+  suggestion?: string;
 }
 
 /**
  * Validate complete workflow
  */
-export function validateWorkflow(workflow: Workflow): ValidationResult
+export function validateWorkflow(workflow: Workflow): ValidationResult;
 
 /**
  * Validate node connections
@@ -946,7 +1034,7 @@ export function validateWorkflow(workflow: Workflow): ValidationResult
 export function validateConnections(
   nodes: WorkflowNode[],
   connections: Connection[]
-): ValidationResult
+): ValidationResult;
 
 /**
  * Check for circular dependencies
@@ -954,7 +1042,7 @@ export function validateConnections(
 export function hasCircularDependency(
   nodes: WorkflowNode[],
   connections: Connection[]
-): boolean
+): boolean;
 
 /**
  * Find all paths between two nodes
@@ -963,7 +1051,7 @@ export function findNodePaths(
   fromNodeId: string,
   toNodeId: string,
   connections: Connection[]
-): string[][]
+): string[][];
 ```
 
 ## 🎨 Styling & Theme API
@@ -977,23 +1065,23 @@ export function findNodePaths(
   --primary-50: #eff6ff;
   --primary-500: #3b82f6;
   --primary-600: #2563eb;
-  
+
   /* Glass effect variables */
   --glass-bg: rgba(255, 255, 255, 0.1);
   --glass-border: rgba(255, 255, 255, 0.2);
   --glass-blur: blur(10px);
-  
+
   /* Canvas variables */
   --canvas-bg: #f8fafc;
   --canvas-grid: #e2e8f0;
   --canvas-grid-size: 20px;
-  
+
   /* Node variables */
   --node-bg: var(--glass-bg);
   --node-border: var(--glass-border);
   --node-border-radius: 12px;
   --node-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  
+
   /* Connection variables */
   --connection-stroke: var(--primary-500);
   --connection-stroke-width: 2px;
@@ -1012,72 +1100,72 @@ export function findNodePaths(
 ```typescript
 interface Theme {
   colors: {
-    primary: ColorScale
-    secondary: ColorScale
-    accent: ColorScale
-    neutral: ColorScale
-    success: ColorScale
-    warning: ColorScale
-    error: ColorScale
-  }
-  
+    primary: ColorScale;
+    secondary: ColorScale;
+    accent: ColorScale;
+    neutral: ColorScale;
+    success: ColorScale;
+    warning: ColorScale;
+    error: ColorScale;
+  };
+
   spacing: {
-    xs: string
-    sm: string
-    md: string
-    lg: string
-    xl: string
-  }
-  
+    xs: string;
+    sm: string;
+    md: string;
+    lg: string;
+    xl: string;
+  };
+
   typography: {
     fontFamily: {
-      sans: string[]
-      mono: string[]
-    }
-    fontSize: Record<string, [string, string]>
-    fontWeight: Record<string, number>
-  }
-  
+      sans: string[];
+      mono: string[];
+    };
+    fontSize: Record<string, [string, string]>;
+    fontWeight: Record<string, number>;
+  };
+
   borderRadius: {
-    sm: string
-    md: string
-    lg: string
-    xl: string
-  }
-  
+    sm: string;
+    md: string;
+    lg: string;
+    xl: string;
+  };
+
   shadows: {
-    sm: string
-    md: string
-    lg: string
-    xl: string
-  }
-  
+    sm: string;
+    md: string;
+    lg: string;
+    xl: string;
+  };
+
   glassmorphism: {
-    primary: GlassStyle
-    secondary: GlassStyle
-    elevated: GlassStyle
-  }
+    primary: GlassStyle;
+    secondary: GlassStyle;
+    elevated: GlassStyle;
+  };
 }
 
 interface ColorScale {
-  50: string
-  100: string
-  200: string
-  300: string
-  400: string
-  500: string
-  600: string
-  700: string
-  800: string
-  900: string
+  50: string;
+  100: string;
+  200: string;
+  300: string;
+  400: string;
+  500: string;
+  600: string;
+  700: string;
+  800: string;
+  900: string;
 }
 
 interface GlassStyle {
-  background: string
-  backdropFilter: string
-  border: string
-  borderRadius: string
-  boxShadow?: string
+  background: string;
+  backdropFilter: string;
+  border: string;
+  borderRadius: string;
+  boxShadow?: string;
 }
 ```
 
@@ -1088,23 +1176,23 @@ interface GlassStyle {
 ```typescript
 interface WorkflowService {
   // CRUD operations
-  create(workflow: Partial<Workflow>): Promise<Workflow>
-  get(id: string): Promise<Workflow>
-  update(id: string, updates: Partial<Workflow>): Promise<Workflow>
-  delete(id: string): Promise<void>
-  list(filters?: WorkflowFilters): Promise<Workflow[]>
-  
+  create(workflow: Partial<Workflow>): Promise<Workflow>;
+  get(id: string): Promise<Workflow>;
+  update(id: string, updates: Partial<Workflow>): Promise<Workflow>;
+  delete(id: string): Promise<void>;
+  list(filters?: WorkflowFilters): Promise<Workflow[]>;
+
   // Execution
-  execute(id: string, input?: any): Promise<ExecutionResult>
-  stop(executionId: string): Promise<void>
-  getExecution(executionId: string): Promise<WorkflowExecution>
-  
+  execute(id: string, input?: any): Promise<ExecutionResult>;
+  stop(executionId: string): Promise<void>;
+  getExecution(executionId: string): Promise<WorkflowExecution>;
+
   // Validation
-  validate(workflow: Workflow): Promise<ValidationResult>
-  
+  validate(workflow: Workflow): Promise<ValidationResult>;
+
   // Templates
-  getTemplates(): Promise<WorkflowTemplate[]>
-  createFromTemplate(templateId: string, name: string): Promise<Workflow>
+  getTemplates(): Promise<WorkflowTemplate[]>;
+  createFromTemplate(templateId: string, name: string): Promise<Workflow>;
 }
 ```
 
@@ -1113,29 +1201,29 @@ interface WorkflowService {
 ```typescript
 interface WebSocketService {
   // Connection management
-  connect(): Promise<void>
-  disconnect(): void
-  isConnected(): boolean
-  
+  connect(): Promise<void>;
+  disconnect(): void;
+  isConnected(): boolean;
+
   // Event subscription
-  on(event: string, handler: (data: any) => void): void
-  off(event: string, handler?: (data: any) => void): void
-  
+  on(event: string, handler: (data: any) => void): void;
+  off(event: string, handler?: (data: any) => void): void;
+
   // Workflow events
-  subscribeToWorkflow(workflowId: string): void
-  unsubscribeFromWorkflow(workflowId: string): void
-  
+  subscribeToWorkflow(workflowId: string): void;
+  unsubscribeFromWorkflow(workflowId: string): void;
+
   // Execution events
-  subscribeToExecution(executionId: string): void
-  unsubscribeFromExecution(executionId: string): void
-  
+  subscribeToExecution(executionId: string): void;
+  unsubscribeFromExecution(executionId: string): void;
+
   // Send messages
-  send(message: WebSocketMessage): void
+  send(message: WebSocketMessage): void;
 }
 ```
 
 ---
 
-ยินดีต้อนรับสู่ f1ow Workflow Engine Frontend API Documentation! 
+ยินดีต้อนรับสู่ f1ow Workflow Engine Frontend API Documentation!
 
 สำหรับข้อมูลเพิ่มเติมหรือคำถาม กรุณาดูเอกสารอื่นๆ ใน [docs directory](./README.md) หรือตรวจสอบ source code ที่มี comprehensive JSDoc comments

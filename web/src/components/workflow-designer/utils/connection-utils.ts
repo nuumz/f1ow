@@ -90,6 +90,8 @@ export type { AnalyzableConnection, GroupedConnection, ConnectionGroupInfo } fro
 
 // Local helpers -------------------------------------------------------------
 type PortSide = 'top' | 'bottom' | 'left' | 'right' | 'unknown'
+// Shared alias for architecture virtual side-ports
+type SidePortId = '__side-left' | '__side-right' | '__side-top' | '__side-bottom'
 function buildNodeBox(node: WorkflowNode) {
   const dims = getShapeAwareDimensions(node)
   const width = dims.width || 200
@@ -152,7 +154,7 @@ function sideToOrientation(side: 'top' | 'bottom' | 'left' | 'right' | 'unknown'
 function chooseAutoTargetSide(
   approachFrom: PortPosition,
   targetNode: WorkflowNode
-): '__side-left' | '__side-right' | '__side-top' | '__side-bottom' {
+): SidePortId {
   const cx = targetNode.x
   const cy = targetNode.y
   const dx = cx - approachFrom.x
@@ -230,6 +232,63 @@ export function generateVariantAwareConnectionPath(
 }
 
 /**
+ * Find nearby snap targets using same logic as final connection path
+ * This ensures preview path matches final path behavior
+ */
+function findNearbySnapTargets(
+  mousePos: { x: number; y: number },
+  availableNodes: WorkflowNode[],
+  sourceNode: WorkflowNode,
+  sourcePos: PortPosition,
+  snapDistance: number = 50
+): { x: number; y: number; type: 'port' | 'edge'; targetNode: WorkflowNode; targetSide: SidePortId } | null {
+  const candidates: Array<{
+    x: number;
+    y: number;
+    type: 'port' | 'edge';
+    distance: number;
+    targetNode: WorkflowNode;
+    targetSide: SidePortId;
+  }> = []
+
+  for (const node of availableNodes) {
+    if (node.id === sourceNode.id) continue // Skip source node
+
+    const nodeDistance = Math.sqrt(
+      Math.pow(mousePos.x - node.x, 2) + Math.pow(mousePos.y - node.y, 2)
+    )
+    if (nodeDistance > snapDistance * 2) continue // Skip distant nodes for performance
+
+    // Use same target side selection logic as final connection
+    const optimalTargetSide = chooseAutoTargetSide(sourcePos, node)
+    const optimalTargetPos = getVirtualSidePortPositionForMode(node, optimalTargetSide, 'architecture')
+
+    const targetDistance = Math.sqrt(
+      Math.pow(mousePos.x - optimalTargetPos.x, 2) + Math.pow(mousePos.y - optimalTargetPos.y, 2)
+    )
+
+    if (targetDistance <= snapDistance) {
+      candidates.push({
+        x: optimalTargetPos.x,
+        y: optimalTargetPos.y,
+        type: 'edge',
+        distance: targetDistance,
+        targetNode: node,
+        targetSide: optimalTargetSide
+      })
+    }
+  }
+
+  // Return the closest candidate using optimal target side selection
+  if (candidates.length > 0) {
+    candidates.sort((a, b) => a.distance - b.distance)
+    return candidates[0]
+  }
+
+  return null
+}
+
+/**
  * Calculate port position during connection preview
  */
 export function calculateConnectionPreviewPath(
@@ -239,7 +298,8 @@ export function calculateConnectionPreviewPath(
   variant: NodeVariant = 'standard',
   config?: PathConfig,
   modeId: string = 'workflow',
-  hoverTargetBox?: { x: number; y: number; width: number; height: number }
+  hoverTargetBox?: { x: number; y: number; width: number; height: number },
+  availableNodes?: WorkflowNode[]
 ): string { // NOSONAR: readability prioritized over cognitive complexity metric here
   // Determine if this is a bottom port (include side-bottom)
   const isSourceBottomPort = isBottomPort(sourceNode, sourcePortId) || sourcePortId === '__side-bottom'
@@ -310,6 +370,8 @@ export function calculateConnectionPreviewPath(
     const SNAP_THRESHOLD = FIXED_LEAD_LENGTH * 2
     let previewEnd = previewPosition
     let endOrientation: 'vertical' | 'horizontal' | undefined = chooseEndOrientationFromBox(sourcePos, hoverTargetBox)
+    // Track chosen target side (for consistent trimming)
+    let chosenSide: SidePortId | undefined
     if (hoverTargetBox) {
       const centerX = hoverTargetBox.x + hoverTargetBox.width / 2
       const centerY = hoverTargetBox.y + hoverTargetBox.height / 2
@@ -319,23 +381,65 @@ export function calculateConnectionPreviewPath(
         const bottomY = hoverTargetBox.y + hoverTargetBox.height
         const useBottom = (topY - sourceY) < SNAP_THRESHOLD
         previewEnd = { x: centerX, y: useBottom ? bottomY : topY }
+        chosenSide = useBottom ? '__side-bottom' : '__side-top'
         endOrientation = 'vertical'
       } else if (startSide === 'left' || startSide === 'right') {
-        // Conditional same-side snap: only when U-shape (close horizontal) condition is met
-        const leftEdgeCenter = { x: hoverTargetBox.x, y: centerY }
-        const rightEdgeCenter = { x: hoverTargetBox.x + hoverTargetBox.width, y: centerY }
-        const tgtCenterX = centerX
-        const isCloseHorizontally = startSide === 'right'
-          ? (tgtCenterX - sourcePos.x) < FIXED_LEAD_LENGTH
-          : (sourcePos.x - tgtCenterX) < FIXED_LEAD_LENGTH
-        if (isCloseHorizontally) {
-          // Same-side only for U-shape scenario
-          previewEnd = (startSide === 'right') ? rightEdgeCenter : leftEdgeCenter
-        } else {
-          // Otherwise, snap to the opposite side of startSide for clean orthogonal routing
-          previewEnd = (startSide === 'right') ? leftEdgeCenter : rightEdgeCenter
+        // Use same target side selection logic as final connection for consistency
+        const mockTargetNode: WorkflowNode = {
+          id: 'mock-target',
+          label: 'Mock Target',
+          x: centerX,
+          y: centerY,
+          type: 'mock',
+          inputs: [],
+          outputs: [],
+          config: {}
         }
-        endOrientation = 'horizontal'
+
+        // Apply same chooseAutoTargetSide logic as final path
+        const optimalTargetSide = chooseAutoTargetSide(sourcePos, mockTargetNode)
+        const optimalTargetPos = (() => {
+          switch (optimalTargetSide) {
+            case '__side-left':
+              return { x: hoverTargetBox.x, y: centerY }
+            case '__side-right':
+              return { x: hoverTargetBox.x + hoverTargetBox.width, y: centerY }
+            case '__side-top':
+              return { x: centerX, y: hoverTargetBox.y }
+            case '__side-bottom':
+              return { x: centerX, y: hoverTargetBox.y + hoverTargetBox.height }
+            default:
+              return { x: centerX, y: centerY }
+          }
+        })()
+
+        previewEnd = optimalTargetPos
+        chosenSide = optimalTargetSide
+        endOrientation = (optimalTargetSide === '__side-left' || optimalTargetSide === '__side-right')
+          ? 'horizontal' : 'vertical'
+      }
+    } else if (availableNodes && availableNodes.length > 0) {
+      // Not hovering a target box: try to snap to nearby nodes using final logic
+      const snapTarget = findNearbySnapTargets(previewPosition, availableNodes, sourceNode, sourcePos, 50)
+      if (snapTarget) {
+        previewEnd = { x: snapTarget.x, y: snapTarget.y }
+        chosenSide = snapTarget.targetSide
+        endOrientation = (snapTarget.targetSide === '__side-left' || snapTarget.targetSide === '__side-right')
+          ? 'horizontal' : 'vertical'
+      } else {
+        // Fallback grid snap for cleaner preview
+        const gridSize = 20
+        previewEnd = {
+          x: Math.round(previewPosition.x / gridSize) * gridSize,
+          y: Math.round(previewPosition.y / gridSize) * gridSize
+        }
+      }
+    } else {
+      // No hover and no availableNodes: snap to grid for stability
+      const gridSize = 20
+      previewEnd = {
+        x: Math.round(previewPosition.x / gridSize) * gridSize,
+        y: Math.round(previewPosition.y / gridSize) * gridSize
       }
     }
 
@@ -348,30 +452,38 @@ export function calculateConnectionPreviewPath(
       const srcBox = buildNodeBox(sourceNode)
       const targetBottomY = hoverTargetBox.y + hoverTargetBox.height
       const boxesBottom = Math.max(srcBox.y + srcBox.height, targetBottomY)
-      const safeClear = 50
+      const safeClear = 16
       // Enforce vertical leg min length of FIXED_LEAD_LENGTH for both sides
       const minBelow = Math.max(sourcePos.y, targetBottomY) + FIXED_LEAD_LENGTH
       const midY = Math.max(boxesBottom + safeClear, minBelow)
+      // Trim like final bottom U-shape (approach from above) using outward trim
+      const HALF_MARKER = -5.5
+      const bottomUTrimmedEnd = { x: previewEnd.x, y: previewEnd.y - HALF_MARKER }
       return [
         `M ${sourcePos.x} ${sourcePos.y}`,
         `L ${sourcePos.x} ${midY}`,
-        `L ${previewEnd.x} ${midY}`,
-        `L ${previewEnd.x} ${previewEnd.y}`
+        `L ${bottomUTrimmedEnd.x} ${midY}`,
+        `L ${bottomUTrimmedEnd.x} ${bottomUTrimmedEnd.y}`
       ].join(' ')
     }
 
-    // Horizontal U-shape during preview: only when targetX - sourceX < FIXED_LEAD_LENGTH
-    if (hoverTargetBox) {
+    // U-shape logic should check if we need to route around using the calculated optimal target side
+    if (hoverTargetBox && previewEnd) {
       const startSidePrev = detectPortSideModeAware(sourceNode, sourcePortId, sourcePos, modeId)
-      const tgtCenterX = hoverTargetBox.x + hoverTargetBox.width / 2
-      // memoized source box for preview (shape-aware)
       const srcBox = buildNodeBox(sourceNode)
+      const centerY = hoverTargetBox.y + hoverTargetBox.height / 2
+
+      // Determine if we need U-shape based on optimal target position and proximity
       if (startSidePrev === 'right') {
-        const rightEdgeCenter = { x: hoverTargetBox.x + hoverTargetBox.width, y: hoverTargetBox.y + hoverTargetBox.height / 2 }
-        const isCloseHorizontally = (tgtCenterX - sourcePos.x) < FIXED_LEAD_LENGTH
+        // Use center distance like final path
+        const centerX = hoverTargetBox.x + hoverTargetBox.width / 2
+        const isCloseHorizontally = (centerX - sourcePos.x) < FIXED_LEAD_LENGTH
+
         if (isCloseHorizontally) {
+          // Force right-side target for U-shape routing
+          const rightEdgeCenter = { x: hoverTargetBox.x + hoverTargetBox.width, y: centerY }
           const boxesRight = Math.max(srcBox.x + srcBox.width, hoverTargetBox.x + hoverTargetBox.width)
-          const safeClear = 50
+          const safeClear = 16
           const minRight = Math.max(sourcePos.x, rightEdgeCenter.x) + FIXED_LEAD_LENGTH
           const midX = Math.max(boxesRight + safeClear, minRight)
           return [
@@ -382,11 +494,15 @@ export function calculateConnectionPreviewPath(
           ].join(' ')
         }
       }
-      // Symmetric case: start from LEFT → RIGHT; only when sourceX - targetX < FIXED_LEAD_LENGTH
+
       if (startSidePrev === 'left') {
-        const leftEdgeCenter = { x: hoverTargetBox.x, y: hoverTargetBox.y + hoverTargetBox.height / 2 }
-        const isCloseHorizontally = (sourcePos.x - tgtCenterX) < FIXED_LEAD_LENGTH
+        // Use center distance like final path
+        const centerX = hoverTargetBox.x + hoverTargetBox.width / 2
+        const isCloseHorizontally = (sourcePos.x - centerX) < FIXED_LEAD_LENGTH
+
         if (isCloseHorizontally) {
+          // Force left-side target for U-shape routing
+          const leftEdgeCenter = { x: hoverTargetBox.x, y: centerY }
           const boxesLeft = Math.min(srcBox.x, hoverTargetBox.x)
           const safeClear = 16
           const minLeft = Math.min(sourcePos.x, leftEdgeCenter.x) - FIXED_LEAD_LENGTH
@@ -402,22 +518,32 @@ export function calculateConnectionPreviewPath(
     }
 
     // Trim the end by half marker size (center-anchored marker). Marker for architecture ~size 15.
-    const HALF_MARKER = 5.5
+    // Use negative constant and mirror final path logic so trimming always goes outward from the node.
+    const HALF_MARKER = -5.5
     const trimmedEndPreview = (() => {
-      if (!hoverTargetBox) return previewEnd
-      const cx = hoverTargetBox.x + hoverTargetBox.width / 2
-      const cy = hoverTargetBox.y + hoverTargetBox.height / 2
-      const dx = cx - sourcePos.x
-      const dy = cy - sourcePos.y
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        // Horizontal approach
-        const right = dx > 0
-        return { x: previewEnd.x + (right ? -HALF_MARKER : HALF_MARKER), y: previewEnd.y }
-      } else {
-        // Vertical approach
-        const bottom = dy > 0
-        return { x: previewEnd.x, y: previewEnd.y + (bottom ? -HALF_MARKER : HALF_MARKER) }
+      if (chosenSide) {
+        switch (chosenSide) {
+          case '__side-left':
+            return { x: previewEnd.x + HALF_MARKER, y: previewEnd.y }
+          case '__side-right':
+            return { x: previewEnd.x - HALF_MARKER, y: previewEnd.y }
+          case '__side-top':
+            return { x: previewEnd.x, y: previewEnd.y + HALF_MARKER }
+          case '__side-bottom':
+            return { x: previewEnd.x, y: previewEnd.y - HALF_MARKER }
+        }
       }
+      // Fallback by vector if side unknown
+      const dx = previewEnd.x - sourcePos.x
+      const dy = previewEnd.y - sourcePos.y
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        const right = dx > 0
+        // Right => x - HALF_MARKER (outward), Left => x + HALF_MARKER (outward)
+        return { x: previewEnd.x + (right ? -HALF_MARKER : HALF_MARKER), y: previewEnd.y }
+      }
+      const bottom = dy > 0
+      // Bottom => y - HALF_MARKER (outward), Top => y + HALF_MARKER (outward)
+      return { x: previewEnd.x, y: previewEnd.y + (bottom ? -HALF_MARKER : HALF_MARKER) }
     })()
 
     const routed = generateAdaptiveOrthogonalRoundedPathSmart(sourcePos, trimmedEndPreview, 16, {
@@ -440,12 +566,16 @@ export function generateModeAwarePreviewPath(
   sourceNode: WorkflowNode,
   sourcePortId: string,
   previewPosition: { x: number; y: number },
-  modeId: string,
-  variant: NodeVariant = 'standard',
-  config?: PathConfig,
-  hoverTargetBox?: { x: number; y: number; width: number; height: number }
+  options: {
+    modeId: string
+    variant?: NodeVariant
+    config?: PathConfig
+    hoverTargetBox?: { x: number; y: number; width: number; height: number }
+    availableNodes?: WorkflowNode[]
+  }
 ): string {
-  return calculateConnectionPreviewPath(sourceNode, sourcePortId, previewPosition, variant, config, modeId, hoverTargetBox)
+  const { modeId, variant = 'standard', config, hoverTargetBox, availableNodes } = options
+  return calculateConnectionPreviewPath(sourceNode, sourcePortId, previewPosition, variant, config, modeId, hoverTargetBox, availableNodes)
 }
 
 /**
@@ -705,11 +835,16 @@ function generateArchitectureModeConnectionPath(
     // Enforce vertical leg min length of FIXED_LEAD_LENGTH for both sides
     const minBelow = Math.max(sourcePos.y, autoTargetPos.y) + FIXED_LEAD_LENGTH
     const midY = Math.max(boxesBottom + safeClear, minBelow)
+
+    // For U-shape bottom: final vertical segment goes upward into bottom side.
+    // Trim outward (below the node) so arrowhead doesn't penetrate the node.
+    const bottomUTrimmedEnd = { x: autoTargetPos.x, y: autoTargetPos.y - HALF_MARKER }
+
     return [
       `M ${sourcePos.x} ${sourcePos.y}`,
       `L ${sourcePos.x} ${midY}`,
-      `L ${trimmedEnd.x} ${midY}`,
-      `L ${trimmedEnd.x} ${trimmedEnd.y}`
+      `L ${bottomUTrimmedEnd.x} ${midY}`,
+      `L ${bottomUTrimmedEnd.x} ${bottomUTrimmedEnd.y}`
     ].join(' ')
   }
 
@@ -726,11 +861,15 @@ function generateArchitectureModeConnectionPath(
       // Enforce horizontal leg min length of FIXED_LEAD_LENGTH for both sides
       const minRight = Math.max(sourcePos.x, forcedRightPos.x) + FIXED_LEAD_LENGTH
       const midX = Math.max(boxesRight + safeClear, minRight)
+
+      // For U-shape right: final segment is horizontal (from right), so trim from right
+      const rightUTrimmedEnd = { x: forcedRightPos.x - HALF_MARKER, y: forcedRightPos.y }
+
       return [
         `M ${sourcePos.x} ${sourcePos.y}`,
         `L ${midX} ${sourcePos.y}`,
-        `L ${midX} ${trimmedEnd.y}`,
-        `L ${trimmedEnd.x} ${trimmedEnd.y}`
+        `L ${midX} ${rightUTrimmedEnd.y}`,
+        `L ${rightUTrimmedEnd.x} ${rightUTrimmedEnd.y}`
       ].join(' ')
     }
   }
@@ -748,11 +887,15 @@ function generateArchitectureModeConnectionPath(
       // Enforce horizontal leg min length of FIXED_LEAD_LENGTH for both sides (to the left)
       const minLeft = Math.min(sourcePos.x, forcedLeftPos.x) - FIXED_LEAD_LENGTH
       const midX = Math.min(boxesLeft - safeClear, minLeft)
+
+      // For U-shape left: final segment is horizontal (from left), so trim from left
+      const leftUTrimmedEnd = { x: forcedLeftPos.x + HALF_MARKER, y: forcedLeftPos.y }
+
       return [
         `M ${sourcePos.x} ${sourcePos.y}`,
         `L ${midX} ${sourcePos.y}`,
-        `L ${midX} ${trimmedEnd.y}`,
-        `L ${trimmedEnd.x} ${trimmedEnd.y}`
+        `L ${midX} ${leftUTrimmedEnd.y}`,
+        `L ${leftUTrimmedEnd.x} ${leftUTrimmedEnd.y}`
       ].join(' ')
     }
   }

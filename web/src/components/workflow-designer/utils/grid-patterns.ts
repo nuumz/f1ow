@@ -11,6 +11,7 @@ export interface DualPatternOptions {
     baseOpacity?: number
     majorOpacity?: number
     majorStep?: number
+    majorType?: 'dot' | 'plus' // Type of major pattern: plus or dot
 }
 
 // Consolidated dot calculation (replaces GridOptimizer.calculateDotProperties)
@@ -51,10 +52,11 @@ export function ensureDualGridPatterns(
 
     const options: Required<DualPatternOptions> = {
         baseColor: opts?.baseColor ?? '#c7c8ca',
-        majorColor: opts?.majorColor ?? '#c7c8ca',
-        baseOpacity: opts?.baseOpacity ?? 0.8,
-        majorOpacity: opts?.majorOpacity ?? 0.9,
+        majorColor: opts?.majorColor ?? '#d0d1d3',
+        baseOpacity: opts?.baseOpacity ?? 0.5,
+        majorOpacity: opts?.majorOpacity ?? 0.5,
         majorStep: opts?.majorStep ?? 5,
+        majorType: opts?.majorType ?? 'dot', // Default to plus
     }
 
     // Consolidated dot properties calculation
@@ -82,7 +84,7 @@ export function ensureDualGridPatterns(
         .attr('fill', options.baseColor)
         .attr('opacity', options.baseOpacity)
 
-    // Major pattern
+    // Major pattern - only plus without base dots
     const majorSize = baseSize * options.majorStep
     let majorPat = defs.select<SVGPatternElement>(`#${majorPatternId}`)
     if (majorPat.empty()) {
@@ -94,16 +96,48 @@ export function ensureDualGridPatterns(
             .attr('height', majorSize)
     }
     majorPat.attr('width', majorSize).attr('height', majorSize)
-    let majorCircle = majorPat.select<SVGCircleElement>('circle.major-dot')
-    if (majorCircle.empty()) {
-        majorCircle = majorPat.append<SVGCircleElement>('circle').attr('class', 'major-dot')
+
+    // Clear any existing content
+    majorPat.selectAll('*').remove()
+
+    // Add background mask to hide base dots where plus will be
+    const centerX = majorSize / 2
+    const centerY = majorSize / 2
+
+    // Create major pattern based on majorType
+    if (options.majorType === 'plus') {
+        // Create plus shape
+        const plusSize = majorRadius * 1.5
+        const strokeWidth = majorRadius * 0.5
+
+        // Create plus path (horizontal + vertical lines)
+        const plusPath = [
+            `M ${centerX - plusSize} ${centerY}`,  // Move to left
+            `L ${centerX + plusSize} ${centerY}`,  // Horizontal line
+            `M ${centerX} ${centerY - plusSize}`,  // Move to top
+            `L ${centerX} ${centerY + plusSize}`   // Vertical line
+        ].join(' ')
+
+        majorPat
+            .append('path')
+            .attr('class', 'major-plus')
+            .attr('d', plusPath)
+            .attr('stroke', options.majorColor)
+            .attr('stroke-width', strokeWidth)
+            .attr('stroke-linecap', 'round')
+            .attr('fill', 'none')
+            .attr('opacity', options.majorOpacity)
+    } else {
+        // Add major dot on top
+        majorPat
+            .append('circle')
+            .attr('class', 'major-dot')
+            .attr('cx', centerX)
+            .attr('cy', centerY)
+            .attr('r', majorRadius)
+            .attr('fill', options.majorColor)
+            .attr('opacity', options.majorOpacity)
     }
-    majorCircle
-        .attr('cx', majorSize / 2)
-        .attr('cy', majorSize / 2)
-        .attr('r', majorRadius)
-        .attr('fill', options.majorColor)
-        .attr('opacity', options.majorOpacity)
 
     return { patternId, majorPatternId }
 }

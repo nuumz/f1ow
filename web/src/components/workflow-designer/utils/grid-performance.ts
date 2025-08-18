@@ -153,10 +153,10 @@ export class GridPerformanceMonitor {
       y: Math.round(transform.y / tolerance.position) * tolerance.position,
       k: Math.round(transform.k * tolerance.zoom) / tolerance.zoom
     };
-    
+
     const transformString = `${roundedTransform.x},${roundedTransform.y},${roundedTransform.k}`;
     const viewportString = `${Math.round(viewport.width / tolerance.viewport) * tolerance.viewport}x${Math.round(viewport.height / tolerance.viewport) * tolerance.viewport}`;
-    
+
     return `${transformString}:${viewportString}`;
   }
 
@@ -180,51 +180,8 @@ export class GridPerformanceMonitor {
 // Singleton instance for global use
 export const gridPerformanceMonitor = new GridPerformanceMonitor();
 
-// Utility functions for grid optimization
-export const GridOptimizer = {
-  /**
-   * คำนวณ optimal grid size based on zoom level
-   */
-  calculateOptimalGridSize(zoomLevel: number, baseSize: number = 20): number {
-    return baseSize * zoomLevel;
-  },
-
-  /**
-   * ตรวจสอบว่าควรแสดง grid หรือไม่ based on zoom level
-   */
-  shouldShowGrid(zoomLevel: number, minGridSize: number = 5, maxGridSize: number = 200): boolean {
-    const gridSize = this.calculateOptimalGridSize(zoomLevel);
-    return gridSize >= minGridSize && gridSize <= maxGridSize;
-  },
-
-  /**
-   * คำนวณ dot appearance properties based on zoom level
-   */
-  calculateDotProperties(zoomLevel: number): {
-    radius: number;
-    opacity: number;
-  } {
-    const zoomFactor = Math.max(0.3, Math.min(2.0, zoomLevel));
-    const radius = Math.max(0.5, Math.min(3.0, zoomFactor * 1.1));
-    const opacity = Math.max(0.2, Math.min(0.9, Math.pow(zoomFactor, 0.7) * 0.8));
-
-    return { radius, opacity };
-  },
-
-  /**
-   * คำนวณ intelligent padding based on zoom level
-   */
-  calculateIntelligentPadding(zoomLevel: number, basePadding: number = 400): number {
-    return Math.max(200, Math.min(1000, basePadding / zoomLevel));
-  },
-
-  /**
-   * สร้าง unique pattern ID based on zoom level
-   */
-  generatePatternId(zoomLevel: number): string {
-    return `dot-grid-pattern-${Math.round(zoomLevel * 100)}`;
-  }
-};
+// GridOptimizer functions moved to grid-patterns.ts as GridUtils
+// This eliminates redundancy while keeping performance monitoring capabilities
 
 // Development utilities
 export const GridDebugger = {

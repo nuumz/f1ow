@@ -118,6 +118,28 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
 
   const isDragging = isContextDragging()
 
+  // Stable signature for selected nodes to ensure effects re-run when content changes
+  const selectedSignature = useMemo(() => {
+    try {
+      const ids = Array.from(selectedNodes || [])
+      ids.sort()
+      return `${ids.length}:${ids.join(',')}`
+    } catch {
+      return `${Date.now()}`
+    }
+  }, [selectedNodes])
+
+  // Also derive signature directly from context to avoid stale prop pass-through
+  const selectedCtxSignature = useMemo(() => {
+    try {
+      const ids = Array.from(workflowContextState.selectedNodes || [])
+      ids.sort()
+      return `${ids.length}:${ids.join(',')}`
+    } catch {
+      return `${Date.now()}`
+    }
+  }, [workflowContextState.selectedNodes])
+
   // Constants
   const MAX_CACHE_SIZE = PERFORMANCE_CONSTANTS.MAX_CACHE_SIZE
   const CACHE_CLEANUP_THRESHOLD = PERFORMANCE_CONSTANTS.CACHE_CLEANUP_THRESHOLD
@@ -233,8 +255,8 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
   const majorPatternId = 'workflow-grid-major'
   const size = 20
   const majorStep = 5 // every 5 dots
-  const color = '#dee0e4' // base dots
-  const majorColor = '#dee0e4' // slightly darker for major dots
+  const color = '#c7c8ca' // base dots
+  const majorColor = '#c7c8ca' // slightly darker for major dots
   const opacity = 0.8
   const majorOpacity = 0.9
 
@@ -375,8 +397,87 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
         );
       }
     }
+  }, []);
 
-    // Reset grid cache if expired (no logging needed)
+  // COMPREHENSIVE RE-RENDER STABILITY FUNCTION
+  const forceStableRerender = useCallback(() => {
+    if (!svgRef.current) return;
+    
+    const svg = d3.select(svgRef.current);
+    const nodeLayer = svg.select('.node-layer');
+    
+    // 1. Force cleanup of all dragging classes and stale state
+    nodeLayer.selectAll('.node').classed('dragging', false);
+    nodeLayer.selectAll('.dragging').classed('dragging', false);
+    svg.selectAll('.dragging').classed('dragging', false);
+    
+    // 2. Clear all element references
+    if (draggedElementRef.current) {
+      draggedElementRef.current = null;
+    }
+    if (draggedNodeElementRef.current) {
+      draggedNodeElementRef.current = null;
+    }
+    
+    // 3. Clear all caches that might have stale DOM references
+    currentDragPositionsRef.current.clear();
+    connectionUpdateQueueRef.current.clear();
+    visualUpdateQueueRef.current.clear();
+    
+    // 4. Force re-sync of allNodeElementsRef with actual DOM
+    allNodeElementsRef.current.clear();
+    nodeLayer.selectAll('.node').each(function(d: any) {
+      allNodeElementsRef.current.set(d.id, this as SVGGElement);
+    });
+    
+    // 5. Cancel any pending RAF callbacks to prevent race conditions
+    if (batchedConnectionUpdateRef.current) {
+      cancelAnimationFrame(batchedConnectionUpdateRef.current);
+      batchedConnectionUpdateRef.current = null;
+    }
+    if (batchedVisualUpdateRef.current) {
+      cancelAnimationFrame(batchedVisualUpdateRef.current);
+      batchedVisualUpdateRef.current = null;
+    }
+    
+    if (process.env.NODE_ENV === "development") {
+      console.log("🔄 Forced stable re-render cleanup completed");
+    }
+  }, [svgRef]);
+
+  // Manual trigger for forceStableRerender via hotkey (Shift+R)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.shiftKey && event.key === 'R') {
+        event.preventDefault();
+        console.log('🔄 Force Stable Re-render triggered');
+        forceStableRerender();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [forceStableRerender]);
+
+  // Auto-trigger when detecting DOM inconsistency
+  useEffect(() => {
+    if (!svgRef.current || !isInitialized) return;
+    
+    const nodeLayer = nodeLayerRef.current;
+    if (!nodeLayer || nodes.length === 0) return;
+
+    // Check if DOM nodes count doesn't match expected nodes
+    const domNodeCount = nodeLayer.querySelectorAll('.node').length;
+    const expectedNodeCount = nodes.length;
+    
+    if (domNodeCount !== expectedNodeCount && expectedNodeCount > 0) {
+      console.warn(`⚠️ DOM inconsistency detected: ${domNodeCount} DOM nodes vs ${expectedNodeCount} expected nodes. Auto-triggering stable re-render.`);
+      forceStableRerender();
+    }
+  }, [nodes, isInitialized, forceStableRerender, svgRef]);
+
+  // Reset grid cache cleanup effect  
+  useEffect(() => {
     const now = performance.now();
     if (
       gridCacheRef.current &&
@@ -549,13 +650,25 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
     return map;
   }, [nodes]);
 
+  // Signature for node positions to trigger downstream effects (e.g., CanvasEffects)
+  const nodePositionsSignature = useMemo(() => {
+    try {
+      return nodes
+        .map((n) => `${n.id}:${Math.round(n.x ?? 0)},${Math.round(n.y ?? 0)}`)
+        .join("|");
+    } catch {
+      // Fallback to array length when nodes is temporarily inconsistent
+      return `len:${nodes.length}`;
+    }
+  }, [nodes]);
+
   // Stable reference for selectedNodes to prevent unnecessary re-renders
   const selectedNodesRef = useRef(selectedNodes);
   selectedNodesRef.current = selectedNodes;
 
   // Throttle drag updates for better performance
   const lastDragUpdateRef = useRef(0);
-  const dragUpdateThrottle = 16; // ~60fps for better performance balance
+  const dragUpdateThrottle = 8; // ~120fps for smoother realtime dragging
 
   // Track last updated paths removed; hook handles caching
 
@@ -1094,23 +1207,36 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
 
   const updateDraggedNodePosition = useCallback(
     (nodeId: string, newX: number, newY: number) => {
-      // Always update node position immediately for smooth dragging
-      if (draggedElementRef.current) {
-        draggedElementRef.current.attr(
-          "transform",
-          `translate(${newX}, ${newY})`
-        );
+      // STABILITY CHECK: Ensure we have valid dragged element ref before proceeding
+      if (!draggedElementRef.current || !draggedElementRef.current.node()) {
+        // Try to recover by finding the dragged node in DOM
+        const svg = d3.select(svgRef.current!);
+        const nodeLayer = svg.select('.node-layer');
+        const targetNode = nodeLayer.select(`[data-node-id="${nodeId}"]`);
+        
+        if (!targetNode.empty() && targetNode.classed('dragging')) {
+          draggedElementRef.current = targetNode;
+        } else {
+          // Cannot update position safely - node not found or not dragging
+          return;
+        }
       }
 
-      // Store current drag position
+      // Always update node position immediately for smooth dragging - NO THROTTLING!
+      draggedElementRef.current.attr(
+        "transform",
+        `translate(${newX}, ${newY})`
+      );
+
+      // Store current drag position immediately
       currentDragPositionsRef.current.set(nodeId, { x: newX, y: newY });
-      // Sync with connection paths hook for live path updates during drag
+      // Sync with connection paths hook for live path updates during drag - immediate
       updateConnDragPos(nodeId, { x: newX, y: newY });
 
-      // Throttle connection updates to improve performance
+      // Only throttle expensive connection path rendering, not the node transform
       const now = Date.now();
       if (now - lastDragUpdateRef.current < dragUpdateThrottle) {
-        return;
+        return; // Skip expensive connection updates but node already moved
       }
       lastDragUpdateRef.current = now;
 
@@ -1121,7 +1247,7 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
 
         // Start batched processing if not already running
         if (!batchedConnectionUpdateRef.current) {
-          scheduleRAF(processBatchedConnectionUpdates, "normal");
+          scheduleRAF(processBatchedConnectionUpdates, "high"); // High priority for drag
           batchedConnectionUpdateRef.current = 1 as unknown as number;
         }
       }
@@ -1130,8 +1256,9 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
       nodeConnectionsMap,
       processBatchedConnectionUpdates,
       dragUpdateThrottle,
-  updateConnDragPos,
-  scheduleRAF,
+      updateConnDragPos,
+      scheduleRAF,
+      svgRef,
     ]
   );
 
@@ -1144,8 +1271,7 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
       if (isSelected) {
         nodeElement
           .style("opacity", 1)
-          .style("filter", "drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))");
-        nodeBackground.attr("stroke", "#2196F3").attr("stroke-width", 3);
+      // Selection stroke handled via CSS (.node.selected .node-background)
       } else {
         nodeElement.style("opacity", 1).style("filter", "none");
         if (node) {
@@ -1246,21 +1372,33 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
         }
       });
     }
-  }, [selectedNodes, isNodeSelected, isInitialized, isDragging, getDraggedNodeId]);
+  }, [selectedNodes, selectedSignature, selectedCtxSignature, isNodeSelected, isInitialized, isDragging, getDraggedNodeId]);
 
-  // Monitor drag state changes to clean up DOM classes
+  // Monitor drag state changes to clean up DOM classes - ENHANCED CLEANUP
   useEffect(() => {
     if (!svgRef.current) return;
 
     const svg = d3.select(svgRef.current);
 
-    // If we're not dragging, remove all dragging classes
+    // If we're not dragging, remove all dragging classes and clear all refs
     if (!isDragging) {
+      // Remove dragging classes from ALL possible locations
       svg.selectAll(".node.dragging").classed("dragging", false);
-      // Clear draggedElementRef when not dragging
+      svg.select('.node-layer').selectAll('.node.dragging').classed('dragging', false);
+      svg.select('.node-layer').selectAll('.dragging').classed('dragging', false);
+      
+      // Clear ALL drag-related references
       if (draggedElementRef.current) {
         draggedElementRef.current = null;
       }
+      if (draggedNodeElementRef.current) {
+        draggedNodeElementRef.current = null;
+      }
+      
+      // Clear drag position caches
+      currentDragPositionsRef.current.clear();
+      connectionUpdateQueueRef.current.clear();
+      visualUpdateQueueRef.current.clear();
     }
   }, [isDragging, svgRef]);
 
@@ -1292,18 +1430,9 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
       nodeElement.classed("selected", isSelected);
 
       if (!isDragging) {
-        if (isSelected) {
-          nodeElement.style(
-            "filter",
-            "drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))"
-          );
-          nodeBackground.attr("stroke", "#2196F3").attr("stroke-width", 3);
-        } else {
-          nodeElement.style("filter", "none");
-          nodeBackground
-            .attr("stroke", getNodeColor(d.type, d.status))
-            .attr("stroke-width", 2);
-        }
+        nodeBackground
+          .attr("stroke", getNodeColor(d.type, d.status))
+          .attr("stroke-width", 2);
       }
     });
 
@@ -1341,6 +1470,8 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
     });
   }, [
     selectedNodes,
+    selectedSignature,
+    selectedCtxSignature,
     selectedConnection?.id,
     isInitialized,
     isDragging,
@@ -1349,6 +1480,27 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
     organizeNodeZIndex,
     svgRef,
   ]);
+
+  // Minimal selection class toggle (fast path)
+  useEffect(() => {
+    if (!svgRef.current || !isInitialized) return
+    const svg = d3.select(svgRef.current)
+    const mainNodeLayer = svg.select('.node-layer')
+    // Only toggle .selected class without touching styles; CSS handles visuals
+    mainNodeLayer.selectAll('.node').each(function (d: any) {
+      const nodeElement = d3.select(this)
+      const selected = isNodeSelected(d.id)
+      nodeElement.classed('selected', selected)
+      // Also adjust inline visuals so selection is immediately visible
+      const dragging = nodeElement.classed('dragging')
+      if (!dragging) {
+        const nodeBackground = nodeElement.select('.node-background')
+        nodeBackground
+          .attr('stroke', getNodeColor(d.type, d.status))
+          .attr('stroke-width', 2)
+      }
+    })
+  }, [isInitialized, svgRef, isNodeSelected, selectedSignature, selectedCtxSignature])
 
   // Connection state effect
   useEffect(() => {
@@ -1609,6 +1761,7 @@ function WorkflowCanvas(props: Readonly<WorkflowCanvasProps>) {
         selectedConnectionId={selectedConnection?.id}
         isNodeSelected={isNodeSelected}
         getConnectionMarker={getConnectionMarker}
+  nodePositionsSignature={nodePositionsSignature}
       />
       <InteractionLayer
         svgRef={svgRef}

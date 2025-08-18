@@ -1686,6 +1686,16 @@ $button-variants: (
   }
 }
 
+// ===== NODE SELECTION STYLES (CSS-driven, no inline stroke) =====
+.node.selected {
+  filter: drop-shadow(0 0 8px rgba(33, 150, 243, 0.5)) !important;
+}
+
+.node.selected .node-background {
+  stroke: #2196f3 !important;
+  stroke-width: 3px !important;
+}
+
 // ===== NODE DROP FEEDBACK =====
 
 .node-background.can-drop {

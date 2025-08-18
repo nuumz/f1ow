@@ -11,9 +11,10 @@ export type CanvasEffectsProps = {
   selectedConnectionId?: string;
   isNodeSelected: (nodeId: string) => boolean;
   getConnectionMarker: (c: Connection, state?: "default" | "hover" | "selected") => string;
+  nodePositionsSignature?: string;
 };
 
-function CanvasEffects({ svgRef, isInitialized, isDragging, selectedNodes, selectedConnectionId, isNodeSelected, getConnectionMarker }: CanvasEffectsProps) {
+function CanvasEffects({ svgRef, isInitialized, isDragging, selectedNodes, selectedConnectionId, isNodeSelected, getConnectionMarker, nodePositionsSignature }: CanvasEffectsProps) {
   useEffect(() => {
     if (!svgRef.current || !isInitialized) return;
 
@@ -25,20 +26,7 @@ function CanvasEffects({ svgRef, isInitialized, isDragging, selectedNodes, selec
     mainNodeLayer.selectAll(".node").each(function (d: any) {
       const nodeElement = d3.select(this);
       const selected = isNodeSelected(d.id);
-      const dragging = nodeElement.classed("dragging");
-      const nodeBackground = nodeElement.select(".node-background");
-
       nodeElement.classed("selected", selected);
-
-      if (!dragging) {
-        if (selected) {
-          nodeElement.style("filter", "drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))");
-          nodeBackground.attr("stroke", "#2196F3").attr("stroke-width", 3);
-        } else {
-          nodeElement.style("filter", "none");
-          // Stroke reset left to node utils in main component; keep simple here
-        }
-      }
     });
 
     // Update connection selection state only - don't touch hover state
@@ -63,7 +51,7 @@ function CanvasEffects({ svgRef, isInitialized, isDragging, selectedNodes, selec
         }
       }
     });
-  }, [svgRef, isInitialized, isDragging, selectedNodes, selectedConnectionId, isNodeSelected, getConnectionMarker]);
+  }, [svgRef, isInitialized, isDragging, selectedNodes, selectedConnectionId, isNodeSelected, getConnectionMarker, nodePositionsSignature]);
 
   return null;
 }

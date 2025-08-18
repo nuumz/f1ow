@@ -915,8 +915,7 @@ function OptimizedWorkflowCanvas(props: Readonly<OptimizedWorkflowCanvasProps>) 
 
       if (isSelected) {
         nodeElement
-          .style("opacity", 1)
-          .style("filter", "drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))");
+          .style("opacity", 1);
         nodeBackground.attr("stroke", "#2196F3").attr("stroke-width", 3);
       } else {
         nodeElement.style("opacity", 1).style("filter", "none");

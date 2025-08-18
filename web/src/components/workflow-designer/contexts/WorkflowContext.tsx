@@ -280,8 +280,7 @@ const validateConnections = (
   })
 }
 
-// Cache last validation signature (module scope – not part of React state)
-let lastValidationSignature: string | null = null
+// Note: Validation signature is now kept per-provider via a ref to avoid cross-instance bleed
 
 const markStateAsDirty = (state: WorkflowState): WorkflowState => ({
   ...state,
@@ -858,6 +857,9 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
   // Create stable refs for current state to avoid stale closures
   const currentStateRef = useRef(state)
   currentStateRef.current = state
+
+  // Keep last validation signature per provider (was module-scoped before)
+  const lastValidationSignatureRef = useRef<string | null>(null)
   
   // Refs
   const svgRef = useRef<SVGSVGElement>(null)
@@ -1049,11 +1051,11 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
   // Auto-validate connections when node / connection identity set changes (not every minor update)
   useEffect(() => {
     if (state.nodes.length === 0 || state.connections.length === 0) return
-    const nodeSig = state.nodes.map(n => n.id).sort().join(',')
-    const connSig = state.connections.map(c => c.id).sort().join(',')
+  const nodeSig = state.nodes.map(n => n.id).sort((a, b) => a.localeCompare(b)).join(',')
+  const connSig = state.connections.map(c => c.id).sort((a, b) => a.localeCompare(b)).join(',')
     const signature = `${nodeSig}|${connSig}`
-    if (lastValidationSignature !== signature) {
-      lastValidationSignature = signature
+    if (lastValidationSignatureRef.current !== signature) {
+      lastValidationSignatureRef.current = signature
       validateConnections()
     }
   }, [state.nodes, state.connections, validateConnections])

@@ -169,15 +169,29 @@ export function useNodeRendering(params: NodeRenderingParams) {
                 const shouldRebuild = changeRatio >= 0.1 || movedRatio >= 0.2 || (MANY_NODES && (changed > 0 || moved > 0))
 
                 if (shouldRebuild) {
+                    // 🧹 COMPLETE CLEANUP: Remove all node elements and clear references
                     nodeLayer.selectAll<SVGGElement, any>('.node').each(function (this: any, d: any) {
                         allNodeElementsRef.current.delete(d.id)
                     })
+
+                    // Remove all SVG node elements
                     nodeLayer.selectAll<SVGGElement, any>('.node').remove()
 
-                    // Clear dragged element ref if we're rebuilding
+                    // Clear ALL references to prevent stale DOM state
                     if (draggedElementRef.current) {
                         draggedElementRef.current = null
                     }
+                    if (draggedNodeElementRef.current) {
+                        draggedNodeElementRef.current = null
+                    }
+
+                    // Clear all drag-related caches
+                    currentDragPositionsRef.current.clear()
+                    connectionUpdateQueueRef.current.clear()
+                    visualUpdateQueueRef.current.clear()
+
+                    // Force cleanup of any stale dragging classes
+                    nodeLayer.selectAll('.dragging').classed('dragging', false)
                 }
             } catch {
                 // fallback: ignore heuristic errors
@@ -405,9 +419,9 @@ export function useNodeRendering(params: NodeRenderingParams) {
                 if (canDrop || designerMode === 'architecture') {
                     const inputs = (hovered.inputs || []) as any[]
                     const portId = inputs.length > 0 ? inputs[0].id : '__side-top'
-                    console.log('✅ Fallback target found (canDrop or architecture mode):', { 
-                        targetNodeId: hovered.id, 
-                        targetPortId: portId, 
+                    console.log('✅ Fallback target found (canDrop or architecture mode):', {
+                        targetNodeId: hovered.id,
+                        targetPortId: portId,
                         inputsCount: inputs.length,
                         canDrop,
                         designerMode
@@ -426,7 +440,7 @@ export function useNodeRendering(params: NodeRenderingParams) {
 
         // Drag handlers
         function dragStarted(this: any, event: any, d: WorkflowNode) {
-            // Prepare drag state; don't attach D3 selection to data to keep state serializable
+            // Prepare drag state; don't mark as dragging until first movement (keeps click behavior intact)
 
             if (dragStateCleanupRef.current) {
                 clearTimeout(dragStateCleanupRef.current)
@@ -438,9 +452,6 @@ export function useNodeRendering(params: NodeRenderingParams) {
             const transform = d3.zoomTransform(svgElement)
             const [canvasX, canvasY] = transform.invert([mouseX, mouseY])
 
-                // Do NOT mark context as dragging yet; wait for threshold in dragged()
-                // Keep element refs unset until real drag begins
-
                 ; (d as any).dragStartX = canvasX
                 ; (d as any).dragStartY = canvasY
                 ; (d as any).initialX = d.x || 0
@@ -448,7 +459,7 @@ export function useNodeRendering(params: NodeRenderingParams) {
                 ; (d as any).hasDragged = false
                 ; (d as any).dragStartTime = Date.now()
                 ; (d as any).dragArmed = true
-                ; (d as any).dragThreshold = 5
+                ; (d as any).dragThreshold = 0 // trigger on first movement
         }
 
         function dragged(this: any, event: any, d: WorkflowNode) {
@@ -464,29 +475,29 @@ export function useNodeRendering(params: NodeRenderingParams) {
             const deltaX = currentCanvasX - dragData.dragStartX
             const deltaY = currentCanvasY - dragData.dragStartY
 
-            updateDragPosition(currentCanvasX, currentCanvasY)
+            const movedEnough = Math.abs(deltaX) > (dragData.dragThreshold || 0) || Math.abs(deltaY) > (dragData.dragThreshold || 0)
 
-            const movedEnough = Math.abs(deltaX) > (dragData.dragThreshold || 5) || Math.abs(deltaY) > (dragData.dragThreshold || 5)
-
-            // Arm real dragging only after threshold is exceeded (prevents click being blocked)
             if (!dragData.hasDragged && movedEnough) {
                 dragData.hasDragged = true
-                // Now mark context as dragging and apply visuals
+                // Mark context as dragging and apply visuals now
                 startDragging(d.id, { x: dragData.dragStartX, y: dragData.dragStartY })
                 const nodeElement = d3.select(this)
                 nodeElement.classed('dragging', true)
                 draggedElementRef.current = nodeElement
                 draggedNodeElementRef.current = this as SVGGElement
-                applyDragVisualStyle(nodeElement, d.id)
+                applyDragVisualStyle(nodeElement as any, d.id)
                 setNodeAsDragging(d.id)
             }
 
-            // If not actually dragging yet, do nothing further (let click happen)
             if (!dragData.hasDragged) return
+
+            // Only publish drag position to context after dragging is active
+            updateDragPosition(currentCanvasX, currentCanvasY)
 
             const newX = dragData.initialX + deltaX
             const newY = dragData.initialY + deltaY
 
+            // Update the dragged node transform immediately for realtime movement
             updateDraggedNodePosition(d.id, newX, newY)
             onNodeDrag(d.id, newX, newY)
         }
@@ -541,11 +552,23 @@ export function useNodeRendering(params: NodeRenderingParams) {
         const existingNodes = nodeLayer.selectAll<SVGGElement, any>('.node')
         const nodeSelection = existingNodes.data(nodes as any, (d: any) => d.id)
 
-        // Handle exit selection (removed nodes)
+        // Handle exit selection (removed nodes) - COMPLETE CLEANUP
         const exitNodes = nodeSelection.exit()
         exitNodes
             .each(function (this: any, d: any) {
+                // Remove from all caches and references
                 allNodeElementsRef.current.delete(d.id)
+                currentDragPositionsRef.current.delete(d.id)
+                connectionUpdateQueueRef.current.delete(d.id)
+                visualUpdateQueueRef.current.delete(d.id)
+
+                // Clear dragged element refs if this was the dragged node
+                if (draggedElementRef.current && draggedElementRef.current.node() === this) {
+                    draggedElementRef.current = null
+                }
+                if (draggedNodeElementRef.current === this) {
+                    draggedNodeElementRef.current = null
+                }
             })
             .remove()
 
@@ -573,7 +596,8 @@ export function useNodeRendering(params: NodeRenderingParams) {
                 d3
                     .drag<any, WorkflowNode>()
                     .container(g.node() as any)
-                    .clickDistance(5)
+                    // Make drag start almost immediately for realtime movement while still allowing clicks
+                    .clickDistance(1)
                     .on('start', dragStarted)
                     .on('drag', dragged)
                     .on('end', dragEnded) as any
@@ -581,6 +605,17 @@ export function useNodeRendering(params: NodeRenderingParams) {
 
         // Merge enter and update selections - this includes both new and existing nodes
         const nodeGroups = nodeEnter.merge(nodeSelection as any)
+
+        // Safety: keep dragging class only on the actual dragged node (prevents stale class from blocking updates)
+        const activeDraggedId = getDraggedNodeId()
+        if (!isContextDragging() || !activeDraggedId) {
+            nodeLayer.selectAll('.node.dragging').classed('dragging', false)
+        } else {
+            nodeLayer
+                .selectAll<SVGGElement, any>('.node.dragging')
+                .filter(function (this: SVGGElement, d: any) { return d?.id !== activeDraggedId })
+                .classed('dragging', false)
+        }
 
         // Synchronize dragging class with actual drag state
         nodeGroups.each(function (this: any, d: any) {
@@ -630,6 +665,16 @@ export function useNodeRendering(params: NodeRenderingParams) {
                 if (!isDragging) {
                     event.stopPropagation()
                     const ctrlKey = event.ctrlKey || event.metaKey
+                    // Immediate visual feedback: toggle .selected class before state round-trip
+                    const svg = d3.select(svgRef.current!)
+                    const nodeLayerSel = svg.select<SVGGElement>('.node-layer')
+                    const nodeEl = d3.select(event.currentTarget.parentNode as SVGGElement)
+                    if (ctrlKey) {
+                        nodeEl.classed('selected', !nodeEl.classed('selected'))
+                    } else {
+                        nodeLayerSel.selectAll('.node.selected').classed('selected', false)
+                        nodeEl.classed('selected', true)
+                    }
                     onNodeClick(d as WorkflowNode, ctrlKey)
                 }
             })
@@ -723,6 +768,17 @@ export function useNodeRendering(params: NodeRenderingParams) {
                 if (!isContextDragging()) {
                     event.stopPropagation()
                     const ctrlKey = event.ctrlKey || event.metaKey
+                    // Immediate visual feedback
+                    const svg = d3.select(svgRef.current!)
+                    const nodeLayerSel = svg.select<SVGGElement>('.node-layer')
+                    // Ensure we toggle class on the node group (g), not the path itself
+                    const nodeEl = d3.select((this as SVGElement).parentNode as SVGGElement)
+                    if (ctrlKey) {
+                        nodeEl.classed('selected', !nodeEl.classed('selected'))
+                    } else {
+                        nodeLayerSel.selectAll('.node.selected').classed('selected', false)
+                        nodeEl.classed('selected', true)
+                    }
                     onNodeClick(d as WorkflowNode, ctrlKey)
                 }
             })
@@ -744,7 +800,6 @@ export function useNodeRendering(params: NodeRenderingParams) {
         // Apply selection/dragging visual style
         nodeGroups.each(function (d: any) {
             const nodeElement = d3.select(this)
-            const selected = isNodeSelected(d.id)
 
             let opacity = 1
             let filter = 'none'
@@ -753,14 +808,12 @@ export function useNodeRendering(params: NodeRenderingParams) {
             const currentDraggedNodeId = getDraggedNodeId()
             const currentlyDragging = isContextDragging()
 
-            if (selected || (currentlyDragging && currentDraggedNodeId === d.id)) {
+            if (currentlyDragging && currentDraggedNodeId === d.id) {
                 strokeColor = '#2196F3'
                 strokeWidth = 3
                 if (currentlyDragging && currentDraggedNodeId === d.id) {
                     opacity = 0.9
                     filter = 'drop-shadow(0 6px 12px rgba(0, 0, 0, 0.3))'
-                } else if (selected) {
-                    filter = 'drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))'
                 }
             }
 

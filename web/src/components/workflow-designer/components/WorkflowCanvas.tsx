@@ -28,20 +28,8 @@ import {
   NODE_MIN_HEIGHT,
   NodeTypes,
 } from "../utils/node-utils";
-import { renderToStaticMarkup } from "react-dom/server";
-import {
-  Server,
-  Database,
-  Globe,
-  Shield,
-  Monitor,
-  Cloud,
-  GitBranch,
-  Package,
-  Users,
-  FileText,
-  Box,
-} from "lucide-react";
+// icon symbols handled in utils/icon-symbols
+import { renderIconUse } from "../utils/icon-symbols";
 import { useConnectionPaths } from "../hooks/useConnectionPaths";
 import {
   getArrowMarkerForMode as getArrowMarkerForModeUtil,
@@ -183,28 +171,7 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
   const visualUpdateQueueRef = useRef<Set<string>>(new Set());
   const connectionUpdateQueueRef = useRef<Set<string>>(new Set());
 
-  // Minimal icon renderer for architecture-mode SVG icons
-  function getArchitectureIconSvg(type: string, size: number, color: string) {
-    const iconMap: Record<string, React.ComponentType<any>> = {
-      server: Server,
-      database: Database,
-      globe: Globe,
-  'rest-api': Globe,
-  api: Globe,
-      shield: Shield,
-      monitor: Monitor,
-      cloud: Cloud,
-      branch: GitBranch,
-      package: Package,
-      users: Users,
-      file: FileText,
-      box: Box,
-    };
-    const Icon = iconMap[type] || Box;
-    return renderToStaticMarkup(
-      React.createElement(Icon, { size, color, strokeWidth: 1.8 })
-    );
-  }
+  // Icon symbols are provided via utils/icon-symbols.ensureIconSymbol
 
   // Helper: show architecture outline only for nodes in group "Services"
   const isServicesArchitectureNode = useCallback((node: any) => {
@@ -2353,25 +2320,27 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
         // Ensure icon stroke width looks balanced in architecture mode
         .style("stroke-width", 1.8 as unknown as string)
         .each(function (d: any) {
-          const g = d3.select(this as SVGGElement);
+          const gSel = d3.select(this as SVGGElement);
           if (workflowContextState.designerMode !== "architecture") {
-            // Clear when not in architecture mode
-            g.html("");
+            gSel.html("");
             return;
           }
           const dimensions = getConfigurableDimensions(d);
           const size = dimensions.iconSize || 24;
           const color = "#8d8d8d";
-          const svgStr = getArchitectureIconSvg(d.type, size, color);
           const key = `${d.type}:${size}`;
-          const nodeEl = g.node() as any;
-          if (nodeEl && nodeEl.__iconKey !== key) {
-            // Center icon at (0,0) of the node group by translating top-left
-            const tx = (dimensions.iconOffset?.x ?? 0) - size / 2;
-            const ty = (dimensions.iconOffset?.y ?? 0) - size / 2;
-            g.attr("transform", `translate(${tx}, ${ty})`);
-            g.html(svgStr || "");
-            nodeEl.__iconKey = key;
+          const nodeEl = gSel.node() as any;
+          if (!nodeEl) return;
+          if (nodeEl.__iconKey !== key) {
+            renderIconUse(
+              gSel,
+              defs,
+              d.type,
+              size,
+              color,
+              dimensions.iconOffset?.x ?? 0,
+              dimensions.iconOffset?.y ?? 0
+            );
           }
         });
 
@@ -4778,10 +4747,14 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
     if (!svgRef.current || !isInitialized) return;
 
     const svg = d3.select(svgRef.current);
-    const g = svg.select("g");
+  // Always operate on the main canvas root / connection layer
+  const canvasRoot = svg.select<SVGGElement>("g.canvas-root");
+  if (canvasRoot.empty()) return;
+  const connectionLayer = canvasRoot.select<SVGGElement>("g.connection-layer");
+  const targetLayer = connectionLayer.empty() ? canvasRoot : connectionLayer;
 
     // Handle connection preview
-    g.selectAll(".connection-preview").remove();
+  targetLayer.selectAll(".connection-preview").remove();
 
     if (isConnecting && connectionStart) {
       console.log("🔄 Connection effect - preview update:", {
@@ -4841,7 +4814,7 @@ function WorkflowCanvas(props: WorkflowCanvasProps) {
         const isWorkflowMode = workflowContextState.designerMode === "workflow";
         const previewMarker = getArrowMarkerForMode(isWorkflowMode, "default");
 
-        g.append("path")
+  targetLayer.append("path")
           .attr("class", "connection-preview")
           .attr("d", previewPath)
           .attr("stroke", "#2196F3")

@@ -181,19 +181,6 @@ function chooseEndOrientationFromBox(
 }
 
 /**
- * Calculate port position - main API function
- * @deprecated Use calculatePortPositionCore from port-positioning module directly
- */
-export function calculatePortPosition(
-  node: WorkflowNode,
-  portId: string,
-  portType: 'input' | 'output' | 'bottom',
-  variant: NodeVariant = 'standard'
-): PortPosition {
-  return calculatePortPositionCore(node, portId, portType, variant)
-}
-
-/**
  * Generate connection path with proper port positioning based on node variants
  */
 export function generateVariantAwareConnectionPath(

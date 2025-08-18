@@ -15,21 +15,21 @@ export interface NodePort {
 }
 
 // Data type enumeration for port types
-export type DataType = 
+export type DataType =
   | 'any'
-  | 'string' 
-  | 'number' 
-  | 'boolean' 
-  | 'object' 
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'object'
   | 'array'
   | 'error'
 
 // Node status enumeration
-export type NodeStatus = 
-  | 'idle' 
-  | 'running' 
-  | 'completed' 
-  | 'error' 
+export type NodeStatus =
+  | 'idle'
+  | 'running'
+  | 'completed'
+  | 'error'
   | 'warning'
 
 // Port type enumeration
@@ -42,7 +42,7 @@ export type NodeVariant = 'compact' | 'standard'
 export type NodeShape = 'rectangle' | 'circle' | 'diamond' | 'square'
 
 // Node category enumeration
-export type NodeCategory = 
+export type NodeCategory =
   | 'Core/Control Flow'
   | 'Data Processing'
   | 'Network'
@@ -56,7 +56,7 @@ export type NodeCategory =
   | 'Monitoring'
   // Architecture diagram categories
   | 'System/External Service'
-  | 'System/Internal Service' 
+  | 'System/Internal Service'
   | 'System/Database'
   | 'System/Queue'
   | 'System/Cache'
@@ -179,6 +179,22 @@ export interface NodeTypeInfo {
   category?: NodeCategory
   description?: string
   shape?: NodeShape
+  // Architecture-only: Optional dashed outline ring settings
+  // If omitted, the outline is shown by default in architecture mode (backward compatible).
+  // Set to false to hide per node type. Use archOutlineColor to customize stroke color.
+  archOutline?: boolean
+  archOutlineColor?: string
+  // Advanced outline customization (architecture mode)
+  // Width of the outline stroke in pixels (defaults to 2)
+  archOutlineWidth?: number
+  // SVG stroke-dasharray value, e.g., '6,6' or a single number
+  archOutlineDash?: string | number
+  // Extra padding around node bounds for the outline ring (defaults to 8)
+  archOutlinePadding?: number
+  // Outline opacity (0..1), defaults to 0.8
+  archOutlineOpacity?: number
+  // Corner radius of the outline rect (defaults to 16)
+  archOutlineCornerRadius?: number
 }
 
 // Execution state for workflow runs
@@ -259,7 +275,7 @@ export interface NodeRenderProps {
   showStatus?: boolean
   customWidth?: number
   customHeight?: number
-  
+
   // Event handlers
   onNodeClick?: (node: WorkflowNode, ctrlKey: boolean) => void
   onNodeDoubleClick?: (node: WorkflowNode) => void
@@ -267,7 +283,7 @@ export interface NodeRenderProps {
   onPortDragStart?: (nodeId: string, portId: string, portType: PortType) => void
   onPortDrag?: (x: number, y: number) => void
   onPortDragEnd?: (targetNodeId?: string, targetPortId?: string) => void
-  
+
   // Visual feedback for connections
   canDropOnPort?: (targetNodeId: string, targetPortId: string) => boolean
   canDropOnNode?: (targetNodeId: string) => boolean
@@ -279,9 +295,9 @@ export type NodeDoubleClickHandler = (node: WorkflowNode) => void
 export type PortClickHandler = (nodeId: string, portId: string, portType: PortType) => void
 export type PortDragHandler = (x: number, y: number) => void
 export type ConnectionValidationHandler = (
-  sourceNode: WorkflowNode, 
-  sourcePortId: string, 
-  targetNode: WorkflowNode, 
+  sourceNode: WorkflowNode,
+  sourcePortId: string,
+  targetNode: WorkflowNode,
   targetPortId: string
 ) => { valid: boolean; reason?: string }
 

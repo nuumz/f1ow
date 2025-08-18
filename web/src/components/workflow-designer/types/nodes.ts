@@ -4,6 +4,7 @@
  */
 
 import type { NodeTypeInfo, NodeDefinition } from '../types'
+import { ArchitectureNodeTypes } from './architecture'
 import type { NodeSchema } from '../schemas'
 
 // Enhanced node type definitions with comprehensive information
@@ -616,7 +617,8 @@ export const NodeDefinitions: Record<string, NodeDefinition> = {
 
 // Helper functions
 export function getNodeTypeInfo(type: string): NodeTypeInfo | undefined {
-  return NodeTypes[type]
+  // Prefer workflow NodeTypes; fallback to ArchitectureNodeTypes to support architecture-only types
+  return NodeTypes[type] || ArchitectureNodeTypes[type]
 }
 
 export function getNodeDefinition(type: string): NodeDefinition {

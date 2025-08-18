@@ -17,6 +17,8 @@ export function createNodeElements<Datum = unknown, PElement extends d3.BaseType
     nodeEnter
         .append('rect')
         .attr('class', 'node-arch-outline')
+        .attr('vector-effect', 'non-scaling-stroke')
+        .attr('shape-rendering', 'geometricPrecision')
         .style('pointer-events', 'none')
         .style('fill', 'none')
         .style('stroke', '#3b82f6')

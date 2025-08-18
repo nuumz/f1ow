@@ -6,7 +6,8 @@ import * as d3 from 'd3'
  * updates and event bindings to the caller.
  */
 export function createNodeElements<Datum = unknown, PElement extends d3.BaseType = SVGGElement, PDatum = unknown, PNode extends d3.BaseType = HTMLElement>(
-    nodeEnter: d3.Selection<PElement, Datum, PNode, PDatum>
+    nodeEnter: d3.Selection<PElement, Datum, PNode, PDatum>,
+    nodeGroups?: d3.Selection<SVGGElement, Datum, SVGGElement, unknown>
 ) {
     // Node background (shape-aware path)
     nodeEnter
@@ -60,6 +61,89 @@ export function createNodeElements<Datum = unknown, PElement extends d3.BaseType
         .attr('class', 'node-sublabel')
         .style('pointer-events', 'none')
         .style('opacity', 0.8)
+
+    // Ensure existing/merged nodes also have required containers (idempotent)
+    if (nodeGroups) {
+        ensureNodeElementContainers(nodeGroups as unknown as d3.Selection<SVGGElement, unknown, SVGGElement, unknown>)
+    }
+}
+
+/**
+ * Core function to ensure a node has all required child containers/elements.
+ * Safe to call repeatedly; will only append missing elements.
+ */
+export function ensureNodeElementContainers(
+    nodeGroups: d3.Selection<SVGGElement, unknown, SVGGElement, unknown>
+) {
+    type D3Sel = d3.Selection<d3.BaseType, unknown, d3.BaseType, unknown>
+
+    const ensure = (
+        sel: D3Sel,
+        selector: string,
+        create: (parent: D3Sel) => void
+    ) => {
+        const sub = sel.select(selector)
+        if (sub.empty()) {
+            create(sel)
+        }
+    }
+
+    nodeGroups.each(function () {
+        const g = d3.select(this as SVGGElement) as unknown as D3Sel
+
+        // Background
+        ensure(g, '.node-background', (p) => {
+            p.append('path').attr('class', 'node-background')
+        })
+
+        // Architecture outline
+        ensure(g, '.node-arch-outline', (p) => {
+            p.append('rect')
+                .attr('class', 'node-arch-outline')
+                .attr('vector-effect', 'non-scaling-stroke')
+                .attr('shape-rendering', 'geometricPrecision')
+                .style('pointer-events', 'none')
+                .style('fill', 'none')
+                .style('stroke', '#3b82f6')
+                .style('stroke-width', 2 as unknown as string)
+                .style('stroke-dasharray', '6,6')
+                .style('opacity', 0.8)
+        })
+
+        // Icons and labels
+        ensure(g, '.node-icon', (p) => {
+            p.append('text').attr('class', 'node-icon').style('pointer-events', 'none')
+        })
+        ensure(g, '.node-icon-svg', (p) => {
+            p.append('g')
+                .attr('class', 'node-icon-svg')
+                .style('pointer-events', 'none')
+                .style('stroke-width', 1.8 as unknown as string)
+        })
+        ensure(g, '.node-label', (p) => {
+            p.append('text').attr('class', 'node-label').style('pointer-events', 'none')
+        })
+        ensure(g, '.node-sublabel', (p) => {
+            p.append('text').attr('class', 'node-sublabel').style('pointer-events', 'none').style('opacity', 0.8)
+        })
+
+        // Ports containers
+        ensure(g, 'g.ports', (p) => {
+            const ports = p.append('g').attr('class', 'ports') as unknown as D3Sel
+            ports.append('g').attr('class', 'input-ports')
+            ports.append('g').attr('class', 'output-ports')
+            ports.append('g').attr('class', 'side-ports')
+            ports.append('g').attr('class', 'bottom-ports')
+        })
+        // If g.ports already exists, ensure sub-groups exist too
+        const ports = (g.select('g.ports') as unknown) as D3Sel
+        if (!ports.empty()) {
+            ensure(ports, 'g.input-ports', (p) => { p.append('g').attr('class', 'input-ports') })
+            ensure(ports, 'g.output-ports', (p) => { p.append('g').attr('class', 'output-ports') })
+            ensure(ports, 'g.side-ports', (p) => { p.append('g').attr('class', 'side-ports') })
+            ensure(ports, 'g.bottom-ports', (p) => { p.append('g').attr('class', 'bottom-ports') })
+        }
+    })
 }
 
 export type CreateNodeGroupsOptions<Datum> = {
@@ -92,15 +176,15 @@ export function createNodeGroups<Datum>(
     } = options
 
     const safeGetId = (d: Datum, i: number): string => {
-        if (getId) return getId(d)
+        if (getId) { return getId(d) }
         const rec = d as unknown as Record<string, unknown>
         const idVal = rec && (rec['id'] as unknown)
-        if (typeof idVal === 'string') return idVal
+        if (typeof idVal === 'string') { return idVal }
         return String(i)
     }
 
     const safeGetTransform = (d: Datum): string => {
-        if (getTransform) return getTransform(d)
+        if (getTransform) { return getTransform(d) }
         const rec = d as unknown as Record<string, unknown>
         const x = typeof rec['x'] === 'number' ? (rec['x'] as number) : 0
         const y = typeof rec['y'] === 'number' ? (rec['y'] as number) : 0
@@ -116,7 +200,7 @@ export function createNodeGroups<Datum>(
     nodeSelection
         .exit()
         .each(function (this: SVGGElement, d: unknown) {
-            if (onExit) onExit(d as Datum, this)
+            if (onExit) { onExit(d as Datum, this) }
         })
         .remove()
 
@@ -128,7 +212,7 @@ export function createNodeGroups<Datum>(
         .attr('transform', (d: Datum) => safeGetTransform(d))
         .style('cursor', cursor)
         .each(function (this: SVGGElement, d: Datum) {
-            if (onEnterEach) onEnterEach(d, this)
+            if (onEnterEach) { onEnterEach(d, this) }
         })
 
     if (dragBehavior) {

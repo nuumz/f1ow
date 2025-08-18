@@ -3,26 +3,30 @@
  * Unified design system for both Workflow and Architecture node palettes
  */
 
-import React, { useState, useMemo, useRef, useEffect } from 'react'
-import { Search, X, Filter, ChevronDown } from 'lucide-react'
-import './BaseNodePalette.css'
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Search, X, Filter, ChevronDown } from 'lucide-react';
+import './BaseNodePalette.css';
 
 export interface NodePaletteItem {
-  readonly type: string
-  readonly label: string
-  readonly icon: React.ComponentType<{ size?: number | string; className?: string; [key: string]: unknown }>
-  readonly category: string
-  readonly description?: string
-  readonly color?: string
+  readonly type: string;
+  readonly label: string;
+  readonly icon: React.ComponentType<{
+    size?: number | string;
+    className?: string;
+    [key: string]: unknown;
+  }>;
+  readonly category: string;
+  readonly description?: string;
+  readonly color?: string;
 }
 
 export interface BaseNodePaletteProps {
-  readonly nodes: NodePaletteItem[]
-  readonly onAddNode: (type: string, position?: { x: number; y: number }) => void
-  readonly categories?: string[]
-  readonly enableSearch?: boolean
-  readonly enableCategoryFilter?: boolean
-  readonly className?: string
+  readonly nodes: NodePaletteItem[];
+  readonly onAddNode: (type: string, position?: { x: number; y: number }) => void;
+  readonly categories?: string[];
+  readonly enableSearch?: boolean;
+  readonly enableCategoryFilter?: boolean;
+  readonly className?: string;
 }
 
 export default function BaseNodePalette({
@@ -31,95 +35,95 @@ export default function BaseNodePalette({
   categories = [],
   enableSearch = true,
   enableCategoryFilter = true,
-  className = ''
+  className = '',
 }: BaseNodePaletteProps) {
-  const [selectedCategory, setSelectedCategory] = useState<string>('all')
-  const [searchTerm, setSearchTerm] = useState('')
-  const [isSearchFocused, setIsSearchFocused] = useState(false)
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Filter nodes based on search and category
   const filteredNodes = useMemo(() => {
-    let filtered = nodes
+    let filtered = nodes;
 
     // Filter by search term
     if (searchTerm) {
-      filtered = filtered.filter(node =>
-        node.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        node.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        node.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        node.category.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+      filtered = filtered.filter(
+        (node) =>
+          node.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          node.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          node.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          node.category.toLowerCase().includes(searchTerm.toLowerCase())
+      );
     }
 
     // Filter by category
     if (selectedCategory !== 'all') {
-      filtered = filtered.filter(node => 
-        node.category === selectedCategory ||
-        node.category.startsWith(selectedCategory)
-      )
+      filtered = filtered.filter(
+        (node) => node.category === selectedCategory || node.category.startsWith(selectedCategory)
+      );
     }
 
-    return filtered
-  }, [nodes, searchTerm, selectedCategory])
+    return filtered;
+  }, [nodes, searchTerm, selectedCategory]);
 
   // Group nodes by category
   const groupedNodes = useMemo(() => {
-    const groups = new Map<string, NodePaletteItem[]>()
-    
-    filteredNodes.forEach(node => {
-      const category = node.category
-      if (!groups.has(category)) {
-        groups.set(category, [])
-      }
-      groups.get(category)!.push(node)
-    })
+    const groups = new Map<string, NodePaletteItem[]>();
 
-    return groups
-  }, [filteredNodes])
+    filteredNodes.forEach((node) => {
+      const category = node.category;
+      if (!groups.has(category)) {
+        groups.set(category, []);
+      }
+      groups.get(category)!.push(node);
+    });
+
+    return groups;
+  }, [filteredNodes]);
 
   // Handle click outside to close dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false)
+        setIsDropdownOpen(false);
       }
-    }
+    };
 
     if (isDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('mousedown', handleClickOutside);
       return () => {
-        document.removeEventListener('mousedown', handleClickOutside)
-      }
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
     }
-  }, [isDropdownOpen])
+  }, [isDropdownOpen]);
 
   const handleDragStart = (e: React.DragEvent, type: string) => {
-    e.dataTransfer.setData('application/node-type', type)
-    e.dataTransfer.effectAllowed = 'copy'
-    
+    e.dataTransfer.setData('application/node-type', type);
+    e.dataTransfer.effectAllowed = 'copy';
+
     // Add visual feedback
-    const target = e.target as HTMLElement
-    target.style.opacity = '0.7'
-    target.style.transform = 'scale(0.95)'
-  }
+    const target = e.target as HTMLElement;
+    target.style.opacity = '0.7';
+    target.style.transform = 'scale(0.95)';
+  };
 
   const handleDragEnd = (e: React.DragEvent) => {
     // Reset visual feedback
-    const target = e.target as HTMLElement
-    target.style.opacity = '1'
-    target.style.transform = 'scale(1)'
-  }
+    const target = e.target as HTMLElement;
+    target.style.opacity = '1';
+    target.style.transform = 'scale(1)';
+  };
 
   const clearSearch = () => {
-    setSearchTerm('')
-  }
+    setSearchTerm('');
+  };
 
   const clearFilters = () => {
-    setSearchTerm('')
-    setSelectedCategory('all')
-  }
+    setSearchTerm('');
+    setSelectedCategory('all');
+  };
 
   return (
     <div className={`base-node-palette ${className}`}>
@@ -144,57 +148,55 @@ export default function BaseNodePalette({
               </button>
             )}
           </div>
-          
+
           {/* Category Dropdown Row */}
           {enableCategoryFilter && categories.length > 0 && (
             <div className="category-dropdown" ref={dropdownRef}>
-              <button 
+              <button
                 className="category-dropdown-trigger"
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                 title="Filter by category"
               >
                 <div className="category-label">
                   <Filter size={14} />
-                  <span>
-                    {selectedCategory === 'all' ? 'All Categories' : selectedCategory}
-                  </span>
+                  <span>{selectedCategory === 'all' ? 'All Categories' : selectedCategory}</span>
                 </div>
-                <ChevronDown 
-                  size={12} 
-                  className={`dropdown-chevron ${isDropdownOpen ? 'open' : ''}`} 
+                <ChevronDown
+                  size={12}
+                  className={`dropdown-chevron ${isDropdownOpen ? 'open' : ''}`}
                 />
               </button>
-              
+
               {isDropdownOpen && (
                 <div className="category-dropdown-menu">
                   <button
                     className={`category-dropdown-item ${selectedCategory === 'all' ? 'active' : ''}`}
                     onClick={() => {
-                      setSelectedCategory('all')
-                      setIsDropdownOpen(false)
+                      setSelectedCategory('all');
+                      setIsDropdownOpen(false);
                     }}
                   >
-                    All Categories{' '}
-                    <span className="count">({nodes.length})</span>
+                    All Categories <span className="count">({nodes.length})</span>
                   </button>
-                  
-                  {categories.map(category => {
-                    const count = nodes.filter(node => node.category === category).length
-                    if (count === 0) {return null}
-                    
+
+                  {categories.map((category) => {
+                    const count = nodes.filter((node) => node.category === category).length;
+                    if (count === 0) {
+                      return null;
+                    }
+
                     return (
                       <button
                         key={category}
                         className={`category-dropdown-item ${selectedCategory === category ? 'active' : ''}`}
                         onClick={() => {
-                          setSelectedCategory(category)
-                          setIsDropdownOpen(false)
+                          setSelectedCategory(category);
+                          setIsDropdownOpen(false);
                         }}
                       >
-                        {category}{' '}
-                        <span className="count">({count})</span>
+                        {category} <span className="count">({count})</span>
                       </button>
-                    )
+                    );
                   })}
                 </div>
               )}
@@ -206,12 +208,8 @@ export default function BaseNodePalette({
       {/* Results Info */}
       <div className="results-info">
         <span>{filteredNodes.length} nodes</span>
-        {searchTerm && (
-          <span className="search-info">for "{searchTerm}"</span>
-        )}
-        {selectedCategory !== 'all' && (
-          <span className="search-info"> in {selectedCategory}</span>
-        )}
+        {searchTerm && <span className="search-info">for &quot;{searchTerm}&quot;</span>}
+        {selectedCategory !== 'all' && <span className="search-info"> in {selectedCategory}</span>}
       </div>
 
       {/* Node Groups */}
@@ -233,8 +231,8 @@ export default function BaseNodePalette({
                 </div>
               )}
               <div className="node-list">
-                {categoryNodes.map(node => {
-                  const Icon = node.icon
+                {categoryNodes.map((node) => {
+                  const Icon = node.icon;
                   return (
                     <button
                       key={node.type}
@@ -246,14 +244,16 @@ export default function BaseNodePalette({
                       onClick={() => onAddNode(node.type)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          onAddNode(node.type)
+                          e.preventDefault();
+                          onAddNode(node.type);
                         }
                       }}
                       title={node.description || node.label}
-                      style={{
-                        '--node-color': node.color || '#64748b'
-                      } as React.CSSProperties}
+                      style={
+                        {
+                          '--node-color': node.color || '#64748b',
+                        } as React.CSSProperties
+                      }
                     >
                       <div className="node-icon">
                         <Icon size={16} />
@@ -265,7 +265,7 @@ export default function BaseNodePalette({
                         )}
                       </div>
                     </button>
-                  )
+                  );
                 })}
               </div>
             </div>
@@ -273,5 +273,5 @@ export default function BaseNodePalette({
         )}
       </div>
     </div>
-  )
+  );
 }

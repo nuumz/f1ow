@@ -111,7 +111,7 @@ const expressionEditorRoute = createRoute({
         },
         onTest: async (expr: string) => {
           try {
-            return new Function('return ' + expr)()
+            return new Function(`return ${  expr}`)()
           } catch (error) {
             throw new Error(`Expression error: ${error instanceof Error ? error.message : String(error)}`)
           }

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Plus, Edit, Trash2, Eye, EyeOff, Lock, Key, Shield, AlertTriangle, LucideIcon } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, EyeOff, Lock, Key, Shield, AlertTriangle } from 'lucide-react'
 
 interface Credential {
   id: string
@@ -91,7 +92,7 @@ export default function CredentialManager() {
 
   // Handle keyboard events for modal
   useEffect(() => {
-    if (!showCreateModal) return
+    if (!showCreateModal) {return}
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -181,7 +182,7 @@ export default function CredentialManager() {
   }
 
   const handleSaveCredential = () => {
-    if (!selectedType) return
+    if (!selectedType) {return}
     
     const newCredential: Credential = {
       id: isEditing ? selectedCredential!.id : `cred-${Date.now()}`,

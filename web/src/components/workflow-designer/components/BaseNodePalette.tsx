@@ -180,7 +180,7 @@ export default function BaseNodePalette({
                   
                   {categories.map(category => {
                     const count = nodes.filter(node => node.category === category).length
-                    if (count === 0) return null
+                    if (count === 0) {return null}
                     
                     return (
                       <button

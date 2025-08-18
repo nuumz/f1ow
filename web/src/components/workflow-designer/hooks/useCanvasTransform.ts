@@ -55,7 +55,7 @@ export function useCanvasTransform({
   }, [workflowName])
 
   const calculateZoomAroundCenter = useCallback((currentTransform: CanvasTransform, scaleFactor: number) => {
-    if (!svgRef.current) return null
+    if (!svgRef.current) {return null}
     
     const rect = svgRef.current.getBoundingClientRect()
     const centerX = rect.width / 2
@@ -84,7 +84,7 @@ export function useCanvasTransform({
   }, [saveCanvasTransform])
 
   const applyTransformWithTransition = useCallback((newTransform: d3.ZoomTransform, duration: number = 200, ease?: any) => {
-    if (!svgRef.current) return
+    if (!svgRef.current) {return}
     
     const svg = d3.select(svgRef.current)
     const transition = svg.transition().duration(duration)
@@ -101,7 +101,7 @@ export function useCanvasTransform({
     const newScale = Math.min(currentTransform.k * 1.2, 3)
     
     const newTransform = calculateZoomAroundCenter(currentTransform, newScale)
-    if (!newTransform) return
+    if (!newTransform) {return}
     
     updateTransformState(newTransform)
     applyTransformWithTransition(newTransform, 200)
@@ -112,14 +112,14 @@ export function useCanvasTransform({
     const newScale = Math.max(currentTransform.k / 1.2, 0.4)
     
     const newTransform = calculateZoomAroundCenter(currentTransform, newScale)
-    if (!newTransform) return
+    if (!newTransform) {return}
     
     updateTransformState(newTransform)
     applyTransformWithTransition(newTransform, 200)
   }, [calculateZoomAroundCenter, updateTransformState, applyTransformWithTransition])
 
   const fitToScreen = useCallback((nodes: any[]) => {
-    if (!svgRef.current || nodes.length === 0) return
+    if (!svgRef.current || nodes.length === 0) {return}
     
     const bounds = {
       minX: Math.min(...nodes.map(n => n.x)) - 100,
@@ -143,7 +143,7 @@ export function useCanvasTransform({
   }, [svgRef, updateTransformState, applyTransformWithTransition])
 
   const resetCanvasPosition = useCallback((nodes: any[], getNodeHeight: (node: any) => number) => {
-    if (!svgRef.current) return
+    if (!svgRef.current) {return}
     
     let transform: d3.ZoomTransform
     

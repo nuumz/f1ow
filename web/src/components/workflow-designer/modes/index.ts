@@ -100,7 +100,7 @@ export class ModeSystemUtils {
     Object.entries(props).forEach(([property, value]) => {
       element.style.setProperty(property, String(value))
     })
-    if (mode.theme.cssClassName) element.classList.add(mode.theme.cssClassName)
+    if (mode.theme.cssClassName) {element.classList.add(mode.theme.cssClassName)}
   }
 
   /**
@@ -125,7 +125,7 @@ export class ModeSystemUtils {
     workflowData: { nodes: unknown[]; connections: unknown[] }
   ): { compatible: boolean; warnings: string[] } {
     const warnings: string[] = []
-    let compatible = true
+    const compatible = true
 
     // Check if mode supports required features
   if (workflowData.nodes.length > 0 && !(mode.behavior?.allowNodeCreation ?? true)) {

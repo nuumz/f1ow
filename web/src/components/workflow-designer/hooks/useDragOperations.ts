@@ -45,7 +45,7 @@ export function useDragOperations({
     const offsets = new Map<string, { x: number; y: number }>()
     const primaryNode = nodes.find(n => n.id === primaryNodeId)
     
-    if (!primaryNode) return offsets
+    if (!primaryNode) {return offsets}
 
     getSelectedNodesList().forEach(node => {
       if (node.id !== primaryNodeId) {

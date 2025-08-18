@@ -4,7 +4,7 @@
  */
 
 import type { WorkflowNode, Connection, NodeVariant, CanvasTransform, NodePort } from './index';
-import * as d3 from 'd3';
+import type * as d3 from 'd3';
 
 // Enhanced D3 selection types for type safety
 export type D3Element = SVGElement | HTMLElement;

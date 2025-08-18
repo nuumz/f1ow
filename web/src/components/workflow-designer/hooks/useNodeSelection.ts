@@ -41,7 +41,7 @@ export function useNodeSelection({
 
   const toggleNodeSelection = useCallback((nodeId: string, ctrlKey: boolean = false) => {
     const node = nodes.find(n => n.id === nodeId)
-    if (!node) return
+    if (!node) {return}
 
     if (ctrlKey || isMultiSelectMode) {
       // Multi-select mode

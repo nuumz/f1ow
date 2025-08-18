@@ -47,7 +47,7 @@ export function usePerformanceInspector(pollMs = 1000): PerformanceInspectorMetr
 /** Optional utility to log metrics periodically (dev only). */
 export function usePerformanceLogging(intervalMs = 5000) {
   useEffect(() => {
-    if (process.env.NODE_ENV !== 'development') return
+    if (process.env.NODE_ENV !== 'development') {return}
     const id = setInterval(() => {
       const v = (window as any).__wfAdaptive
       const c = (window as any).__wfConnAdaptive

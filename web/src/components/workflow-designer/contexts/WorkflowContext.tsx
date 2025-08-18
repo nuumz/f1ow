@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useReducer, useCallback, useRef, ReactNode, useMemo, useEffect } from 'react'
+import type { ReactNode} from 'react';
+import React, { createContext, useContext, useReducer, useCallback, useRef, useMemo, useEffect } from 'react'
 
 // Import centralized types
 import type { 
@@ -227,7 +228,7 @@ const validateConnections = (
   nodes: WorkflowNode[],
   designerMode?: 'workflow' | 'architecture'
 ): Connection[] => {
-  if (connections.length === 0 || nodes.length === 0) return []
+  if (connections.length === 0 || nodes.length === 0) {return []}
 
   // Precompute node & port indexes for O(1) validation
   const nodeIds = new Set<string>()
@@ -254,7 +255,7 @@ const validateConnections = (
 
     const sourcePorts = nodePortMap.get(conn.sourceNodeId)
     const targetPorts = nodePortMap.get(conn.targetNodeId)
-    if (!sourcePorts || !targetPorts) return false
+    if (!sourcePorts || !targetPorts) {return false}
 
     const sourcePortExists =
       sourcePorts.outputs.has(conn.sourcePortId) ||
@@ -1048,7 +1049,7 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
   
   // Auto-validate connections when node / connection identity set changes (not every minor update)
   useEffect(() => {
-    if (state.nodes.length === 0 || state.connections.length === 0) return
+    if (state.nodes.length === 0 || state.connections.length === 0) {return}
     const nodeSig = state.nodes.map(n => n.id).sort().join(',')
     const connSig = state.connections.map(c => c.id).sort().join(',')
     const signature = `${nodeSig}|${connSig}`

@@ -1,5 +1,6 @@
 // import { createElement } from 'react'
-import { NodeRenderProps, DefaultTheme, getNodeDimensions } from '../NodeRenderer'
+import type { NodeRenderProps} from '../NodeRenderer';
+import { DefaultTheme, getNodeDimensions } from '../NodeRenderer'
 import { getNodeColor, getNodeIcon, getPortColor } from '../../../utils/node-utils'
 
 export function CompactNode(props: NodeRenderProps) {
@@ -209,5 +210,5 @@ function getPortStrokeColor(_dataType: string, isConnecting: boolean, canDrop?: 
 function truncateText(text: string, maxWidth: number): string {
   // Simple text truncation - in real implementation you'd measure text width
   const maxChars = Math.floor(maxWidth / 8) // Rough estimation
-  return text.length > maxChars ? text.substring(0, maxChars - 3) + '...' : text
+  return text.length > maxChars ? `${text.substring(0, maxChars - 3)  }...` : text
 }

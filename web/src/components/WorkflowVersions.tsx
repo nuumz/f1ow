@@ -122,7 +122,7 @@ export function WorkflowVersions({ workflowId, onVersionSelect, onCreateVersion 
   }
 
   const handleCreateVersion = () => {
-    if (!newVersionData.name.trim()) return
+    if (!newVersionData.name.trim()) {return}
     
     const newVersion: Partial<WorkflowVersion> = {
       name: newVersionData.name,

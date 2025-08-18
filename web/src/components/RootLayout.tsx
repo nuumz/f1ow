@@ -44,10 +44,10 @@ export default function RootLayout() {
   // Get appropriate footer configuration based on current page
   const getPageFooterConfig = () => {
     // Dashboard page - show full footer with stats
-    if (currentPath === '/') return getFooterConfig('dashboard')
+    if (currentPath === '/') {return getFooterConfig('dashboard')}
     
     // Designer page - no footer, full height layout
-    if (currentPath.startsWith('/designer')) return getFooterConfig('designer')
+    if (currentPath.startsWith('/designer')) {return getFooterConfig('designer')}
     
     // Tools pages - minimal footer
     if (currentPath.startsWith('/mapper') || 
@@ -57,7 +57,7 @@ export default function RootLayout() {
     }
     
     // Documentation pages
-    if (currentPath.startsWith('/docs')) return getFooterConfig('docs')
+    if (currentPath.startsWith('/docs')) {return getFooterConfig('docs')}
     
     // Regular pages (templates, executions, credentials, workflows) - show footer
     return getFooterConfig('page')

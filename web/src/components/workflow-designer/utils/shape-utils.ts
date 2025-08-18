@@ -209,7 +209,7 @@ export function getPortPositions(
   const positions: Array<{ x: number; y: number }> = []
   const baseOffset = dimensions.portOffsets[portType]
 
-  if (portCount === 0) return positions
+  if (portCount === 0) {return positions}
 
   switch (shape) {
     case 'circle':

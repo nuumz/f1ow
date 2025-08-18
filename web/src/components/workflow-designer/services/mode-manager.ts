@@ -390,7 +390,7 @@ export class ModeManager implements IModeManager {
       canvasContainer.classList.remove('workflow-mode', 'architecture-mode', 'debug-mode')
       
       // Add new mode class
-  if (mode.theme.cssClassName) canvasContainer.classList.add(mode.theme.cssClassName)
+  if (mode.theme.cssClassName) {canvasContainer.classList.add(mode.theme.cssClassName)}
     }
   }
 

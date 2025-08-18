@@ -100,7 +100,7 @@ export class GridPerformanceMonitor {
     const { avgRenderTime, cacheHitRate, renderCount } = this.metrics;
 
     let status: 'excellent' | 'good' | 'warning' | 'poor';
-    let recommendations: string[] = [];
+    const recommendations: string[] = [];
 
     // Determine performance status
     if (avgRenderTime < 5 && cacheHitRate > 90) {
@@ -139,7 +139,7 @@ export class GridPerformanceMonitor {
   }
 
   isCacheExpired(cache: GridCacheInfo | null): boolean {
-    if (!cache) return true;
+    if (!cache) {return true;}
     return (performance.now() - cache.lastRenderTime) > this.CACHE_DURATION;
   }
 
@@ -165,7 +165,7 @@ export class GridPerformanceMonitor {
     _currentTransform: { x: number; y: number; k: number },
     currentViewport: { width: number; height: number }
   ): boolean {
-    if (!cache) return false;
+    if (!cache) {return false;}
 
     // Check if viewport dimensions haven't changed significantly
     const viewportDelta = {
@@ -186,7 +186,7 @@ export const gridPerformanceMonitor = new GridPerformanceMonitor();
 // Development utilities
 export const GridDebugger = {
   logPerformanceReport(): void {
-    if (process.env.NODE_ENV !== 'development') return;
+    if (process.env.NODE_ENV !== 'development') {return;}
 
     const report = gridPerformanceMonitor.getPerformanceReport();
     const metrics = gridPerformanceMonitor.getMetrics();
@@ -214,7 +214,7 @@ export const GridDebugger = {
   },
 
   startPerformanceMonitoring(): void {
-    if (process.env.NODE_ENV !== 'development') return;
+    if (process.env.NODE_ENV !== 'development') {return;}
 
     setInterval(() => {
       const metrics = gridPerformanceMonitor.getMetrics();

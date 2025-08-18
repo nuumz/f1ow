@@ -29,7 +29,7 @@ export default function DataMapper({ sourceData, targetSchema, mappings }: DataM
 
   // Convert object to tree structure
   const objectToTree = (obj: any, prefix = ''): DataItem[] => {
-    if (!obj || typeof obj !== 'object') return []
+    if (!obj || typeof obj !== 'object') {return []}
     
     return Object.entries(obj).map(([key, value]) => {
       const path = prefix ? `${prefix}.${key}` : key

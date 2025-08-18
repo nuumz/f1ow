@@ -141,7 +141,7 @@ function calculateSmartDelay(): number {
 
 // Check if data has actually changed
 function hasDataChanged(newData: Omit<DraftWorkflow, 'metadata'>): boolean {
-  if (!lastSavedData) return true
+  if (!lastSavedData) {return true}
   
   try {
     const newChecksum = generateChecksum(newData)
@@ -255,7 +255,7 @@ export function loadDraftWorkflow(draftId: string): DraftWorkflow | null {
     const key = `${STORAGE_CONFIG.DRAFT_PREFIX}${draftId}`
     const saved = localStorage.getItem(key)
     
-    if (!saved) return null
+    if (!saved) {return null}
     
     // Handle compressed data
     let dataToProcess = saved
@@ -319,7 +319,7 @@ export function autoSaveDraftWorkflow(draft: Omit<DraftWorkflow, 'metadata'>): v
  * Perform the actual auto-save operation with performance monitoring
  */
 function performAutoSave(draft: Omit<DraftWorkflow, 'metadata'>): void {
-  if (isAutoSaving) return
+  if (isAutoSaving) {return}
   
   isAutoSaving = true
   autoSaveCallback?.('started')

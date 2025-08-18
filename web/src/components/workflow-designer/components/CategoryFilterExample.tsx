@@ -1,6 +1,7 @@
 // CategoryFilterExample.tsx - Updated example with working inline filter
 import React, { useState } from 'react'
-import BaseNodePalette, { NodePaletteItem } from './BaseNodePalette'
+import type { NodePaletteItem } from './BaseNodePalette';
+import BaseNodePalette from './BaseNodePalette'
 import { 
   Database, 
   Globe, 

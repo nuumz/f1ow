@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react'
+import type {
+  ChartOptions
+} from 'chart.js';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -9,8 +12,7 @@ import {
   Title,
   Tooltip,
   Legend,
-  Filler,
-  ChartOptions
+  Filler
 } from 'chart.js'
 import { Chart } from 'react-chartjs-2'
 
@@ -151,7 +153,7 @@ export default function ModernExecutionChart({ data, className = '' }: ModernExe
           weight: 400
         },
         callbacks: {
-          title: function(tooltipItems) {
+          title(tooltipItems) {
             const item = tooltipItems[0]
             if (item) {
               const dataIndex = item.dataIndex
@@ -160,20 +162,20 @@ export default function ModernExecutionChart({ data, className = '' }: ModernExe
               const today = new Date()
               const daysDiff = Math.floor((today.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
               
-              if (daysDiff === 0) return 'Today'
-              if (daysDiff === 1) return 'Yesterday'
+              if (daysDiff === 0) {return 'Today'}
+              if (daysDiff === 1) {return 'Yesterday'}
               return `${daysDiff} days ago`
             }
             return ''
           },
-          label: function(context) {
+          label(context) {
             // Only show individual values for bar charts, not summary
             if (context.dataset.type === 'line') {
               return `${context.dataset.label}: ${context.parsed.y}%`
             }
             return `${context.dataset.label}: ${context.parsed.y.toLocaleString()}`
           },
-          afterBody: function(tooltipItems) {
+          afterBody(tooltipItems) {
             const item = tooltipItems[0]
             if (item) {
               const dataIndex = item.dataIndex
@@ -219,7 +221,7 @@ export default function ModernExecutionChart({ data, className = '' }: ModernExe
             size: 11,
             weight: 500
           },
-          callback: function(value) {
+          callback(value) {
             return Number(value).toLocaleString()
           }
         },
@@ -249,8 +251,8 @@ export default function ModernExecutionChart({ data, className = '' }: ModernExe
             size: 11,
             weight: 500
           },
-          callback: function(value) {
-            return value + '%'
+          callback(value) {
+            return `${value  }%`
           }
         },
         border: {

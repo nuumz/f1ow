@@ -1,4 +1,4 @@
-import * as d3 from 'd3'
+import type * as d3 from 'd3'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import {
@@ -42,7 +42,7 @@ export function ensureIconSymbol(
     type: string
 ): string {
     const id = getIconSymbolId(type)
-    if (!defs.select(`#${id}`).empty()) return id
+    if (!defs.select(`#${id}`).empty()) {return id}
 
     const Icon = iconMap[type] || Box
     // Render canonical 24px SVG with currentColor so color can be controlled by container via CSS
@@ -67,7 +67,7 @@ export function ensureIconSymbols(
     defs: d3.Selection<SVGDefsElement, unknown, null, undefined>,
     types: string[]
 ): void {
-    for (const t of types) ensureIconSymbol(defs, t)
+    for (const t of types) {ensureIconSymbol(defs, t)}
 }
 
 // Render or update a single <use> element inside the provided group, referencing the shared symbol
@@ -81,7 +81,7 @@ export function renderIconUse(
     offsetY: number
 ): void {
     const nodeEl = g.node() as any
-    if (!nodeEl) return
+    if (!nodeEl) {return}
 
     const symbolId = ensureIconSymbol(defs, type)
     const key = `${type}:${size}`

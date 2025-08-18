@@ -24,7 +24,8 @@
       "Bash(cp:*)",
       "Bash(npx sass:*)",
       "Bash(npm test:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(pnpm format:check:*)"
     ],
     "deny": []
   }

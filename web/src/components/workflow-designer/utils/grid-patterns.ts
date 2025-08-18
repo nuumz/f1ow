@@ -3,7 +3,7 @@
   Creates base dot grid (id: workflow-grid) + major overlay (id: workflow-grid-major)
   with intelligent scaling and caching for optimal performance.
 */
-import * as d3 from 'd3'
+import type * as d3 from 'd3'
 
 export interface DualPatternOptions {
     baseColor?: string

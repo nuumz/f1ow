@@ -43,7 +43,7 @@ class WebSocketService {
   }
 
   private setupEventHandlers() {
-    if (!this.ws) return
+    if (!this.ws) {return}
 
     this.ws.onopen = () => {
       console.log('WebSocket connected')
@@ -154,27 +154,27 @@ class WebSocketService {
   // Execution monitoring
   subscribeToExecution(executionId: string, callback: (event: ExecutionEvent) => void) {
     const unsubscribeStarted = this.subscribe('execution.started', (data) => {
-      if (data.executionId === executionId) callback(data)
+      if (data.executionId === executionId) {callback(data)}
     })
     
     const unsubscribeCompleted = this.subscribe('execution.completed', (data) => {
-      if (data.executionId === executionId) callback(data)
+      if (data.executionId === executionId) {callback(data)}
     })
     
     const unsubscribeFailed = this.subscribe('execution.failed', (data) => {
-      if (data.executionId === executionId) callback(data)
+      if (data.executionId === executionId) {callback(data)}
     })
     
     const unsubscribeNodeStarted = this.subscribe('node.started', (data) => {
-      if (data.executionId === executionId) callback(data)
+      if (data.executionId === executionId) {callback(data)}
     })
     
     const unsubscribeNodeCompleted = this.subscribe('node.completed', (data) => {
-      if (data.executionId === executionId) callback(data)
+      if (data.executionId === executionId) {callback(data)}
     })
 
     const unsubscribeNodeFailed = this.subscribe('node.failed', (data) => {
-      if (data.executionId === executionId) callback(data)
+      if (data.executionId === executionId) {callback(data)}
     })
 
     // Return cleanup function
@@ -220,7 +220,7 @@ class WebSocketService {
   }
 
   get connectionState() {
-    if (!this.ws) return 'disconnected'
+    if (!this.ws) {return 'disconnected'}
     
     switch (this.ws.readyState) {
       case WebSocket.CONNECTING:

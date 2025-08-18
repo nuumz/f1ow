@@ -1,4 +1,4 @@
-import * as d3 from 'd3'
+import type * as d3 from 'd3'
 
 function createArrowMarker(
     defs: d3.Selection<SVGDefsElement, unknown, d3.BaseType, unknown>,
@@ -49,7 +49,7 @@ export function ensureArrowMarkers(
     defs: d3.Selection<SVGDefsElement, unknown, d3.BaseType, unknown>
 ) {
     const initialized = !defs.select('#arrowhead').empty()
-    if (initialized) return
+    if (initialized) {return}
 
     createArrowMarker(defs, 'arrowhead', '#666')
     createArrowMarker(defs, 'arrowhead-selected', '#2196F3')

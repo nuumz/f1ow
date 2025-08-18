@@ -106,7 +106,7 @@ function WorkflowDesignerContent({
   // Handle adding new architecture nodes
   const handleAddArchitectureNode = useCallback((type: string, position?: { x: number; y: number }) => {
     const definition = ArchitectureNodeDefinitions[type]
-    if (!definition) return
+    if (!definition) {return}
 
     const nodePosition = position || { x: 300, y: 200 }
     

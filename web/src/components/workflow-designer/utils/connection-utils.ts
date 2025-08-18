@@ -115,10 +115,10 @@ function detectPortSideModeAware(
   pos: PortPosition,
   modeId?: string
 ): PortSide {
-  if (portId === '__side-top') return 'top'
-  if (portId === '__side-right') return 'right'
-  if (portId === '__side-bottom') return 'bottom'
-  if (portId === '__side-left') return 'left'
+  if (portId === '__side-top') {return 'top'}
+  if (portId === '__side-right') {return 'right'}
+  if (portId === '__side-bottom') {return 'bottom'}
+  if (portId === '__side-left') {return 'left'}
 
   const dims = getModeAwareDimensions(node, modeId)
   const halfW = dims.width / 2
@@ -129,10 +129,10 @@ function detectPortSideModeAware(
   const bottomY = node.y + halfH
   const eps = 0.5
 
-  if (Math.abs(pos.x - rightX) <= eps) return 'right'
-  if (Math.abs(pos.x - leftX) <= eps) return 'left'
-  if (Math.abs(pos.y - topY) <= eps) return 'top'
-  if (Math.abs(pos.y - bottomY) <= eps) return 'bottom'
+  if (Math.abs(pos.x - rightX) <= eps) {return 'right'}
+  if (Math.abs(pos.x - leftX) <= eps) {return 'left'}
+  if (Math.abs(pos.y - topY) <= eps) {return 'top'}
+  if (Math.abs(pos.y - bottomY) <= eps) {return 'bottom'}
 
   // Fallback: choose nearest side
   const dxLeft = Math.abs(pos.x - leftX)
@@ -141,12 +141,12 @@ function detectPortSideModeAware(
   const dyBottom = Math.abs(pos.y - bottomY)
   const minX = Math.min(dxLeft, dxRight)
   const minY = Math.min(dyTop, dyBottom)
-  if (minX < minY) return dxLeft < dxRight ? 'left' : 'right'
+  if (minX < minY) {return dxLeft < dxRight ? 'left' : 'right'}
   return dyTop < dyBottom ? 'top' : 'bottom'
 }
 
 function sideToOrientation(side: 'top' | 'bottom' | 'left' | 'right' | 'unknown'): 'vertical' | 'horizontal' {
-  if (side === 'top' || side === 'bottom') return 'vertical'
+  if (side === 'top' || side === 'bottom') {return 'vertical'}
   return 'horizontal'
 }
 
@@ -171,12 +171,12 @@ function chooseEndOrientationFromBox(
   approachFrom: PortPosition,
   box?: { x: number; y: number; width: number; height: number }
 ): 'vertical' | 'horizontal' | undefined {
-  if (!box) return undefined
+  if (!box) {return undefined}
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2
   const dx = cx - approachFrom.x
   const dy = cy - approachFrom.y
-  if (Math.abs(dx) >= Math.abs(dy)) return 'horizontal'
+  if (Math.abs(dx) >= Math.abs(dy)) {return 'horizontal'}
   return 'vertical'
 }
 
@@ -239,12 +239,12 @@ function findNearbySnapTargets(
   }> = []
 
   for (const node of availableNodes) {
-    if (node.id === sourceNode.id) continue // Skip source node
+    if (node.id === sourceNode.id) {continue} // Skip source node
 
     const nodeDistance = Math.sqrt(
       Math.pow(mousePos.x - node.x, 2) + Math.pow(mousePos.y - node.y, 2)
     )
-    if (nodeDistance > snapDistance * 2) continue // Skip distant nodes for performance
+    if (nodeDistance > snapDistance * 2) {continue} // Skip distant nodes for performance
 
     // Use same target side selection logic as final connection
     const optimalTargetSide = chooseAutoTargetSide(sourcePos, node)
@@ -646,7 +646,7 @@ export function generateModeAwareConnectionPath(
 ): string {
   const sourceNode = nodes.find(n => n.id === connection.sourceNodeId)
   const targetNode = nodes.find(n => n.id === connection.targetNodeId)
-  if (!sourceNode || !targetNode) return ''
+  if (!sourceNode || !targetNode) {return ''}
 
   if (modeId === 'architecture') {
     return generateArchitectureModeConnectionPath(sourceNode, targetNode, connection)
@@ -675,7 +675,7 @@ function generateArchitectureModeConnectionPath(
   const portPosCache = new WeakMap<WorkflowNode, Map<string, { x: number; y: number }>>()
   const cachedBuildNodeBoxModeAware = (node: WorkflowNode, mode: 'workflow' | 'architecture') => {
     const hit = boxCache.get(node)
-    if (hit) return hit
+    if (hit) {return hit}
     const box = buildNodeBoxModeAware(node, mode)
     boxCache.set(node, box)
     return box
@@ -692,7 +692,7 @@ function generateArchitectureModeConnectionPath(
     }
     const key = `${side}|${mode}`
     const hit = inner.get(key)
-    if (hit) return hit
+    if (hit) {return hit}
     const pos = getVirtualSidePortPositionForMode(node, side, mode)
     inner.set(key, pos)
     return pos
@@ -768,7 +768,7 @@ function generateArchitectureModeConnectionPath(
     const x = targetType === 'input' ? -targetDims.width / 2 : targetDims.width / 2
     return { x: targetNode.x + x, y: targetNode.y + y }
   })()
-  if (!validatePathInputs(sourcePos, targetPos)) return ''
+  if (!validatePathInputs(sourcePos, targetPos)) {return ''}
   // Build boxes and obstacles for adaptive routing
   const startSide = detectPortSideModeAware(sourceNode, connection.sourcePortId, sourcePos, 'architecture')
   const startOrientation = sideToOrientation(startSide)

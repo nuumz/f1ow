@@ -306,7 +306,7 @@ export function useWorkflowCanvas() {
     const currentTransform = canvasTransformRef.current
     const newScale = Math.max(0.4, Math.min(3, zoomLevel))
     
-    if (Math.abs(newScale - currentTransform.k) < 0.001) return
+    if (Math.abs(newScale - currentTransform.k) < 0.001) {return}
     
     const svg = d3.select(svgRef.current)
     const transition = svg.transition().duration(200)

@@ -40,7 +40,7 @@ export function findNearestPortTarget(
         const nodeGroup = d3.select(
             portGroup.node()?.closest('g[data-node-id]') as SVGElement
         )
-        if (nodeGroup.empty()) return { x: 0, y: 0 }
+        if (nodeGroup.empty()) {return { x: 0, y: 0 }}
         const transform = nodeGroup.attr('transform')
         let nodeSvgX = 0,
             nodeSvgY = 0
@@ -87,7 +87,7 @@ export function findNearestPortTarget(
         const nodeGroup = d3.select(
             portGroup.node()?.closest('g[data-node-id]') as SVGElement
         )
-        if (nodeGroup.empty()) return
+        if (nodeGroup.empty()) {return}
         const nodeId = nodeGroup.attr('data-node-id')
         const nodeTransform = nodeGroup.attr('transform')
         let nodeSvgX = 0,
@@ -144,6 +144,6 @@ export function findNearestPortTarget(
         }
     })
 
-    if (targetNodeId && targetPortId) return { nodeId: targetNodeId, portId: targetPortId }
+    if (targetNodeId && targetPortId) {return { nodeId: targetNodeId, portId: targetPortId }}
     return null
 }

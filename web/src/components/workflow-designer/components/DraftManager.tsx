@@ -228,10 +228,10 @@ export default function DraftManager({ isOpen, onClose }: DraftManagerProps) {
     const hours = Math.floor(diff / (1000 * 60 * 60))
     const days = Math.floor(diff / (1000 * 60 * 60 * 24))
 
-    if (minutes < 1) return 'Just now'
-    if (minutes < 60) return `${minutes}m ago`
-    if (hours < 24) return `${hours}h ago`
-    if (days < 7) return `${days}d ago`
+    if (minutes < 1) {return 'Just now'}
+    if (minutes < 60) {return `${minutes}m ago`}
+    if (hours < 24) {return `${hours}h ago`}
+    if (days < 7) {return `${days}d ago`}
     return formatDate(timestamp)
   }
 
@@ -258,7 +258,7 @@ export default function DraftManager({ isOpen, onClose }: DraftManagerProps) {
 
   const cycleSort = (key: SortKey) => {
     setSort(prev => {
-      if (prev.key !== key) return { key, dir: key === 'name' ? 'asc' : 'desc' }
+      if (prev.key !== key) {return { key, dir: key === 'name' ? 'asc' : 'desc' }}
       // toggle dir
       return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
     })
@@ -266,24 +266,24 @@ export default function DraftManager({ isOpen, onClose }: DraftManagerProps) {
 
   // Keyboard navigation (arrow up/down, enter, delete)
   const handleKeyNav = useCallback((e: React.KeyboardEvent) => {
-    if (!filteredDrafts.length) return
-    if (['ArrowDown','ArrowUp','Enter','Delete','Backspace'].includes(e.key)) e.preventDefault()
+    if (!filteredDrafts.length) {return}
+    if (['ArrowDown','ArrowUp','Enter','Delete','Backspace'].includes(e.key)) {e.preventDefault()}
     const currentIndex = selectedDraft ? filteredDrafts.findIndex(d=>d.id===selectedDraft) : -1
     if (e.key === 'ArrowDown') {
       const next = filteredDrafts[Math.min(filteredDrafts.length-1, currentIndex + 1)]
-      if (next) setSelectedDraft(next.id)
+      if (next) {setSelectedDraft(next.id)}
     } else if (e.key === 'ArrowUp') {
       const prev = filteredDrafts[Math.max(0, currentIndex <= 0 ? 0 : currentIndex - 1)]
-      if (prev) setSelectedDraft(prev.id)
+      if (prev) {setSelectedDraft(prev.id)}
     } else if (e.key === 'Enter' && selectedDraft) {
       handleLoadDraft(selectedDraft)
     } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedDraft) {
       const target = drafts.find(d=>d.id===selectedDraft)
-      if (target) handleDeleteDraft(selectedDraft, target.name)
+      if (target) {handleDeleteDraft(selectedDraft, target.name)}
     }
   }, [filteredDrafts, selectedDraft, handleLoadDraft, handleDeleteDraft, drafts])
 
-  if (!isOpen) return null
+  if (!isOpen) {return null}
 
   return (
     <div className="draft-manager-overlay">
@@ -395,7 +395,7 @@ export default function DraftManager({ isOpen, onClose }: DraftManagerProps) {
               <>
                 {(() => {
                   const draft = drafts.find(d => d.id === selectedDraft)
-                  if (!draft) return null
+                  if (!draft) {return null}
                   
                   return (
                     <>
@@ -421,7 +421,7 @@ export default function DraftManager({ isOpen, onClose }: DraftManagerProps) {
                                 autoFocus
                                 onChange={(e)=>setEditingName(e.target.value)}
                                 onKeyDown={(e)=> {
-                                  if (e.key==='Enter') commitRename(draft.id)
+                                  if (e.key==='Enter') {commitRename(draft.id)}
                                   if (e.key==='Escape') { setIsEditingName(false); setEditingName('') }
                                 }}
                                 onBlur={()=> commitRename(draft.id)}

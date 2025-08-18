@@ -411,13 +411,13 @@ export class SchemaBuilder {
   }
 
   addInput(name: string, type: DataType, description: string, required = false): this {
-    if (!this.schema.inputs) this.schema.inputs = []
+    if (!this.schema.inputs) {this.schema.inputs = []}
     this.schema.inputs.push({ name, type, description, required })
     return this
   }
 
   addOutput(name: string, type: DataType, description: string, required = true): this {
-    if (!this.schema.outputs) this.schema.outputs = []
+    if (!this.schema.outputs) {this.schema.outputs = []}
     this.schema.outputs.push({ name, type, description, required })
     return this
   }

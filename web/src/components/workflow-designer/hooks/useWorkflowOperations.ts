@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import * as d3 from 'd3'
+import type * as d3 from 'd3'
 import { useWorkflowContext } from '../contexts/WorkflowContext'
 import { createNode } from '../utils/node-utils'
 import type { WorkflowNode } from './useNodeSelection'
@@ -326,7 +326,7 @@ export function useWorkflowOperations() {
     }
 
     const dataStr = JSON.stringify(workflow, null, 2)
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr)
+    const dataUri = `data:application/json;charset=utf-8,${ encodeURIComponent(dataStr)}`
     
     const exportFileDefaultName = `${state.workflowName.replace(/\s+/g, '_')}.json`
     

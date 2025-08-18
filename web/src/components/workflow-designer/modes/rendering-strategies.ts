@@ -4,7 +4,7 @@
  * Following SOLID principles with clear separation of concerns
  */
 
-/* eslint-disable @typescript-eslint/no-unused-vars */
+ 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import * as d3 from 'd3'
@@ -107,7 +107,7 @@ abstract class BaseRenderingStrategy implements ModeRenderingStrategy {
 
   protected renderGridPattern(canvas: CanvasRenderData): void {
     const { gridStyle } = this.mode.canvasStyle
-    if (!gridStyle.enabled) return
+    if (!gridStyle.enabled) {return}
 
     // Grid rendering logic will be implemented by specific strategies
     this.createGridPattern(canvas, gridStyle)
@@ -883,7 +883,7 @@ export class DebugRenderingStrategy extends BaseRenderingStrategy {
 
   private addDebugLabel(element: SVGElement, connection: ConnectionRenderData): void {
     const parent = element.parentElement
-    if (!parent) return
+    if (!parent) {return}
 
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text')
     text.setAttribute('class', 'debug-label')
@@ -897,7 +897,7 @@ export class DebugRenderingStrategy extends BaseRenderingStrategy {
 
   private addPortDebugInfo(element: SVGElement, port: PortRenderData): void {
     const parent = element.parentElement
-    if (!parent) return
+    if (!parent) {return}
 
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text')
     text.setAttribute('class', 'debug-label')

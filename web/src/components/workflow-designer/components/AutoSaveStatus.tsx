@@ -108,11 +108,11 @@ export function AutoSaveStatus({ className = '', showFullStatus = false }: Reado
       } else if (ev.detail?.status === 'completed') {
         setIsAutoSaving(false)
         setError(null)
-        if (ev.detail.timestamp) setLastSavedTs(ev.detail.timestamp)
+        if (ev.detail.timestamp) {setLastSavedTs(ev.detail.timestamp)}
       } else if (ev.detail?.status === 'failed') {
         setIsAutoSaving(false)
         setError(ev.detail.error || 'Save failed')
-        if (ev.detail.timestamp) setLastSavedTs(ev.detail.timestamp)
+        if (ev.detail.timestamp) {setLastSavedTs(ev.detail.timestamp)}
       }
     }
     window.addEventListener('workflow:autosave', handler as EventListener)
@@ -121,7 +121,7 @@ export function AutoSaveStatus({ className = '', showFullStatus = false }: Reado
   
   // Format time display
   const formatTime = (timestamp: number) => {
-    if (timestamp === 0) return 'Never'
+    if (timestamp === 0) {return 'Never'}
     return new Date(timestamp).toLocaleTimeString([], { 
       hour: '2-digit', 
       minute: '2-digit', 
@@ -131,13 +131,13 @@ export function AutoSaveStatus({ className = '', showFullStatus = false }: Reado
   
   // Get time ago string
   const getTimeAgo = (timestamp: number) => {
-    if (timestamp === 0) return ''
+    if (timestamp === 0) {return ''}
     const now = Date.now()
     const diff = now - timestamp
     
-    if (diff < 1000) return 'just now'
-    if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
+    if (diff < 1000) {return 'just now'}
+    if (diff < 60000) {return `${Math.floor(diff / 1000)}s ago`}
+    if (diff < 3600000) {return `${Math.floor(diff / 60000)}m ago`}
     return `${Math.floor(diff / 3600000)}h ago`
   }
   
@@ -228,10 +228,10 @@ export function AutoSaveStatus({ className = '', showFullStatus = false }: Reado
   }
   
   const tooltipParts = [status.text]
-  if (lastSavedTime) tooltipParts.push(`Last saved: ${lastSavedTime}`)
-  if (error) tooltipParts.push(`Error: ${error}`)
-  if (metrics.pendingChanges > 0) tooltipParts.push(`Pending changes: ${metrics.pendingChanges}`)
-  if (metrics.currentDelay !== 500) tooltipParts.push(`Smart delay: ${metrics.currentDelay}ms`)
+  if (lastSavedTime) {tooltipParts.push(`Last saved: ${lastSavedTime}`)}
+  if (error) {tooltipParts.push(`Error: ${error}`)}
+  if (metrics.pendingChanges > 0) {tooltipParts.push(`Pending changes: ${metrics.pendingChanges}`)}
+  if (metrics.currentDelay !== 500) {tooltipParts.push(`Smart delay: ${metrics.currentDelay}ms`)}
   const tooltipText = tooltipParts.join(' • ')
   
   return (

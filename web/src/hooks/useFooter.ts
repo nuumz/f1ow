@@ -1,4 +1,4 @@
-import { FooterConfig } from '../components/AppFooter'
+import type { FooterConfig } from '../components/AppFooter'
 
 interface UseFooterOptions {
   /** Default footer configuration */

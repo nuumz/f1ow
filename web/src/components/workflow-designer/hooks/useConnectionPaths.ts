@@ -54,7 +54,7 @@ export function useConnectionPaths(
     const size = cache.size
     const MAX_CACHE_SIZE = PERFORMANCE_CONSTANTS.MAX_CACHE_SIZE
     const CACHE_CLEANUP_THRESHOLD = PERFORMANCE_CONSTANTS.CACHE_CLEANUP_THRESHOLD
-    if (size <= MAX_CACHE_SIZE) return
+    if (size <= MAX_CACHE_SIZE) {return}
 
     // Probabilistic pruning
     const overBy = size - MAX_CACHE_SIZE
@@ -63,7 +63,7 @@ export function useConnectionPaths(
     const softTarget = Math.floor(MAX_CACHE_SIZE * 0.95)
     let removed = 0
     for (const key of cache.keys()) {
-      if (cache.size <= softTarget) break
+      if (cache.size <= softTarget) {break}
       if (Math.random() < baseSample) {
         cache.delete(key)
         removed++
@@ -75,7 +75,7 @@ export function useConnectionPaths(
       for (const key of cache.keys()) {
         cache.delete(key)
         i++
-        if (i >= toRemove) break
+        if (i >= toRemove) {break}
       }
     }
     if (removed > 0 && process.env.NODE_ENV === 'development') {
@@ -89,12 +89,12 @@ export function useConnectionPaths(
 
       if (!useDragPositions) {
         const cached = pathCacheRef.current.get(cacheKey)
-        if (cached) return cached
+        if (cached) {return cached}
       }
 
       const sourceNode = nodeMap.get(connection.sourceNodeId)
       const targetNode = nodeMap.get(connection.targetNodeId)
-      if (!sourceNode || !targetNode) return ''
+      if (!sourceNode || !targetNode) {return ''}
 
       let nodesForPath = nodes
       if (useDragPositions) {

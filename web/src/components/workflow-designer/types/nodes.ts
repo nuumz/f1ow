@@ -634,10 +634,10 @@ export function getNodeDefinition(type: string): NodeDefinition {
 }
 
 export function getNodeColor(type: string, status?: string): string {
-  if (status === 'running') return '#FFA726'
-  if (status === 'completed') return '#66BB6A'
-  if (status === 'error') return '#EF5350'
-  if (status === 'warning') return '#FFCA28'
+  if (status === 'running') {return '#FFA726'}
+  if (status === 'completed') {return '#66BB6A'}
+  if (status === 'error') {return '#EF5350'}
+  if (status === 'warning') {return '#FFCA28'}
 
   return NodeTypes[type]?.color || '#8d8d8d'
 }
@@ -662,7 +662,7 @@ export function getPortColor(dataType: string): string {
 export function getNodeCategories(): string[] {
   const categories = new Set<string>()
   Object.values(NodeTypes).forEach(info => {
-    if (info.category) categories.add(info.category)
+    if (info.category) {categories.add(info.category)}
   })
   return Array.from(categories).sort((a, b) => a.localeCompare(b))
 }
@@ -712,12 +712,12 @@ export class NodeRegistry {
 
     // Add built-in categories
     Object.values(NodeTypes).forEach(info => {
-      if (info.category) categories.add(info.category)
+      if (info.category) {categories.add(info.category)}
     })
 
     // Add registered categories
     this.nodes.forEach(info => {
-      if (info.category) categories.add(info.category)
+      if (info.category) {categories.add(info.category)}
     })
 
     return Array.from(categories).sort((a, b) => a.localeCompare(b))

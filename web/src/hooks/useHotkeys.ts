@@ -22,7 +22,7 @@ export function useHotkeys(
   } = options
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
-    if (!enabled) return
+    if (!enabled) {return}
 
     // Check if we're in a form element
     const target = event.target as HTMLElement
@@ -42,61 +42,61 @@ export function useHotkeys(
           case 'cmd':
           case 'command':
           case 'meta':
-            if (!event.metaKey) isMatch = false
+            if (!event.metaKey) {isMatch = false}
             break
           case 'ctrl':
           case 'control':
-            if (!event.ctrlKey) isMatch = false
+            if (!event.ctrlKey) {isMatch = false}
             break
           case 'alt':
           case 'option':
-            if (!event.altKey) isMatch = false
+            if (!event.altKey) {isMatch = false}
             break
           case 'shift':
-            if (!event.shiftKey) isMatch = false
+            if (!event.shiftKey) {isMatch = false}
             break
           case 'space':
-            if (event.key !== ' ') isMatch = false
+            if (event.key !== ' ') {isMatch = false}
             break
           case 'enter':
           case 'return':
-            if (event.key !== 'Enter') isMatch = false
+            if (event.key !== 'Enter') {isMatch = false}
             break
           case 'escape':
           case 'esc':
-            if (event.key !== 'Escape') isMatch = false
+            if (event.key !== 'Escape') {isMatch = false}
             break
           case 'delete':
           case 'del':
-            if (event.key !== 'Delete') isMatch = false
+            if (event.key !== 'Delete') {isMatch = false}
             break
           case 'backspace':
-            if (event.key !== 'Backspace') isMatch = false
+            if (event.key !== 'Backspace') {isMatch = false}
             break
           case 'tab':
-            if (event.key !== 'Tab') isMatch = false
+            if (event.key !== 'Tab') {isMatch = false}
             break
           case 'up':
           case 'arrowup':
-            if (event.key !== 'ArrowUp') isMatch = false
+            if (event.key !== 'ArrowUp') {isMatch = false}
             break
           case 'down':
           case 'arrowdown':
-            if (event.key !== 'ArrowDown') isMatch = false
+            if (event.key !== 'ArrowDown') {isMatch = false}
             break
           case 'left':
           case 'arrowleft':
-            if (event.key !== 'ArrowLeft') isMatch = false
+            if (event.key !== 'ArrowLeft') {isMatch = false}
             break
           case 'right':
           case 'arrowright':
-            if (event.key !== 'ArrowRight') isMatch = false
+            if (event.key !== 'ArrowRight') {isMatch = false}
             break
           default:
             // Single character or function keys
             if (part.startsWith('f') && part.length <= 3) {
               // Function keys F1-F12
-              if (event.key.toLowerCase() !== part) isMatch = false
+              if (event.key.toLowerCase() !== part) {isMatch = false}
             } else if (event.key.toLowerCase() !== part) {
               isMatch = false
             }

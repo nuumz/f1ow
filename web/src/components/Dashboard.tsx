@@ -112,7 +112,7 @@ export default function Dashboard() {
   }
 
   const calculateSuccessRate = () => {
-    if (stats.totalExecutions === 0) return 0
+    if (stats.totalExecutions === 0) {return 0}
     return Math.round((stats.successfulExecutions / stats.totalExecutions) * 100)
   }
 

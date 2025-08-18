@@ -139,12 +139,12 @@ export function generateWorkflowConnectionPath(
   const sourceNode = nodes.find(n => n.id === connection.sourceNodeId)
   const targetNode = nodes.find(n => n.id === connection.targetNodeId)
   
-  if (!sourceNode || !targetNode) return ""
+  if (!sourceNode || !targetNode) {return ""}
 
   const sourcePort = sourceNode.outputs.find(p => p.id === connection.sourcePortId)
   const targetPort = targetNode.inputs.find(p => p.id === connection.targetPortId)
   
-  if (!sourcePort || !targetPort) return ""
+  if (!sourcePort || !targetPort) {return ""}
 
   const sourceIndex = sourceNode.outputs.indexOf(sourcePort)
   const targetIndex = targetNode.inputs.indexOf(targetPort)

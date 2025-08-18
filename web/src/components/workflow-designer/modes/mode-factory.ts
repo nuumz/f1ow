@@ -362,7 +362,7 @@ export class ModeFactory implements IModeFactory {
   private validateTheme(theme: Partial<ModeTheme>): boolean {
     // Validate color values if present
     const colorValidator = this.validationRules.get('color')
-    if (!colorValidator) return true
+    if (!colorValidator) {return true}
 
     const colorFields = [
       theme.connections?.defaultColor,

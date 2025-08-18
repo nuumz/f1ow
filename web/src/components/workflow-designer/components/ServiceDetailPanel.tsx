@@ -167,8 +167,8 @@ export default function ServiceDetailPanel({
                 <span className="call-count">
                   {dep.consumers.reduce((total, consumer) => {
                     let dailyCalls = 10
-                    if (consumer.frequency === 'high') dailyCalls = 1000
-                    else if (consumer.frequency === 'medium') dailyCalls = 100
+                    if (consumer.frequency === 'high') {dailyCalls = 1000}
+                    else if (consumer.frequency === 'medium') {dailyCalls = 100}
                     return total + dailyCalls
                   }, 0)} calls/day
                 </span>

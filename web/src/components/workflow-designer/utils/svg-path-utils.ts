@@ -34,6 +34,6 @@ export function getPathMidpointWithOrientation(
 }
 
 export function getLabelOffsetForOrientation(orientation: 'horizontal' | 'vertical') {
-  if (orientation === 'horizontal') return { x: 10, y: 0 }
+  if (orientation === 'horizontal') {return { x: 10, y: 0 }}
   return { x: 0, y: -6 }
 }

@@ -13,11 +13,11 @@ export function suggestNextNodeType(
     }
 
     // Workflow defaults
-    if (!sourceNodeType) return 'set'
+    if (!sourceNodeType) {return 'set'}
 
     // Common patterns
-    if (sourceNodeType === 'start') return 'http'
-    if (sourceNodeType === 'http') return 'set'
+    if (sourceNodeType === 'start') {return 'http'}
+    if (sourceNodeType === 'http') {return 'set'}
 
     // Fallback
     return 'set'

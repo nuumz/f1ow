@@ -230,7 +230,7 @@ export const useModeSystem = (config: UseModeSystemConfig = {}): UseModeSystemRe
 
   // Apply mode theme to specific element
   const applyModeTheme = useCallback((element: HTMLElement | SVGElement): void => {
-    if (!currentMode) return
+    if (!currentMode) {return}
 
     const theme = currentMode.theme
     
@@ -240,7 +240,7 @@ export const useModeSystem = (config: UseModeSystemConfig = {}): UseModeSystemRe
     })
 
     // Apply CSS class
-    if (theme.cssClassName) element.classList.add(theme.cssClassName)
+    if (theme.cssClassName) {element.classList.add(theme.cssClassName)}
 
     // Apply canvas-specific styling if it's a canvas element
     if (element instanceof SVGSVGElement && renderingStrategy?.applyCanvasTransformations) {
@@ -337,7 +337,7 @@ const applyGlobalTheme = (mode: ModeDefinition): void => {
     canvasContainer.classList.remove('workflow-mode', 'architecture-mode', 'debug-mode')
     
     // Add new mode class
-    if (mode.theme.cssClassName) canvasContainer.classList.add(mode.theme.cssClassName)
+    if (mode.theme.cssClassName) {canvasContainer.classList.add(mode.theme.cssClassName)}
   }
 }
 

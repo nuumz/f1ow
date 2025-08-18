@@ -181,7 +181,7 @@ export default function ExpressionEditor({
     const suggestions: ExpressionSuggestion[] = []
     
     const addObjectProperties = (obj: any, prefix = '') => {
-      if (typeof obj !== 'object' || obj === null) return
+      if (typeof obj !== 'object' || obj === null) {return}
       
       Object.keys(obj).forEach(key => {
         const fullPath = prefix ? `${prefix}.${key}` : key
@@ -243,7 +243,7 @@ export default function ExpressionEditor({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (!showSuggestions) return
+    if (!showSuggestions) {return}
     
     switch (e.key) {
       case 'ArrowDown':
@@ -267,7 +267,7 @@ export default function ExpressionEditor({
 
   const insertSuggestion = (suggestion: ExpressionSuggestion) => {
     const textarea = textareaRef.current
-    if (!textarea) return
+    if (!textarea) {return}
     
     const beforeCursor = value.substring(0, cursorPosition)
     const afterCursor = value.substring(cursorPosition)
@@ -290,7 +290,7 @@ export default function ExpressionEditor({
   }
 
   const testExpression = async () => {
-    if (!onTest || !value.trim()) return
+    if (!onTest || !value.trim()) {return}
     
     setIsTestingExpression(true)
     try {

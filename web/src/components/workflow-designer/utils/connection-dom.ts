@@ -37,7 +37,7 @@ export function renderConnectionsLayer(opts: RenderConnectionsOptions) {
     } = opts
 
     const connectionLayer = svg.select<SVGGElement>('g.connection-layer')
-    if (connectionLayer.empty()) return
+    if (connectionLayer.empty()) {return}
 
     // Data-join by id
     const selection = connectionLayer
@@ -134,7 +134,7 @@ export function renderConnectionsLayer(opts: RenderConnectionsOptions) {
             if (groupInfo.isMultiple) {
                 // Allow CSS styling for grouped connections
                 classes += ' connection-multi'
-                if (groupInfo.index === 0) classes += ' connection-multi-primary'
+                if (groupInfo.index === 0) {classes += ' connection-multi-primary'}
             }
             return classes
         })
@@ -143,7 +143,7 @@ export function renderConnectionsLayer(opts: RenderConnectionsOptions) {
     merged
         .select<SVGTextElement>('.connection-label')
         .style('display', (d: Connection) => {
-            if (workflowMode !== 'architecture') return 'none'
+            if (workflowMode !== 'architecture') {return 'none'}
             const gi = getConnectionGroupInfo(d.id, connections)
             return gi.isMultiple && gi.index === 0 ? 'block' : 'none'
         })
@@ -152,24 +152,24 @@ export function renderConnectionsLayer(opts: RenderConnectionsOptions) {
                 // When needed, label positioning can be improved to follow Manhattan segments.
                 const s = nodeMap.get(d.sourceNodeId)
                 const t = nodeMap.get(d.targetNodeId)
-                if (!s || !t) return 0
+                if (!s || !t) {return 0}
                 return (s.x + t.x) / 2
             }
             const s = nodeMap.get(d.sourceNodeId)
             const t = nodeMap.get(d.targetNodeId)
-            if (!s || !t) return 0
+            if (!s || !t) {return 0}
             return (s.x + t.x) / 2
         })
         .attr('y', (d: Connection) => {
             if (workflowMode === 'architecture') {
                 const s = nodeMap.get(d.sourceNodeId)
                 const t = nodeMap.get(d.targetNodeId)
-                if (!s || !t) return 0
+                if (!s || !t) {return 0}
                 return (s.y + t.y) / 2 - 8
             }
             const s = nodeMap.get(d.sourceNodeId)
             const t = nodeMap.get(d.targetNodeId)
-            if (!s || !t) return 0
+            if (!s || !t) {return 0}
             return (s.y + t.y) / 2 - 8
         })
         .text(() => {

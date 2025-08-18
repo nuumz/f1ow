@@ -1,5 +1,5 @@
 import { useCallback, useRef, useEffect } from 'react'
-import * as d3 from 'd3'
+import type * as d3 from 'd3'
 import { useWorkflowContext } from '../contexts/WorkflowContext'
 import { useWorkflowOperations } from './useWorkflowOperations'
 import { useWorkflowCanvas } from './useWorkflowCanvas'

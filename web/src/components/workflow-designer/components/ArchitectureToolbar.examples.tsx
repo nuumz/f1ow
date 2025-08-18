@@ -29,8 +29,8 @@ export function BasicArchitectureToolbar() {
       }}
       onToggleLayer={(layer, visible) => {
         console.log(`Layer ${layer} toggled:`, visible)
-        if (layer === 'grid') setShowGrid(visible)
-        if (layer === 'labels') setShowLabels(visible)
+        if (layer === 'grid') {setShowGrid(visible)}
+        if (layer === 'labels') {setShowLabels(visible)}
       }}
       onSave={() => console.log('Save architecture')}
       onExport={() => console.log('Export diagram')}

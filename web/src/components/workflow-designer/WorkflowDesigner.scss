@@ -8,17 +8,6 @@
 
 // ===== MAIN WORKFLOW DESIGNER CONTAINER =====
 
-.workflow-designer {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  width: 100%;
-  min-height: 100%;
-  overflow: hidden;
-  background: #f8fafc;
-  position: relative;
-}
-
 // ===== SCSS VARIABLES =====
 
 // Opacity values
@@ -853,6 +842,31 @@ $button-variants: (
     }
   }
 
+  // Extra-high-specificity fallback for cases where input groups also carry .port-group
+  .workflow-canvas.connecting .port-group.input-port-group,
+  .workflow-canvas.connecting g.node .port-group.input-port-group {
+    opacity: 1 !important;
+    pointer-events: all !important;
+
+    .port-circle {
+      fill: #ff5722 !important;
+      stroke: #d32f2f !important;
+      stroke-width: 0 !important;
+      stroke-dasharray: none !important;
+      filter: drop-shadow(0 2px 8px rgba(255, 87, 34, 0.4)) !important;
+      opacity: 0.6 !important;
+    }
+
+    &.can-dropped .port-circle {
+      fill: #4caf50 !important;
+      stroke: #388e3c !important;
+      stroke-width: 0 !important;
+      stroke-dasharray: none !important;
+      filter: drop-shadow(0 2px 8px rgba(76, 175, 80, 0.6)) !important;
+      opacity: 1 !important;
+    }
+  }
+
   .input-port,
   .output-port {
     // CRITICAL: Hide input/output ports by default in architecture mode
@@ -1629,7 +1643,7 @@ $button-variants: (
 .connection {
   position: relative;
   z-index: var(--z-connections);
-  
+
   .connection-path {
     stroke-linecap: round;
     stroke-linejoin: round;
@@ -1645,11 +1659,11 @@ $button-variants: (
     cursor: pointer !important;
     z-index: 2;
   }
-  
+
   &.connection-hover {
     z-index: calc(var(--z-connections) + 1);
   }
-  
+
   &.connection-selected {
     z-index: calc(var(--z-connections) + 2);
   }

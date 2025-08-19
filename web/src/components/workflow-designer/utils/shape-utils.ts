@@ -28,12 +28,12 @@ export interface ShapePathData {
  * Get shape-specific dimensions and offsets
  */
 export function getShapeDimensions(
-  shape: NodeShape, 
-  baseWidth: number, 
+  shape: NodeShape,
+  baseWidth: number,
   baseHeight: number
 ): ShapeDimensions {
   switch (shape) {
-    case 'circle':
+    case 'circle': {
       const radius = Math.min(baseWidth, baseHeight) / 2.5 // Reduced radius significantly
       return {
         width: radius * 2,
@@ -48,8 +48,9 @@ export function getShapeDimensions(
         iconSize: 32, // Smaller icon size
         fontSize: 12 // Smaller font size
       }
+    }
 
-    case 'diamond':
+    case 'diamond': {
       return {
         width: baseWidth,
         height: baseHeight,
@@ -63,15 +64,16 @@ export function getShapeDimensions(
         iconSize: 18,
         fontSize: 12
       }
+    }
 
-    case 'square':
+    case 'square': {
       const size = Math.min(baseWidth, baseHeight) * 1.2
       const actualSquareSize = size * 0.8 // Match the path generation: halfSize = size/2 * 0.8
       return {
         width: size,
         height: size,
         iconOffset: { x: 0, y: 3 },
-        labelOffset: { x: 0, y: actualSquareSize/2 + 20 }, // Move label below square
+        labelOffset: { x: 0, y: actualSquareSize / 2 + 20 }, // Move label below square
         portOffsets: {
           input: { x: -actualSquareSize / 2, y: 0 }, // Position ports inside the actual square boundary
           output: { x: actualSquareSize / 2, y: 0 }   // Position ports inside the actual square boundary
@@ -80,9 +82,10 @@ export function getShapeDimensions(
         iconSize: 32,
         fontSize: 10
       }
+    }
 
     case 'rectangle':
-    default:
+    default: {
       return {
         width: baseWidth,
         height: baseHeight,
@@ -96,6 +99,7 @@ export function getShapeDimensions(
         iconSize: 18,
         fontSize: 12
       }
+    }
   }
 }
 
@@ -103,8 +107,8 @@ export function getShapeDimensions(
  * Generate SVG path data for different shapes
  */
 export function getShapePath(
-  shape: NodeShape, 
-  width: number, 
+  shape: NodeShape,
+  width: number,
   height: number,
   rx: number | { topLeft?: number; topRight?: number; bottomLeft?: number; bottomRight?: number } = 8
 ): ShapePathData {
@@ -112,23 +116,23 @@ export function getShapePath(
   const halfHeight = height / 2
 
   switch (shape) {
-    case 'circle':
+    case 'circle': {
       const radius = Math.max(width, height) / 2
       return {
         d: `M ${-radius} 0 A ${radius} ${radius} 0 1 1 ${radius} 0 A ${radius} ${radius} 0 1 1 ${-radius} 0`
       }
+    }
 
-    case 'diamond':
+    case 'diamond': {
       return {
-        d: `M 0 ${-halfHeight * 0.75} L ${halfWidth} 0 L 0 ${halfHeight* 0.75} L ${-halfWidth} 0 Z`
+        d: `M 0 ${-halfHeight * 0.75} L ${halfWidth} 0 L 0 ${halfHeight * 0.75} L ${-halfWidth} 0 Z`
       }
+    }
 
-    case 'square':
+    case 'square': {
       const halfSize = Math.max(width, height) / 2 * 0.8
-      
       // Handle both uniform and asymmetric border radius
       let topLeftR = 0, topRightR = 0, bottomLeftR = 0, bottomRightR = 0
-      
       if (typeof rx === 'number') {
         topLeftR = topRightR = bottomLeftR = bottomRightR = rx
       } else if (rx && typeof rx === 'object') {
@@ -137,7 +141,6 @@ export function getShapePath(
         bottomLeftR = rx.bottomLeft || 0
         bottomRightR = rx.bottomRight || 0
       }
-      
       if (topLeftR > 0 || topRightR > 0 || bottomLeftR > 0 || bottomRightR > 0) {
         return {
           d: `M ${-halfSize + topLeftR} ${-halfSize} 
@@ -150,17 +153,14 @@ export function getShapePath(
               L ${-halfSize} ${-halfSize + topLeftR} 
               ${topLeftR > 0 ? `Q ${-halfSize} ${-halfSize} ${-halfSize + topLeftR} ${-halfSize}` : `L ${-halfSize} ${-halfSize}`} Z`
         }
-      } else {
-        return {
-          d: `M ${-halfSize} ${-halfSize} L ${halfSize} ${-halfSize} L ${halfSize} ${halfSize} L ${-halfSize} ${halfSize} Z`
-        }
       }
+      return { d: `M ${-halfSize} ${-halfSize} L ${halfSize} ${-halfSize} L ${halfSize} ${halfSize} L ${-halfSize} ${halfSize} Z` }
+    }
 
     case 'rectangle':
-    default:
+    default: {
       // Handle both uniform and asymmetric border radius for rectangles
       let rectTopLeftR = 0, rectTopRightR = 0, rectBottomLeftR = 0, rectBottomRightR = 0
-      
       if (typeof rx === 'number') {
         rectTopLeftR = rectTopRightR = rectBottomLeftR = rectBottomRightR = rx
       } else if (rx && typeof rx === 'object') {
@@ -169,7 +169,6 @@ export function getShapePath(
         rectBottomLeftR = rx.bottomLeft || 0
         rectBottomRightR = rx.bottomRight || 0
       }
-      
       if (rectTopLeftR > 0 || rectTopRightR > 0 || rectBottomLeftR > 0 || rectBottomRightR > 0) {
         return {
           d: `M ${-halfWidth + rectTopLeftR} ${-halfHeight} 
@@ -182,11 +181,9 @@ export function getShapePath(
               L ${-halfWidth} ${-halfHeight + rectTopLeftR} 
               ${rectTopLeftR > 0 ? `Q ${-halfWidth} ${-halfHeight} ${-halfWidth + rectTopLeftR} ${-halfHeight}` : `L ${-halfWidth} ${-halfHeight}`} Z`
         }
-      } else {
-        return {
-          d: `M ${-halfWidth} ${-halfHeight} L ${halfWidth} ${-halfHeight} L ${halfWidth} ${halfHeight} L ${-halfWidth} ${halfHeight} Z`
-        }
       }
+      return { d: `M ${-halfWidth} ${-halfHeight} L ${halfWidth} ${-halfHeight} L ${halfWidth} ${halfHeight} L ${-halfWidth} ${halfHeight} Z` }
+    }
   }
 }
 
@@ -207,25 +204,21 @@ export function getPortPositions(
   portType: 'input' | 'output'
 ): Array<{ x: number; y: number }> {
   const positions: Array<{ x: number; y: number }> = []
-  const baseOffset = dimensions.portOffsets[portType]
 
-  if (portCount === 0) {return positions}
+  if (portCount === 0) { return positions }
 
   switch (shape) {
-    case 'circle':
+    case 'circle': {
       // For circles, distribute ports around the perimeter
       const radius = dimensions.width / 2
       const angleStep = (Math.PI / 3) / Math.max(1, portCount - 1) // 60 degrees spread
       const startAngle = portType === 'input' ? Math.PI : 0 // Left side for input, right for output
-      
       for (let i = 0; i < portCount; i++) {
         const angle = startAngle + (angleStep * i) - (angleStep * (portCount - 1) / 2)
-        positions.push({
-          x: Math.cos(angle) * radius,
-          y: Math.sin(angle) * radius
-        })
+        positions.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius })
       }
       break
+    }
 
     case 'diamond':
       // For diamonds, place ports along the slanted left/right edges
@@ -254,18 +247,19 @@ export function getPortPositions(
 
     case 'square':
     case 'rectangle':
-    default:
+    default: {
       // For rectangles and squares, distribute vertically on sides
       const rectSpacing = Math.min(25, dimensions.height / (portCount + 1))
       const rectStartY = -(portCount - 1) * rectSpacing / 2
-      
+      // Square path is rendered with an inner 0.8 half-size (see getShapePath for 'square').
+      // Adjust horizontal anchor to that inner edge for squares to match visuals.
+      const halfX = (shape === 'square') ? (dimensions.width / 2) * 0.8 : (dimensions.width / 2)
+      const baseX = (portType === 'input') ? -halfX : halfX
       for (let i = 0; i < portCount; i++) {
-        positions.push({
-          x: baseOffset.x,
-          y: rectStartY + i * rectSpacing
-        })
+        positions.push({ x: baseX, y: rectStartY + i * rectSpacing })
       }
       break
+    }
   }
 
   return positions
@@ -282,24 +276,27 @@ export function isPointInShape(
 ): boolean {
   const relativeX = point.x - center.x
   const relativeY = point.y - center.y
-  
+
   switch (shape) {
-    case 'circle':
+    case 'circle': {
       const radius = dimensions.width / 2
       return Math.sqrt(relativeX * relativeX + relativeY * relativeY) <= radius
+    }
 
-    case 'diamond':
-  const halfWidth = dimensions.width / 2
-  const halfHeight = dimensions.height / 2
-  // Match getShapePath vertical scale (0.75) so hit-test equals visual diamond
-  const effectiveHalfHeight = halfHeight * 0.75
-  return Math.abs(relativeX / halfWidth) + Math.abs(relativeY / effectiveHalfHeight) <= 1
+    case 'diamond': {
+      const halfWidth = dimensions.width / 2
+      const halfHeight = dimensions.height / 2
+      // Match getShapePath vertical scale (0.75) so hit-test equals visual diamond
+      const effectiveHalfHeight = halfHeight * 0.75
+      return Math.abs(relativeX / halfWidth) + Math.abs(relativeY / effectiveHalfHeight) <= 1
+    }
 
     case 'square':
     case 'rectangle':
-    default:
+    default: {
       const halfW = dimensions.width / 2
       const halfH = dimensions.height / 2
       return Math.abs(relativeX) <= halfW && Math.abs(relativeY) <= halfH
+    }
   }
 }

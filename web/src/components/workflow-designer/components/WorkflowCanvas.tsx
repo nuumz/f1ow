@@ -133,6 +133,13 @@ function WorkflowCanvas({
   onZoomLevelChange,
   onPlusButtonClick,
 }: WorkflowCanvasProps) {
+  // Keep latest connection state in a ref to avoid stale closures inside D3 handlers
+  const isConnectingRef = useRef(isConnecting);
+  const connectionStartRef = useRef(connectionStart);
+  useEffect(() => {
+    isConnectingRef.current = isConnecting;
+    connectionStartRef.current = connectionStart;
+  }, [isConnecting, connectionStart]);
   // Wire workflow context utilities and state used throughout
   const {
     state: workflowContextState,
@@ -182,6 +189,14 @@ function WorkflowCanvas({
   // Connection interaction shims (forward to context connection state via dispatch helpers)
   const onPortDragStart = useCallback(
     (nodeId: string, portId: string, type: 'input' | 'output') => {
+      // Guard: if context says we're already connecting, ignore secondary starts
+      if (isConnectingRef.current && connectionStartRef.current) {
+        // If it's the same port, silently ignore; otherwise drop to avoid conflicting gestures
+        const cs = connectionStartRef.current;
+        if (cs?.nodeId === nodeId && cs?.portId === portId && cs?.type === type) {
+          return;
+        }
+      }
       // Always capture locally first to avoid stale state issues
       dragConnectionDataRef.current = { nodeId, portId, type };
       if (onPortDragStartProp) {
@@ -936,16 +951,22 @@ function WorkflowCanvas({
   }, [nodeVariant, workflowContextState.designerMode]);
 
   // Helper: shape-specific port positions calculators (extracted to reduce complexity)
+  // Rect-like (rectangle/square) port positions. For squares, the rendered path uses an inner 0.8 scale
+  // (see shape-utils.getShapePath for 'square'), so use the inner edge for port centers to match
+  // connection anchors from shape-utils.getPortPositions.
   function computeRectPortPositions(
     dimensions: { width: number; height: number },
     portCount: number,
-    portType: 'input' | 'output'
+    portType: 'input' | 'output',
+    shape: 'rectangle' | 'square'
   ): Array<{ x: number; y: number }> {
     const spacing = dimensions.height / (portCount + 1);
     const positions: Array<{ x: number; y: number }> = [];
     for (let i = 0; i < portCount; i++) {
       const y = -dimensions.height / 2 + spacing * (i + 1);
-      const x = portType === 'input' ? -dimensions.width / 2 : dimensions.width / 2;
+      // For squares, the path inner half-size is width/2 * 0.8; for rectangles it's width/2
+      const half = shape === 'square' ? (dimensions.width / 2) * 0.8 : dimensions.width / 2;
+      const x = portType === 'input' ? -half : half;
       positions.push({ x, y });
     }
     return positions;
@@ -1009,7 +1030,7 @@ function WorkflowCanvas({
 
       let positions: Array<{ x: number; y: number }> = [];
       if (shape === 'rectangle' || shape === 'square') {
-        positions = computeRectPortPositions(dimensions, portCount, portType);
+        positions = computeRectPortPositions(dimensions, portCount, portType, shape);
       } else if (shape === 'circle') {
         positions = computeCirclePortPositions(dimensions, portCount);
       } else if (shape === 'diamond') {
@@ -1497,6 +1518,11 @@ function WorkflowCanvas({
       // Optimized drag functions
 
       function dragStarted(this: any, event: any, d: WorkflowNode) {
+        // Guard: while connecting, do not allow node dragging to start
+        if (isConnectingRef.current || dragConnectionDataRef.current) {
+          event?.sourceEvent?.stopPropagation?.();
+          return;
+        }
         const nodeElement = d3.select(this);
         const dragData = d as any;
         const domNode = this as SVGGElement;
@@ -1838,6 +1864,7 @@ function WorkflowCanvas({
           sel.call(
             d3
               .drag<any, any>()
+              .clickDistance(4)
               .on('start', (event: any, d: any) => {
                 event.sourceEvent.stopPropagation();
                 event.sourceEvent.preventDefault();
@@ -1926,12 +1953,18 @@ function WorkflowCanvas({
         .style('cursor', 'crosshair')
         .style('pointer-events', 'all')
         .on('click', (event: any, d: any) => {
+          // Ignore click-to-start while a drag-connection is active
+          if (isConnectingRef.current || dragConnectionDataRef.current) {
+            event.stopPropagation();
+            return;
+          }
           event.stopPropagation();
           onPortClick(d.nodeId, d.id, 'output');
         })
         .call(
           d3
             .drag<any, any>()
+            .clickDistance(4)
             .on('start', (event: any, d: any) => {
               event.sourceEvent.stopPropagation();
               event.sourceEvent.preventDefault();
@@ -2150,6 +2183,7 @@ function WorkflowCanvas({
         .call(
           d3
             .drag<any, any>()
+            .clickDistance(4)
             .on('start', (event: any, d: any) => {
               // Architecture omni-ports: allow dragging from all sides; treat as output source
               event.sourceEvent.stopPropagation();
@@ -2240,6 +2274,7 @@ function WorkflowCanvas({
         .call(
           d3
             .drag<any, any>()
+            .clickDistance(4)
             .on('start', (event: any, d: any) => {
               dbg.warn('🚀 Bottom port diamond drag START:', d.nodeId, d.id);
               event.sourceEvent.stopPropagation();
@@ -2480,6 +2515,7 @@ function WorkflowCanvas({
               .call(
                 d3
                   .drag<any, any>()
+                  .clickDistance(4)
                   .on('start', (event: any) => {
                     dbg.warn('🚀 Plus button drag START:', d.nodeId, d.id);
                     event.sourceEvent.stopPropagation();
@@ -3063,6 +3099,27 @@ function WorkflowCanvas({
       // (Intentionally silenced)
     }
   }, [isConnecting, isInitialized, svgRef, dbg]);
+
+  // Global ESC to cancel current connection gesture quickly
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isConnectingRef.current || dragConnectionDataRef.current) {
+          // Clear preview and connection state via dispatch path
+          dragConnectionDataRef.current = null;
+          if (onPortDragEndProp) {
+            onPortDragEndProp(undefined, undefined);
+          } else {
+            dispatch?.({ type: 'CLEAR_CONNECTION_STATE' });
+          }
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true } as any);
+  }, [dispatch, onPortDragEndProp]);
 
   // Canvas state effect
   useEffect(() => {

@@ -132,11 +132,21 @@
 ## Core Features
 
 ### 1. Visual Workflow Designer
-- **Drag-and-drop** interface
+- **Drag-and-drop** interface with real-time canvas updates
 - **Real-time preview** of workflow execution
-- **Node configuration** panels
-- **Connection validation**
-- **Zoom and pan** controls
+- **Node configuration** panels with dynamic forms
+- **Advanced Connection System**:
+  - Intelligent path routing with U-shape and straight paths
+  - Mode-aware rendering (Workflow vs Architecture modes)
+  - Multi-connection bundling for complex relationships
+  - Smart port positioning (diamond, rectangle, circle shapes)
+  - Connection validation with compatibility checking
+  - Performance-optimized with multi-level caching
+- **Canvas Controls**:
+  - Zoom and pan with smooth animations
+  - Viewport management with bounds checking
+  - Grid snapping for precise alignment
+  - Selection tools (single, multi-select)
 - **Export/Import** workflows as JSON
 
 ### 2. Execution Engine

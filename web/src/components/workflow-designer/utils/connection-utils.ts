@@ -234,24 +234,23 @@ function computeSourcePosForPreview(
 
 // Helper: trim a point outward by side (architecture marker)
 function trimPointBySide(pt: { x: number; y: number }, side: SidePortId | undefined, sourcePos: PortPosition, HALF_MARKER = 5.5) {
-  if (side) {
-    switch (side) {
-      // Inward trims so the arrow tip (center-anchored marker) lands on the edge
-      case '__side-left': return { x: pt.x + HALF_MARKER, y: pt.y }
-      case '__side-right': return { x: pt.x - HALF_MARKER, y: pt.y }
-      case '__side-top': return { x: pt.x, y: pt.y + HALF_MARKER }
-      case '__side-bottom': return { x: pt.x, y: pt.y - HALF_MARKER }
-      default: return pt
-    }
-  }
   const dx = pt.x - sourcePos.x
   const dy = pt.y - sourcePos.y
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    // Horizontal: if heading right (dx>0) trim left (inward), else trim right
-    return { x: pt.x + (dx > 0 ? -HALF_MARKER : HALF_MARKER), y: pt.y }
+  if (side === '__side-left' || side === '__side-right') {
+    const dirX = Math.sign(dx) || (side === '__side-right' ? 1 : -1)
+    return { x: pt.x - dirX * HALF_MARKER, y: pt.y }
   }
-  // Vertical: if heading down (dy>0) trim up (inward), else trim down
-  return { x: pt.x, y: pt.y + (dy > 0 ? -HALF_MARKER : HALF_MARKER) }
+  if (side === '__side-top' || side === '__side-bottom') {
+    const dirY = Math.sign(dy) || (side === '__side-bottom' ? 1 : -1)
+    return { x: pt.x, y: pt.y - dirY * HALF_MARKER }
+  }
+  // Fallback when side is undefined: infer primary axis from delta
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    const dirX = Math.sign(dx) || 1
+    return { x: pt.x - dirX * HALF_MARKER, y: pt.y }
+  }
+  const dirY = Math.sign(dy) || 1
+  return { x: pt.x, y: pt.y - dirY * HALF_MARKER }
 }
 
 // Helper: compute snap end for architecture preview
@@ -511,7 +510,7 @@ export function calculateConnectionPreviewPath(
   }
 ): string { // NOSONAR: readability prioritized over cognitive complexity metric here
   // Helpers extracted to reduce complexity
-  const HALF_MARKER = -5.5
+  const HALF_MARKER = 5.5
 
   const variant: NodeVariant = opts?.variant ?? 'standard'
   const config: PathConfig | undefined = opts?.config

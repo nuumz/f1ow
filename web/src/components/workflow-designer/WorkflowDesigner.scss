@@ -536,41 +536,7 @@ $button-variants: (
     }
   }
 
-  &.architecture-mode {
-    background: map.get($colors, architecture-bg);
-
-    .workflow-canvas {
-      background: transparent;
-
-      &.architecture-canvas {
-        background: transparent;
-      }
-
-      &.connecting {
-        background: radial-gradient(circle at center, rgba(139, 92, 246, 0.05) 0%, transparent 70%);
-
-        // Enhanced grid visibility during connection mode
-        .grid-layer .grid-pattern-rect {
-          opacity: 0.9;
-          filter: contrast(1.2);
-        }
-      }
-    }
-  }
-
-  &.workflow-mode {
-    background: map.get($colors, background);
-
-    .workflow-canvas.connecting {
-      background: radial-gradient(circle at center, rgba(33, 150, 243, 0.05) 0%, transparent 70%);
-
-      // Enhanced grid visibility during connection mode
-      .grid-layer .grid-pattern-rect {
-        opacity: 0.8;
-        filter: contrast(1.1);
-      }
-    }
-  }
+  // mode-specific container backgrounds and connecting styling moved into dedicated blocks below
 
   @include media(tablet) {
     order: 2;
@@ -747,13 +713,15 @@ $button-variants: (
     "architecture"
   );
 
-  .node:hover .port-group {
+  .node:hover .port-group,
+  .node:hover .side-port-group {
     opacity: 1 !important;
     pointer-events: all !important;
     transition: var(--port-transition) !important;
   }
 
-  .port-group {
+  .port-group,
+  .side-port-group {
     @include hidden-state;
     transition: var(--port-transition);
 
@@ -828,7 +796,8 @@ $button-variants: (
     pointer-events: all !important;
   }
 
-  .workflow-canvas.connecting .port-group {
+  .workflow-canvas.connecting .port-group,
+  .workflow-canvas.connecting .side-port-group {
     @include opacity-state(visible);
     pointer-events: all !important;
 
@@ -848,8 +817,9 @@ $button-variants: (
     }
   }
 
-  // CRITICAL: Force ALL input ports to be visible during connection in architecture mode
-  .workflow-canvas.connecting .input-port-group {
+  // CRITICAL: Force ALL input ports and side ports to be visible during connection in architecture mode
+  .workflow-canvas.connecting .input-port-group,
+  .workflow-canvas.connecting .side-port-group {
     @include visible-state;
     pointer-events: all !important;
 
@@ -924,19 +894,24 @@ $button-variants: (
 
 .port-group,
 .input-port-group,
-.output-port-group {
+.output-port-group,
+.side-port-group {
   transition: var(--port-transition);
   cursor: crosshair;
   @include visible-state;
   position: relative;
   will-change: opacity;
+  z-index: var(--z-ports);
 }
 
 // ===== SPECIAL PORT STATES =====
 
 .port-group.can-dropped,
-.port-group.drop-target-port {
+.port-group.drop-target-port,
+.side-port-group.can-dropped,
+.side-port-group.drop-target-port {
   @include visible-state;
+  z-index: calc(var(--z-ports) + 1);
 
   .port-circle {
     fill: #4caf50 !important;
@@ -1063,7 +1038,8 @@ $button-variants: (
   }
 
   // ===== CONNECTION INTERACTION DISABLING =====
-  .port-group:hover {
+  .port-group:hover,
+  .side-port-group:hover {
     transform: none !important;
     transition: opacity 0.2s ease !important;
   }
@@ -1072,6 +1048,7 @@ $button-variants: (
     pointer-events: none !important;
     cursor: default !important;
     @include opacity-state(dimmed);
+    z-index: var(--z-connections);
   }
 
   .connection-hover .connection-path {
@@ -1119,8 +1096,10 @@ $button-variants: (
   }
 
   // Port groups with multiple connections visibility during connection
-  .port-group.has-multiple-connections {
+  .port-group.has-multiple-connections,
+  .side-port-group.has-multiple-connections {
     @include opacity-state(visible);
+    z-index: calc(var(--z-ports) + 1);
   }
 
   // Bottom ports (diamond shapes) during connection
@@ -1174,6 +1153,26 @@ $button-variants: (
 // ===== ARCHITECTURE MODE OVERRIDES =====
 
 // Additional architecture mode specific connection state handling can be added here if needed
+
+// ULTIMATE OVERRIDE: Ensure ALL side-port groups are visible while connecting (architecture mode)
+.canvas-container.architecture-mode .workflow-canvas.connecting {
+  // Make the side-ports layer interactable and visible
+  g.side-ports,
+  g.side-ports .side-port-group,
+  g.side-ports .side-port-group .side-port-rect {
+    opacity: 1 !important;
+    pointer-events: all !important;
+    visibility: visible !important;
+  }
+
+  // Also cover any side-port-groups outside of the side-ports wrapper (safety net)
+  .side-port-group,
+  .side-port-group .side-port-rect {
+    opacity: 1 !important;
+    pointer-events: all !important;
+    visibility: visible !important;
+  }
+}
 
 // ===== NODE HOVER STATES =====
 
@@ -1628,9 +1627,14 @@ $button-variants: (
 // ===== CONNECTION STYLES =====
 
 .connection {
+  position: relative;
+  z-index: var(--z-connections);
+  
   .connection-path {
     stroke-linecap: round;
     stroke-linejoin: round;
+    position: relative;
+    z-index: 1;
   }
 
   .connection-hitbox {
@@ -1639,6 +1643,15 @@ $button-variants: (
     fill: none !important;
     pointer-events: all !important;
     cursor: pointer !important;
+    z-index: 2;
+  }
+  
+  &.connection-hover {
+    z-index: calc(var(--z-connections) + 1);
+  }
+  
+  &.connection-selected {
+    z-index: calc(var(--z-connections) + 2);
   }
 }
 
@@ -1650,6 +1663,8 @@ $button-variants: (
   text-anchor: middle;
   dominant-baseline: middle;
   pointer-events: none;
+  position: relative;
+  z-index: 3;
   text-shadow:
     0 0 3px rgba(255, 255, 255, 0.8),
     0 0 6px rgba(255, 255, 255, 0.6);
@@ -1658,27 +1673,6 @@ $button-variants: (
     text-shadow:
       0 0 3px rgba(255, 255, 255, 0.9),
       0 0 6px rgba(255, 255, 255, 0.7);
-  }
-}
-
-// ===== NODE DROP FEEDBACK =====
-
-.node-background.can-drop {
-  stroke: #4caf50 !important;
-  stroke-width: 2px;
-  stroke-dasharray: 5, 5;
-  animation: dash 1s linear infinite;
-}
-
-.node.can-drop-node {
-  filter: drop-shadow(0 0 12px rgba(76, 175, 80, 0.6)) !important;
-  transform: scale(1.02);
-
-  .node-background {
-    stroke: #4caf50 !important;
-    stroke-width: 3px !important;
-    stroke-dasharray: 8, 4;
-    animation: nodeDrop 1.2s ease-in-out infinite;
   }
 }
 

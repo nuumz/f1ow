@@ -65,10 +65,10 @@ function projectPointToBoxSide(
   const absDx = Math.abs(dx)
   const absDy = Math.abs(dy)
   const pad = Math.min(Math.max(radius, 4), Math.min(box.width, box.height) / 2)
-  
+
   // Add extra clearance for arrow markers to prevent overlap
-  const arrowClearance = 10; // Slightly increased space for arrow marker to avoid overlap
-  
+  const arrowClearance = 8; // Slightly increased space for arrow marker to avoid overlap
+
   if (absDx >= absDy) {
     if (dx >= 0) {
       return { x: box.x + box.width + arrowClearance, y: Math.min(box.y + box.height - pad, Math.max(box.y + pad, point.y)) }
@@ -83,7 +83,7 @@ function projectPointToBoxSide(
 
 /** Build a sharp orthogonal (Manhattan) SVG path from ordered waypoints */
 function buildSharpOrthogonalPath(points: PortPosition[]): string {
-  if (points.length < 2) {return ''}
+  if (points.length < 2) { return '' }
   return points.map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`)).join(' ')
 }
 
@@ -93,7 +93,7 @@ function enforceFixedSegments(
   fixed = FIXED_LEAD_LENGTH,
   enforceEnd = true
 ): PortPosition[] {
-  if (pts.length < 3) {return pts}
+  if (pts.length < 3) { return pts }
   const cloned = pts.map(p => ({ ...p }))
   const start = cloned[0]
   const first = cloned[1]
@@ -108,13 +108,13 @@ function enforceFixedSegments(
     const totalLen = Math.abs(end.y - start.y)
     const adaptiveFixed = getAdaptiveLeadLength(totalLen, fixed)
     const len = Math.abs(first.y - start.y)
-    if (len > adaptiveFixed) {first.y = start.y + dir * adaptiveFixed}
+    if (len > adaptiveFixed) { first.y = start.y + dir * adaptiveFixed }
   } else if (start.y === first.y) { // horizontal
     const dir = Math.sign(first.x - start.x) || 1
     const totalLen = Math.abs(end.x - start.x)
     const adaptiveFixed = getAdaptiveLeadLength(totalLen, fixed)
     const len = Math.abs(first.x - start.x)
-    if (len > adaptiveFixed) {first.x = start.x + dir * adaptiveFixed}
+    if (len > adaptiveFixed) { first.x = start.x + dir * adaptiveFixed }
   }
 
   if (enforceEnd && cloned.length > 3) {
@@ -123,13 +123,13 @@ function enforceFixedSegments(
       const totalLen = Math.abs(end.y - start.y)
       const adaptiveFixed = getAdaptiveLeadLength(totalLen, fixed)
       const len = Math.abs(end.y - preEnd.y)
-      if (len > adaptiveFixed) {preEnd.y = end.y + dir * adaptiveFixed}
+      if (len > adaptiveFixed) { preEnd.y = end.y + dir * adaptiveFixed }
     } else if (preEnd.y === end.y) { // horizontal end approach
       const dir = Math.sign(preEnd.x - end.x) || 1
       const totalLen = Math.abs(end.x - start.x)
       const adaptiveFixed = getAdaptiveLeadLength(totalLen, fixed)
       const len = Math.abs(end.x - preEnd.x)
-      if (len > adaptiveFixed) {preEnd.x = end.x + dir * adaptiveFixed}
+      if (len > adaptiveFixed) { preEnd.x = end.x + dir * adaptiveFixed }
     }
   }
   return cloned
@@ -164,11 +164,11 @@ export function calculateArrowAdjustedPosition(
   const dx = target.x - source.x
   const dy = target.y - source.y
   const distance = Math.sqrt(dx * dx + dy * dy)
-  
+
   if (distance === 0) {
     return target
   }
-  
+
   const offsetRatio = arrowOffset / distance
   return {
     x: target.x - (dx * offsetRatio),
@@ -187,7 +187,7 @@ export function generateHorizontalControlPoints(
   const dx = target.x - source.x
   const dy = target.y - source.y
   const controlOffset = Math.max(Math.abs(dx) / config.smoothingFactor, config.controlOffsetMin)
-  
+
   return {
     cp1: {
       x: source.x + controlOffset,
@@ -211,7 +211,7 @@ export function generateBottomToInputControlPoints(
   const dx = target.x - source.x
   const dy = target.y - source.y
   const controlOffset = Math.max(Math.abs(dy) / config.smoothingFactor, config.controlOffsetMin)
-  
+
   return {
     cp1: {
       x: source.x, // Keep same x position (straight down)
@@ -246,13 +246,13 @@ export function generateConnectionPath(
   config: PathConfig = {}
 ): string {
   const fullConfig = { ...DEFAULT_PATH_CONFIG, ...config }
-  
+
   // Calculate arrow-adjusted target position
   const adjustedTarget = calculateArrowAdjustedPosition(sourcePos, targetPos, fullConfig.arrowOffset)
-  
+
   // Generate control points based on flow type
   let controlPoints: { cp1: PortPosition; cp2: PortPosition }
-  
+
   switch (flow) {
     case 'bottom-to-input':
       controlPoints = generateBottomToInputControlPoints(sourcePos, adjustedTarget, fullConfig)
@@ -262,7 +262,7 @@ export function generateConnectionPath(
       controlPoints = generateHorizontalControlPoints(sourcePos, adjustedTarget, fullConfig)
       break
   }
-  
+
   return generateCubicBezierPath(sourcePos, adjustedTarget, controlPoints.cp1, controlPoints.cp2)
 }
 
@@ -330,11 +330,11 @@ export function generateOrthogonalRoundedPath(
   if (!opts.allowDoubleBend) {
     const axisSpan = horizontalFirst ? Math.abs(end.x - start.x) : Math.abs(end.y - start.y)
     const straightSegmentLength = clampLeadLength(axisSpan, radius, fixedLead)
-    
-  // Calculate intermediate points with fixed straight segments
+
+    // Calculate intermediate points with fixed straight segments
     let startExtended: PortPosition
     let endExtended: PortPosition
-    
+
     if (horizontalFirst) {
       // For horizontal-first: extend horizontally from start, then extend horizontally to end
       startExtended = { x: start.x + Math.sign(dx) * straightSegmentLength, y: start.y }
@@ -344,10 +344,10 @@ export function generateOrthogonalRoundedPath(
       startExtended = { x: start.x, y: start.y + Math.sign(dy) * straightSegmentLength }
       endExtended = { x: end.x, y: end.y - Math.sign(dy) * straightSegmentLength }
     }
-    
+
     // Corner point between the extended segments
     const corner = horizontalFirst ? { x: endExtended.x, y: startExtended.y } : { x: startExtended.x, y: endExtended.y }
-    
+
     // Compute effective radius limited by segment lengths
     const seg1Len = horizontalFirst ? Math.abs(corner.x - startExtended.x) : Math.abs(corner.y - startExtended.y)
     const seg2Len = horizontalFirst ? Math.abs(endExtended.y - corner.y) : Math.abs(endExtended.x - corner.x)
@@ -367,7 +367,7 @@ export function generateOrthogonalRoundedPath(
       entry = { x: corner.x, y: corner.y - Math.sign(cornerDy) * r }
       exit = { x: corner.x + Math.sign(cornerDx) * r, y: corner.y }
     }
-    
+
     return [
       `M ${start.x} ${start.y}`,
       `L ${startExtended.x} ${startExtended.y}`,
@@ -386,11 +386,11 @@ export function generateOrthogonalRoundedPath(
   // Fixed straight segments from start and end with clamping similar to single-bend
   const axisSpan = horizontalFirst ? Math.abs(originalTarget.x - originalSource.x) : Math.abs(originalTarget.y - originalSource.y)
   const straightSegmentLength = clampLeadLength(axisSpan, radius, fixedLead)
-  
+
   // Calculate extended points with 50px straight segments
   let startExtended: PortPosition
   let endExtended: PortPosition
-  
+
   if (horizontalFirst) {
     startExtended = { x: originalSource.x + Math.sign(dx) * straightSegmentLength, y: originalSource.y }
     endExtended = { x: originalTarget.x - Math.sign(dx) * straightSegmentLength, y: originalTarget.y }
@@ -398,7 +398,7 @@ export function generateOrthogonalRoundedPath(
     startExtended = { x: originalSource.x, y: originalSource.y + Math.sign(dy) * straightSegmentLength }
     endExtended = { x: originalTarget.x, y: originalTarget.y - Math.sign(dy) * straightSegmentLength }
   }
-  
+
   // Calculate midpoint between extended segments
   const extendedDx = endExtended.x - startExtended.x
   const extendedDy = endExtended.y - startExtended.y
@@ -453,14 +453,14 @@ function rectIntersectsSegment(
   if (a.x === b.x) {
     // vertical segment
     const x = a.x
-    if (x < rect.x || x > rect.x + rect.width) {return false}
+    if (x < rect.x || x > rect.x + rect.width) { return false }
     const y1 = Math.min(a.y, b.y)
     const y2 = Math.max(a.y, b.y)
     return !(y2 < rect.y || y1 > rect.y + rect.height)
   } else if (a.y === b.y) {
     // horizontal segment
     const y = a.y
-    if (y < rect.y || y > rect.y + rect.height) {return false}
+    if (y < rect.y || y > rect.y + rect.height) { return false }
     const x1 = Math.min(a.x, b.x)
     const x2 = Math.max(a.x, b.x)
     return !(x2 < rect.x || x1 > rect.x + rect.width)
@@ -468,8 +468,8 @@ function rectIntersectsSegment(
   return false
 }
 
-function inflateRect(r: {x:number;y:number;width:number;height:number}, pad: number) {
-  return { x: r.x - pad, y: r.y - pad, width: r.width + pad*2, height: r.height + pad*2 }
+function inflateRect(r: { x: number; y: number; width: number; height: number }, pad: number) {
+  return { x: r.x - pad, y: r.y - pad, width: r.width + pad * 2, height: r.height + pad * 2 }
 }
 
 // Rounded path helper removed (logic switched to sharp 90° only for adaptive variant)
@@ -489,8 +489,8 @@ export function generateAdaptiveOrthogonalRoundedPath(
   // Derive anchor points via existing projection if boxes provided
   let start = source
   let end = target
-  if (options?.sourceBox) {start = projectPointToBoxSide(start, options.sourceBox, target, radius)}
-  if (options?.targetBox) {end = projectPointToBoxSide(end, options.targetBox, start, radius)}
+  if (options?.sourceBox) { start = projectPointToBoxSide(start, options.sourceBox, target, radius) }
+  if (options?.targetBox) { end = projectPointToBoxSide(end, options.targetBox, start, radius) }
 
   // Determine which side of the boxes we exited/entered (if boxes provided) so we can decide bend count.
   const startSide = detectBoxSide(start, options?.sourceBox)
@@ -508,7 +508,7 @@ export function generateAdaptiveOrthogonalRoundedPath(
     if (orientedPoints) {
       return buildSharpOrthogonalPath(orientedPoints)
     }
-    
+
     // General case (non-horizontal start) keeps previous behavior with fixed length enforcement.
     if (candidatePoints.length >= 3) {
       return buildSharpOrthogonalPath(enforceFixedSegments(candidatePoints, FIXED_LEAD_LENGTH, true))
@@ -538,12 +538,12 @@ export function generateAdaptiveOrthogonalRoundedPath(
     const intersects = () => {
       for (let i = 0; i < doglegPoints.length - 1; i++) {
         const a = doglegPoints[i]; const b = doglegPoints[i + 1]
-        for (const ob of obstacles) {if (rectIntersectsSegment(ob, a, b)) {return true}}
+        for (const ob of obstacles) { if (rectIntersectsSegment(ob, a, b)) { return true } }
       }
       return false
     }
-    if (!intersects()) {return true}
-    if (maxBends <= 3) {return false}
+    if (!intersects()) { return true }
+    if (maxBends <= 3) { return false }
     const extraOffset = offset * 1.6
     if (horizontalFirst) {
       const extraX = start.x + dirX * extraOffset
@@ -626,11 +626,11 @@ export function generateOffsetPath(
   config: PathConfig = {}
 ): string {
   const fullConfig = { ...DEFAULT_PATH_CONFIG, ...config }
-  
+
   // Apply offset to both positions
   const offsetSource: PortPosition = { x: sourcePos.x, y: sourcePos.y + offsetY }
   const offsetTarget: PortPosition = { x: targetPos.x, y: targetPos.y + offsetY }
-  
+
   // Use horizontal flow for offset connections
   return generateConnectionPath(offsetSource, offsetTarget, 'horizontal', fullConfig)
 }
@@ -646,12 +646,12 @@ export function calculateConnectionOffset(
   if (totalConnections <= 1) {
     return 0
   }
-  
+
   if (totalConnections === 2) {
     // For 2 connections: one above center, one below center
     return connectionIndex === 0 ? -spacing / 2 : spacing / 2
   }
-  
+
   // For 3+ connections: spread them out evenly
   const totalSpacing = spacing * (totalConnections - 1)
   return (connectionIndex * spacing) - (totalSpacing / 2)
@@ -670,26 +670,26 @@ export function validatePathInputs(source: PortPosition, target: PortPosition): 
 /** Clamp desired lead length to available axis span given radius; ensures minimum 4px */
 function clampLeadLength(axisSpan: number, radius: number, desired: number): number {
   const minNeeded = 2 * desired + 2 * radius + 2
-  if (axisSpan >= minNeeded) {return desired}
+  if (axisSpan >= minNeeded) { return desired }
   const shrinkLead = Math.max(4, (axisSpan - (2 * radius + 2)) / 2)
   return isFinite(shrinkLead) && shrinkLead > 0 ? shrinkLead : 4
 }
 
 /** Detect which side of a box a point exits from */
-function detectBoxSide(pt: PortPosition, box?: {x:number;y:number;width:number;height:number}): BoxSide {
-  if (!box) {return 'none'}
+function detectBoxSide(pt: PortPosition, box?: { x: number; y: number; width: number; height: number }): BoxSide {
+  if (!box) { return 'none' }
   const eps = 0.5
-  if (Math.abs(pt.x - box.x) < eps) {return 'left'}
-  if (Math.abs(pt.x - (box.x + box.width)) < eps) {return 'right'}
-  if (Math.abs(pt.y - box.y) < eps) {return 'top'}
-  if (Math.abs(pt.y - (box.y + box.height)) < eps) {return 'bottom'}
+  if (Math.abs(pt.x - box.x) < eps) { return 'left' }
+  if (Math.abs(pt.x - (box.x + box.width)) < eps) { return 'right' }
+  if (Math.abs(pt.y - box.y) < eps) { return 'top' }
+  if (Math.abs(pt.y - (box.y + box.height)) < eps) { return 'bottom' }
   return 'none'
 }
 
 /** Get orientation from box side */
 function getOrientationFromSide(side: BoxSide): Orientation {
-  if (side === 'left' || side === 'right') {return 'horizontal'}
-  if (side === 'top' || side === 'bottom') {return 'vertical'}
+  if (side === 'left' || side === 'right') { return 'horizontal' }
+  if (side === 'top' || side === 'bottom') { return 'vertical' }
   return 'none'
 }
 
@@ -702,29 +702,29 @@ function generateHorizontalToVertical3Bend(
   const dirX = Math.sign(end.x - start.x) || 1
   const dirY = Math.sign(end.y - start.y) || 1
   const firstPoint: PortPosition = { x: start.x + dirX * FIXED, y: start.y }
-  
+
   const totalY = end.y - start.y
   let midY = start.y + totalY / 2
   const minGap = FIXED * 1.2
-  if (Math.abs(midY - start.y) < minGap) {midY = start.y + dirY * minGap}
-  if (Math.abs(end.y - midY) < minGap) {midY = end.y - dirY * minGap}
-  
+  if (Math.abs(midY - start.y) < minGap) { midY = start.y + dirY * minGap }
+  if (Math.abs(end.y - midY) < minGap) { midY = end.y - dirY * minGap }
+
   const approachDirY = dirY
   let preEndY = end.y - approachDirY * FIXED
   if (Math.abs(end.y - start.y) < FIXED * 3) {
     preEndY = end.y - approachDirY * Math.max(8, Math.abs(end.y - start.y) / 4)
   }
-  
+
   const points = [
     start,
     firstPoint,
     { x: firstPoint.x, y: midY },
     { x: end.x, y: midY }
   ]
-  
-  if (preEndY !== end.y) {points.push({ x: end.x, y: preEndY })}
+
+  if (preEndY !== end.y) { points.push({ x: end.x, y: preEndY }) }
   points.push(end)
-  
+
   return points
 }
 
@@ -737,7 +737,7 @@ function generateCandidatePoints(
   endOrientation: Orientation
 ): PortPosition[] {
   const horizontalFirst = Math.abs(end.x - start.x) >= Math.abs(end.y - start.y)
-  
+
   // If both orientations are the same (both horizontal exits or both vertical) and positions require change on the orthogonal axis,
   // we prefer a TWO-BEND path: start -> mid dogleg -> turn -> end, yielding two rounded corners for clearer schematic shape.
   if (startOrientation !== 'none' && startOrientation === endOrientation) {
@@ -748,7 +748,7 @@ function generateCandidatePoints(
         // For nearby nodes, use adaptive positioning instead of simple midpoint
         const totalDistX = Math.abs(end.x - start.x)
         let midX: number
-        
+
         if (totalDistX < FIXED_LEAD_LENGTH * 2) {
           // When nodes are close, position the dogleg to avoid overlapping
           const minLead = Math.max(10, totalDistX * 0.25)
@@ -757,7 +757,7 @@ function generateCandidatePoints(
         } else {
           midX = (start.x + end.x) / 2
         }
-        
+
         return [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end]
       }
     } else { // vertical orientation
@@ -767,7 +767,7 @@ function generateCandidatePoints(
         // For nearby nodes, use adaptive positioning instead of simple midpoint
         const totalDistY = Math.abs(end.y - start.y)
         let midY: number
-        
+
         if (totalDistY < FIXED_LEAD_LENGTH * 2) {
           // When nodes are close, position the dogleg to avoid overlapping
           const minLead = Math.max(10, totalDistY * 0.25)
@@ -776,7 +776,7 @@ function generateCandidatePoints(
         } else {
           midY = (start.y + end.y) / 2
         }
-        
+
         return [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end]
       }
     }
@@ -796,7 +796,7 @@ function hasObstacleIntersection(
     const a = candidatePoints[i]
     const b = candidatePoints[i + 1]
     for (const ob of obstacles) {
-      if (rectIntersectsSegment(ob, a, b)) {return true}
+      if (rectIntersectsSegment(ob, a, b)) { return true }
     }
   }
   return false
@@ -817,7 +817,7 @@ function handleOrientedRouting(
     const adaptiveFixed = getAdaptiveLeadLength(totalDistX, FIXED)
     const dirX = Math.sign(end.x - start.x) || 1
     const firstPoint: PortPosition = { x: start.x + dirX * adaptiveFixed, y: start.y }
-    
+
     if (endOrientation === 'horizontal') {
       const dirEndX = Math.sign(end.x - start.x) || 1
       const preEnd: PortPosition = { x: end.x - dirEndX * adaptiveFixed, y: end.y }
@@ -836,7 +836,7 @@ function handleOrientedRouting(
     const adaptiveFixed = getAdaptiveLeadLength(totalDistY, FIXED)
     const dirY = Math.sign(end.y - start.y) || 1
     const firstPoint: PortPosition = { x: start.x, y: start.y + dirY * adaptiveFixed }
-    
+
     if (endOrientation === 'vertical') {
       const dirEndY = Math.sign(end.y - start.y) || 1
       const preEnd: PortPosition = { x: end.x, y: end.y - dirEndY * adaptiveFixed }
@@ -862,28 +862,28 @@ function generateVerticalToHorizontal3Bend(
   const dirY = Math.sign(end.y - start.y) || 1
   const dirX = Math.sign(end.x - start.x) || 1
   const firstPoint: PortPosition = { x: start.x, y: start.y + dirY * FIXED }
-  
+
   const totalX = end.x - start.x
   let midX = start.x + totalX / 2
   const minGap = FIXED * 1.2
-  if (Math.abs(midX - start.x) < minGap) {midX = start.x + dirX * minGap}
-  if (Math.abs(end.x - midX) < minGap) {midX = end.x - dirX * minGap}
-  
+  if (Math.abs(midX - start.x) < minGap) { midX = start.x + dirX * minGap }
+  if (Math.abs(end.x - midX) < minGap) { midX = end.x - dirX * minGap }
+
   const approachDirX = dirX
   let preEndX = end.x - approachDirX * FIXED
   if (Math.abs(end.x - start.x) < FIXED * 3) {
     preEndX = end.x - approachDirX * Math.max(8, Math.abs(end.x - start.x) / 4)
   }
-  
+
   const points = [
     start,
     firstPoint,
     { x: midX, y: firstPoint.y },
     { x: midX, y: end.y }
   ]
-  
-  if (preEndX !== end.x) {points.push({ x: preEndX, y: end.y })}
+
+  if (preEndX !== end.x) { points.push({ x: preEndX, y: end.y }) }
   points.push(end)
-  
+
   return points
 }

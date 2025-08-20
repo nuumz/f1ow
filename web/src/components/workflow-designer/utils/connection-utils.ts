@@ -234,23 +234,21 @@ function computeSourcePosForPreview(
 
 // Helper: trim a point outward by side (architecture marker)
 function trimPointBySide(pt: { x: number; y: number }, side: SidePortId | undefined, sourcePos: PortPosition, HALF_MARKER = 5.5) {
+  // Prefer explicit outward trim based on side to avoid arrowheads entering nodes.
+  if (side === '__side-left') { return { x: pt.x - HALF_MARKER, y: pt.y } }
+  if (side === '__side-right') { return { x: pt.x + HALF_MARKER, y: pt.y } }
+  if (side === '__side-top') { return { x: pt.x, y: pt.y - HALF_MARKER } }
+  if (side === '__side-bottom') { return { x: pt.x, y: pt.y + HALF_MARKER } }
+
+  // Fallback when side is undefined: infer direction from the approach vector
   const dx = pt.x - sourcePos.x
   const dy = pt.y - sourcePos.y
-  if (side === '__side-left' || side === '__side-right') {
-    const dirX = Math.sign(dx) || (side === '__side-right' ? 1 : -1)
-    return { x: pt.x - dirX * HALF_MARKER, y: pt.y }
-  }
-  if (side === '__side-top' || side === '__side-bottom') {
-    const dirY = Math.sign(dy) || (side === '__side-bottom' ? 1 : -1)
-    return { x: pt.x, y: pt.y - dirY * HALF_MARKER }
-  }
-  // Fallback when side is undefined: infer primary axis from delta
   if (Math.abs(dx) >= Math.abs(dy)) {
     const dirX = Math.sign(dx) || 1
-    return { x: pt.x - dirX * HALF_MARKER, y: pt.y }
+    return { x: pt.x + dirX * HALF_MARKER, y: pt.y }
   }
   const dirY = Math.sign(dy) || 1
-  return { x: pt.x, y: pt.y - dirY * HALF_MARKER }
+  return { x: pt.x, y: pt.y + dirY * HALF_MARKER }
 }
 
 // Helper: compute snap end for architecture preview
@@ -262,7 +260,7 @@ function snapToHoverTargetBox(args: {
   isSourceBottomPort: boolean
   sourcePos: PortPosition
 }): SnapResult | null {
-  const { hoverTargetBox, startSide, isSourceBottomPort, sourcePos } = args
+  const { hoverTargetBox, startSide: _startSide, isSourceBottomPort, sourcePos } = args
   const centerX = hoverTargetBox.x + hoverTargetBox.width / 2
   const centerY = hoverTargetBox.y + hoverTargetBox.height / 2
   const SNAP_THRESHOLD = FIXED_LEAD_LENGTH * 2
@@ -272,19 +270,17 @@ function snapToHoverTargetBox(args: {
     const useBottom = (topY - sourcePos.y) < SNAP_THRESHOLD
     return { previewEnd: { x: centerX, y: useBottom ? bottomY : topY }, chosenSide: useBottom ? '__side-bottom' : '__side-top', endOrientation: 'vertical' }
   }
-  if (startSide === 'left' || startSide === 'right') {
-    const mockTarget: WorkflowNode = { id: 'mock-target', label: 'Mock Target', x: centerX, y: centerY, type: 'mock', inputs: [], outputs: [], config: {} }
-    const optimalSide = chooseAutoTargetSide(sourcePos, mockTarget)
-    let posBySide: { x: number; y: number }
-    switch (optimalSide) {
-      case '__side-left': posBySide = { x: hoverTargetBox.x, y: centerY }; break
-      case '__side-right': posBySide = { x: hoverTargetBox.x + hoverTargetBox.width, y: centerY }; break
-      case '__side-top': posBySide = { x: centerX, y: hoverTargetBox.y }; break
-      default: posBySide = { x: centerX, y: hoverTargetBox.y + hoverTargetBox.height }
-    }
-    return { previewEnd: posBySide, chosenSide: optimalSide, endOrientation: (optimalSide === '__side-left' || optimalSide === '__side-right') ? 'horizontal' : 'vertical' }
+  // For non-bottom starts (left, right, top), choose optimal side based on geometry
+  const mockTarget: WorkflowNode = { id: 'mock-target', label: 'Mock Target', x: centerX, y: centerY, type: 'mock', inputs: [], outputs: [], config: {} }
+  const optimalSide = chooseAutoTargetSide(sourcePos, mockTarget)
+  let posBySide: { x: number; y: number }
+  switch (optimalSide) {
+    case '__side-left': posBySide = { x: hoverTargetBox.x, y: centerY }; break
+    case '__side-right': posBySide = { x: hoverTargetBox.x + hoverTargetBox.width, y: centerY }; break
+    case '__side-top': posBySide = { x: centerX, y: hoverTargetBox.y }; break
+    default: posBySide = { x: centerX, y: hoverTargetBox.y + hoverTargetBox.height }
   }
-  return null
+  return { previewEnd: posBySide, chosenSide: optimalSide, endOrientation: (optimalSide === '__side-left' || optimalSide === '__side-right') ? 'horizontal' : 'vertical' }
 }
 
 function snapToAvailableNodes(args: {
@@ -341,8 +337,8 @@ function maybeBottomUPathForPreview(args: {
   const safeClear = 16
   const minBelow = Math.max(sourcePos.y, targetBottomY) + FIXED_LEAD_LENGTH
   const midY = Math.max(boxesBottom + safeClear, minBelow)
-  // For bottom side, push outward (increase y)
-  const bottomUTrimmedEndCorrected = { x: previewEnd.x, y: previewEnd.y + HALF_MARKER }
+  // Trim end by marker size using shared helper to align arrow tip with bottom edge
+  const bottomUTrimmedEndCorrected = trimPointBySide({ x: previewEnd.x, y: previewEnd.y }, '__side-bottom', sourcePos, HALF_MARKER)
   return [
     `M ${sourcePos.x} ${sourcePos.y}`,
     `L ${sourcePos.x} ${midY}`,
@@ -510,7 +506,8 @@ export function calculateConnectionPreviewPath(
   }
 ): string { // NOSONAR: readability prioritized over cognitive complexity metric here
   // Helpers extracted to reduce complexity
-  const HALF_MARKER = 5.5
+  // Architecture markers use size=10 (see marker-utils); half is 5px
+  const HALF_MARKER = 5
 
   const variant: NodeVariant = opts?.variant ?? 'standard'
   const config: PathConfig | undefined = opts?.config
@@ -782,22 +779,22 @@ function generateArchitectureModeConnectionPath(
         return { x: sideAnchor.x, y: targetPos.y } // lock to side X, keep exact port Y
       case '__side-top':
       case '__side-bottom':
-      default:
-        // Use side anchor X (center of top/bottom edge) to match preview snap; Y is the side edge
-        return { x: sideAnchor.x, y: sideAnchor.y }
+      default: {
+        // For top/bottom termination:
+        // - If the actual target is a bottom port (or virtual bottom side), keep its exact X
+        // - Otherwise, use the side center X to keep arrowhead centered on the edge
+        const isActualBottomTarget = isTargetBottom
+        const endX = isActualBottomTarget ? targetPos.x : sideAnchor.x
+        return { x: endX, y: sideAnchor.y }
+      }
     }
   })()
   const endOrientation = sideToOrientation(detectPortSideModeAware(targetNode, targetSidePortId, preciseEnd, 'architecture'))
 
-  const HALF_MARKER = 5.5
-  const trimBySide = (pt: { x: number; y: number }, side: SidePortId): { x: number; y: number } => {
-    // Inward trims for center-anchored markers
-    if (side === '__side-left') { return { x: pt.x - HALF_MARKER, y: pt.y } }
-    if (side === '__side-right') { return { x: pt.x - HALF_MARKER, y: pt.y } }
-    if (side === '__side-top') { return { x: pt.x, y: pt.y - HALF_MARKER } }
-    return { x: pt.x, y: pt.y + HALF_MARKER }
-  }
-  const trimmedEnd = trimBySide(preciseEnd, targetSidePortId)
+  // Architecture markers use size=10; half is 5px for accurate trim
+  const HALF_MARKER = 5
+  // Use shared direction-aware trimming to offset the end point by half the marker size
+  const trimmedEnd = trimPointBySide(preciseEnd, targetSidePortId, sourcePos, HALF_MARKER)
 
   // Bottom U-shape special-case
   if (isSourceBottom && targetSidePortId === '__side-bottom') {
@@ -807,7 +804,8 @@ function generateArchitectureModeConnectionPath(
     const boxesBottom = Math.max(srcBox.y + srcBox.height, tgtBox.y + tgtBox.height)
     const minBelow = Math.max(sourcePos.y, preciseEnd.y) + FIXED_LEAD_LENGTH
     const midY = Math.max(boxesBottom + safeClear, minBelow)
-    const bottomUTrimmedEnd = { x: preciseEnd.x, y: preciseEnd.y + HALF_MARKER }
+    // Trim with shared helper to ensure arrowhead aligns to bottom edge
+    const bottomUTrimmedEnd = trimPointBySide(preciseEnd, '__side-bottom', sourcePos, HALF_MARKER)
     return [
       `M ${sourcePos.x} ${sourcePos.y}`,
       `L ${sourcePos.x} ${midY}`,
@@ -828,10 +826,9 @@ function generateArchitectureModeConnectionPath(
     const boxesRight = Math.max(srcBox.x + srcBox.width, tgtBox.x + tgtBox.width)
     const minRight = Math.max(sourcePos.x, forcedRightPos.x) + FIXED_LEAD_LENGTH
     const midX = Math.max(boxesRight + safeClear, minRight)
-    // Align end to the exact target port Y
+    // Align end to the exact target port Y then trim using shared helper
     const rightAligned = { x: forcedRightPos.x, y: targetPos.y }
-    // For right side, push outward (increase x)
-    const rightUTrimmedEnd = { x: rightAligned.x + HALF_MARKER, y: rightAligned.y }
+    const rightUTrimmedEnd = trimPointBySide(rightAligned, '__side-right', sourcePos, HALF_MARKER)
     return [
       `M ${sourcePos.x} ${sourcePos.y}`,
       `L ${midX} ${sourcePos.y}`,
@@ -852,10 +849,9 @@ function generateArchitectureModeConnectionPath(
     const boxesLeft = Math.min(srcBox.x, tgtBox.x)
     const minLeft = Math.min(sourcePos.x, forcedLeftPos.x) - FIXED_LEAD_LENGTH
     const midX = Math.min(boxesLeft - safeClear, minLeft)
-    // Align end to the exact target port Y
+    // Align end to the exact target port Y then trim using shared helper
     const leftAligned = { x: forcedLeftPos.x, y: targetPos.y }
-    // For left side, push outward (decrease x)
-    const leftUTrimmedEnd = { x: leftAligned.x - HALF_MARKER, y: leftAligned.y }
+    const leftUTrimmedEnd = trimPointBySide(leftAligned, '__side-left', sourcePos, HALF_MARKER)
     return [
       `M ${sourcePos.x} ${sourcePos.y}`,
       `L ${midX} ${sourcePos.y}`,

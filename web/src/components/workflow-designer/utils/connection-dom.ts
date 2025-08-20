@@ -107,13 +107,27 @@ export function renderConnectionsLayer(opts: RenderConnectionsOptions) {
         selection as unknown as d3.Selection<SVGGElement, Connection, SVGGElement, unknown>
     )
 
+    // Apply group-level classes to allow CSS to target grouped connections easily
+    merged
+        .classed('connection-multi', (d: Connection) => {
+            const gi = getConnectionGroupInfo(d.id, connections)
+            return gi.isMultiple
+        })
+        .classed('connection-multi-primary', (d: Connection) => {
+            const gi = getConnectionGroupInfo(d.id, connections)
+            return gi.isMultiple && gi.index === 0
+        })
+
     // Update hitbox geometry
     merged
         .select<SVGPathElement>('.connection-hitbox')
         .attr('d', (d: Connection) => createFilledPolygonFromPath(getConnectionPath(d), 8))
         .style('display', (d: Connection) => {
             const groupInfo = getConnectionGroupInfo(d.id, connections)
-            return groupInfo.isMultiple && groupInfo.index > 0 ? 'none' : 'block'
+            // Only collapse to primary connection in architecture mode; show all in workflow/debug
+            return workflowMode === 'architecture' && groupInfo.isMultiple && groupInfo.index > 0
+                ? 'none'
+                : 'block'
         })
 
     // Update visible path
@@ -126,7 +140,10 @@ export function renderConnectionsLayer(opts: RenderConnectionsOptions) {
         .style('marker-end', (d: Connection) => getConnectionMarker(d, 'default'))
         .style('display', (d: Connection) => {
             const groupInfo = getConnectionGroupInfo(d.id, connections)
-            return groupInfo.isMultiple && groupInfo.index > 0 ? 'none' : 'block'
+            // Only collapse to primary connection in architecture mode; show all in workflow/debug
+            return workflowMode === 'architecture' && groupInfo.isMultiple && groupInfo.index > 0
+                ? 'none'
+                : 'block'
         })
         .attr('class', (d: Connection) => {
             const groupInfo = getConnectionGroupInfo(d.id, connections)

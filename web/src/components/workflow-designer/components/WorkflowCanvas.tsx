@@ -223,10 +223,10 @@ function WorkflowCanvas({
   );
 
   const onPortDragEnd = useCallback(
-    (targetNodeId?: string, targetPortId?: string) => {
+    (targetNodeId?: string, targetPortId?: string, canvasX?: number, canvasY?: number) => {
       // Prefer external handler if provided (unified flow with operations + validation)
       if (onPortDragEndProp) {
-        onPortDragEndProp(targetNodeId, targetPortId);
+        onPortDragEndProp(targetNodeId, targetPortId, canvasX, canvasY);
         // Cleanup local ref regardless
         dragConnectionDataRef.current = null;
         return;
@@ -1898,7 +1898,12 @@ function WorkflowCanvas({
                   canvasY,
                   getHitTestPortRadius
                 );
-                onPortDragEnd(portHit?.nodeId, portHit?.portId);
+                if (portHit?.nodeId && portHit?.portId) {
+                  onPortDragEnd(portHit.nodeId, portHit.portId, canvasX, canvasY);
+                } else {
+                  // No port found; treat as canvas background drop
+                  onPortDragEnd('__CANVAS_DROP__', undefined, canvasX, canvasY);
+                }
               })
           );
         });
@@ -2068,7 +2073,7 @@ function WorkflowCanvas({
                     canvasY
                   );
                   // Signal canvas background drop with special values
-                  onPortDragEnd();
+                  onPortDragEnd('__CANVAS_DROP__', undefined, canvasX, canvasY);
                   return;
                 }
               }
@@ -2077,7 +2082,7 @@ function WorkflowCanvas({
                 targetNodeId,
                 targetPortId,
               });
-              onPortDragEnd(targetNodeId, targetPortId);
+              onPortDragEnd(targetNodeId, targetPortId, canvasX, canvasY);
 
               // CLEANUP: Clear stored drag connection data
               dragConnectionDataRef.current = null;
@@ -2225,7 +2230,11 @@ function WorkflowCanvas({
                 dragConnectionDataRef.current,
                 getHitTestPortRadius
               );
-              onPortDragEnd(result.nodeId, result.portId);
+              if (result.nodeId && result.portId) {
+                onPortDragEnd(result.nodeId, result.portId, canvasX, canvasY);
+              } else {
+                onPortDragEnd('__CANVAS_DROP__', undefined, canvasX, canvasY);
+              }
               dragConnectionDataRef.current = null;
             })
         );
@@ -2347,7 +2356,9 @@ function WorkflowCanvas({
                 targetNodeId,
                 targetPortId,
               });
-              onPortDragEnd(targetNodeId, targetPortId);
+              if (targetNodeId && targetPortId) {
+                onPortDragEnd(targetNodeId, targetPortId, canvasX, canvasY);
+              }
             })
         );
 
@@ -2550,7 +2561,11 @@ function WorkflowCanvas({
                       null,
                       getHitTestPortRadius
                     );
-                    onPortDragEnd(result.nodeId, result.portId);
+                    if (result.nodeId && result.portId) {
+                      onPortDragEnd(result.nodeId, result.portId, canvasX, canvasY);
+                    } else {
+                      onPortDragEnd('__CANVAS_DROP__', undefined, canvasX, canvasY);
+                    }
                   })
               )
               .on('click', (event: any) => {
@@ -3108,7 +3123,7 @@ function WorkflowCanvas({
           // Clear preview and connection state via dispatch path
           dragConnectionDataRef.current = null;
           if (onPortDragEndProp) {
-            onPortDragEndProp(undefined, undefined);
+            onPortDragEndProp(undefined, undefined, undefined, undefined);
           } else {
             dispatch?.({ type: 'CLEAR_CONNECTION_STATE' });
           }

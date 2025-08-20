@@ -13,10 +13,31 @@ import {
     Users,
     FileText,
     Box,
+    Zap,
+    Code,
+    Mail,
+    Clock,
+    Pause,
+    Settings,
+    Repeat,
+    Filter,
+    Map,
+    Calculator,
+    Bot,
+    Brain,
+    Network,
+    HardDrive,
+    Layers,
+    Lock,
+    Smartphone,
+    Tablet,
+    Cpu,
 } from 'lucide-react'
 
-// Map node type to lucide-react icon component
+// Map node type to lucide-react icon component - Updated to match WorkflowNodePalette
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const iconMap: Record<string, React.ComponentType<any>> = {
+    // Original mappings
     server: Server,
     database: Database,
     globe: Globe,
@@ -30,6 +51,49 @@ const iconMap: Record<string, React.ComponentType<any>> = {
     users: Users,
     file: FileText,
     box: Box,
+
+    // Workflow node mappings to match WorkflowNodePalette icons
+    start: Zap,
+    if: GitBranch,
+    loop: Repeat,
+    subworkflow: Package,
+    set: Code,
+    json: FileText,
+    transform: Map,
+    filter: Filter,
+    calculate: Calculator,
+    http: Globe,
+    email: Mail,
+    mysql: Database,
+    postgresql: Database,
+    aiagent: Bot,
+    openai: Brain,
+    schedule: Clock,
+    webhook: Globe,
+    auth: Lock,
+    encrypt: Shield,
+    delay: Pause,
+    config: Settings,
+
+    // Architecture node mappings
+    loadbalancer: Network,
+    cdn: Globe,
+    cache: HardDrive,
+    microservice: Box,
+    cloudfunction: Cloud,
+    container: Box,
+    kubernetes: Layers,
+    firewall: Shield,
+    external: Globe,
+    thirdparty: Package,
+    webapp: Monitor,
+    mobile: Smartphone,
+    tablet: Tablet,
+    processor: Cpu,
+    pipeline: GitBranch,
+    documentation: FileText,
+    team: Users,
+    storage: Database,
 }
 
 export function getIconSymbolId(type: string): string {
@@ -42,14 +106,15 @@ export function ensureIconSymbol(
     type: string
 ): string {
     const id = getIconSymbolId(type)
-    if (!defs.select(`#${id}`).empty()) {return id}
+    if (!defs.select(`#${id}`).empty()) { return id }
 
     const Icon = iconMap[type] || Box
     // Render canonical 24px SVG with currentColor so color can be controlled by container via CSS
     const svgMarkup = renderToStaticMarkup(
         React.createElement(Icon, { size: 24, color: 'currentColor', strokeWidth: 1.8 })
     )
-    const match = svgMarkup.match(/<svg[^>]*>([\s\S]*?)<\/svg>/i)
+    const regex = /<svg[^>]*>([\s\S]*?)<\/svg>/i
+    const match = regex.exec(svgMarkup)
     const inner = match ? match[1] : svgMarkup
     const wrapperAttrs =
         'fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"'
@@ -67,12 +132,12 @@ export function ensureIconSymbols(
     defs: d3.Selection<SVGDefsElement, unknown, null, undefined>,
     types: string[]
 ): void {
-    for (const t of types) {ensureIconSymbol(defs, t)}
+    for (const t of types) { ensureIconSymbol(defs, t) }
 }
 
 // Render or update a single <use> element inside the provided group, referencing the shared symbol
 export function renderIconUse(
-    g: d3.Selection<SVGGElement, any, any, any>,
+    g: d3.Selection<SVGGElement, unknown, null, undefined>,
     defs: d3.Selection<SVGDefsElement, unknown, null, undefined>,
     type: string,
     size: number,
@@ -80,8 +145,8 @@ export function renderIconUse(
     offsetX: number,
     offsetY: number
 ): void {
-    const nodeEl = g.node() as any
-    if (!nodeEl) {return}
+    const nodeEl = g.node() as SVGGElement & { __iconKey?: string }
+    if (!nodeEl) { return }
 
     const symbolId = ensureIconSymbol(defs, type)
     const key = `${type}:${size}`

@@ -5,7 +5,13 @@
  */
 
 import type { WorkflowNode, PortPosition, NodeVariant } from '../types'
-import { getShapeAwareDimensions } from './node-utils'
+import * as d3 from 'd3'
+import { getShapeAwareDimensions, NODE_WIDTH, NODE_MIN_HEIGHT } from './node-utils'
+import { computePortVisualAttributes, applyPortVisualAttributes } from './port-visuals'
+
+// Type aliases
+type MarkerState = 'default' | 'selected' | 'hover';
+export type DesignerMode = 'workflow' | 'architecture' | undefined;
 
 // Shared helpers for virtual side ports (architecture omni-ports)
 const isVirtualSidePortId = (id: string) => id.startsWith('__side-')
@@ -996,4 +1002,227 @@ export function createOptimizedPathGenerator(config?: PathConfig) {
       return cache.size
     }
   }
+}
+
+// ======================== CONNECTION RENDERING HELPERS ========================
+// Helper functions for connection preview and port state management
+// (Previously in connection-rendering-helpers.ts)
+
+// Port datum interfaces for better typing
+interface PortDatum {
+  nodeId: string;
+  id: string;
+  nodeData: WorkflowNode;
+}
+
+interface SidePortDatum {
+  kind: 'input' | 'output';
+}
+
+interface NodeDimensions {
+  width: number;
+  height: number;
+  portRadius?: number;
+}
+
+// Helper to compute hover target box for connection preview
+const computeHoverTargetBox = (
+  node: WorkflowNode | undefined,
+  getDims: (n: WorkflowNode) => NodeDimensions
+): { x: number; y: number; width: number; height: number } | undefined => {
+  if (!node) {
+    return undefined;
+  }
+  const dims = getDims(node);
+  const w = dims.width || NODE_WIDTH;
+  const h = dims.height || NODE_MIN_HEIGHT;
+  return { x: node.x - w / 2, y: node.y - h / 2, width: w, height: h };
+};
+
+/**
+ * Render connection preview path during drag
+ */
+export function renderConnectionPreviewPath(
+  targetLayer: d3.Selection<SVGGElement, unknown, null, undefined>,
+  params: {
+    isConnecting: boolean;
+    connectionStart: { nodeId: string; portId: string; type: 'input' | 'output' } | null;
+    connectionPreview: { x: number; y: number } | null;
+    nodes: WorkflowNode[];
+    nodeMap: Map<string, WorkflowNode>;
+    nodeVariant: NodeVariant;
+    modeId: DesignerMode;
+    getDims: (n: WorkflowNode) => NodeDimensions;
+    getArrowMarkerForMode: (isWorkflowMode: boolean, state: MarkerState) => string;
+    dbg: { warn: (...args: unknown[]) => void };
+  }
+) {
+  const {
+    isConnecting,
+    connectionStart,
+    connectionPreview,
+    nodes,
+    nodeMap,
+    nodeVariant,
+    modeId,
+    getDims,
+    getArrowMarkerForMode,
+    dbg,
+  } = params;
+
+  if (!(isConnecting && connectionStart)) {
+    return;
+  }
+
+  const sourceNode = nodeMap.get(connectionStart.nodeId);
+  if (!sourceNode || !connectionPreview) {
+    dbg.warn('🔄 Effect not rendering preview:', {
+      sourceNode: !!sourceNode,
+      connectionPreview: !!connectionPreview,
+    });
+    return;
+  }
+
+  const hoveredNode = nodes.find((n) => {
+    const dims = getDims(n);
+    const w = dims.width || NODE_WIDTH;
+    const h = dims.height || NODE_MIN_HEIGHT;
+    return (
+      connectionPreview.x >= n.x - w / 2 &&
+      connectionPreview.x <= n.x + w / 2 &&
+      connectionPreview.y >= n.y - h / 2 &&
+      connectionPreview.y <= n.y + h / 2
+    );
+  });
+
+  const hoverTargetBox = computeHoverTargetBox(hoveredNode, getDims);
+
+  const previewPath = calculateConnectionPreviewPath(
+    sourceNode,
+    connectionStart.portId,
+    connectionPreview,
+    {
+      variant: nodeVariant,
+      modeId: modeId || 'workflow',
+      hoverTargetBox,
+    }
+  );
+
+  const isWorkflowMode = modeId === 'workflow';
+  const previewMarker = getArrowMarkerForMode(isWorkflowMode, 'default');
+  targetLayer
+    .append('path')
+    .attr('class', 'connection-preview')
+    .attr('d', previewPath)
+    .attr('stroke', '#2196F3')
+    .attr('stroke-width', 2)
+    .attr('stroke-dasharray', '5,5')
+    .attr('stroke-linecap', 'round')
+    .attr('fill', 'none')
+    .attr('marker-end', previewMarker)
+    .attr('pointer-events', 'none')
+    .style('opacity', 0.7);
+}
+
+/**
+ * Tag side ports during connection for architecture mode
+ */
+export function tagSidePortsDuringConnection(
+  svg: d3.Selection<SVGSVGElement, unknown, null, undefined>,
+  params: {
+    modeId: DesignerMode;
+    isConnecting: boolean;
+    connectionStart: { type: 'input' | 'output' } | null;
+  }
+) {
+  const { modeId, isConnecting, connectionStart } = params;
+  if (modeId !== 'architecture') {
+    return;
+  }
+
+  const sidePorts = svg.selectAll<SVGGElement, SidePortDatum>('.side-port-group');
+  sidePorts.classed('input-port-group', false).classed('output-port-group', false);
+
+  if (isConnecting && connectionStart) {
+    if (connectionStart.type === 'output') {
+      sidePorts.filter((d) => d?.kind === 'input').classed('input-port-group', true);
+    } else {
+      sidePorts.filter((d) => d?.kind === 'output').classed('output-port-group', true);
+    }
+  }
+}
+
+/**
+ * Update ports visual state during connection
+ */
+export function updatePortsVisualState(
+  svg: d3.Selection<SVGSVGElement, unknown, null, undefined>,
+  params: {
+    isConnecting: boolean;
+    connectionStart: { type: 'input' | 'output' } | null;
+    canDropOnPort?: (nodeId: string, portId: string, type: 'input' | 'output') => boolean;
+    modeId: DesignerMode;
+    getDims: (n: WorkflowNode) => NodeDimensions;
+    updatePortHighlighting: (
+      key: string,
+      canDrop: boolean,
+      portGroup: d3.Selection<SVGGElement, unknown, null, undefined>
+    ) => void;
+  }
+) {
+  const { isConnecting, connectionStart, canDropOnPort, modeId, getDims, updatePortHighlighting } =
+    params;
+  const nodeLayer = svg.select('.node-layer');
+
+  // Update input ports visual state
+  nodeLayer.selectAll('.input-port-circle').each(function (d: unknown) {
+    const portData = d as PortDatum;
+    const portElement = d3.select<SVGCircleElement, unknown>(this as SVGCircleElement);
+    const parentElement = (this as Element)?.parentNode;
+    const portGroup = parentElement ? d3.select(parentElement as SVGGElement) : null;
+    const isActive = Boolean(isConnecting && connectionStart && connectionStart.type === 'output');
+    const canDrop = isActive ? (canDropOnPort?.(portData.nodeId, portData.id, 'input') ?? false) : false;
+    const archNoValidation = modeId === 'architecture';
+
+    if (portGroup) {
+      updatePortHighlighting(
+        `${portData.nodeId}-${portData.id}`,
+        Boolean(isActive && !archNoValidation && canDrop),
+        portGroup
+      );
+    }
+
+    const baseRadius = getDims(portData.nodeData).portRadius || 6;
+    const attrs = computePortVisualAttributes(
+      isActive,
+      archNoValidation,
+      Boolean(canDrop),
+      baseRadius
+    );
+    applyPortVisualAttributes(portElement, attrs);
+  });
+
+  // Update output ports visual state
+  nodeLayer.selectAll('.output-port-circle').each(function (d: unknown) {
+    const portData = d as PortDatum;
+    const portElement = d3.select<SVGCircleElement, unknown>(this as SVGCircleElement);
+    const parentElement = (this as Element)?.parentNode;
+    const portGroup = parentElement ? d3.select(parentElement as SVGGElement) : null;
+    const isActive = Boolean(isConnecting && connectionStart && connectionStart.type === 'input');
+    const canDrop = isActive ? (canDropOnPort?.(portData.nodeId, portData.id, 'output') ?? false) : false;
+    const archNoValidation = modeId === 'architecture';
+
+    if (portGroup) {
+      portGroup.classed('can-dropped', Boolean(isActive && !archNoValidation && canDrop));
+    }
+
+    const baseRadius = getDims(portData.nodeData).portRadius || 6;
+    const attrs = computePortVisualAttributes(
+      isActive,
+      archNoValidation,
+      Boolean(canDrop),
+      baseRadius
+    );
+    applyPortVisualAttributes(portElement, attrs);
+  });
 }

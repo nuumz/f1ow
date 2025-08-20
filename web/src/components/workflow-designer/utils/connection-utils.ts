@@ -813,7 +813,7 @@ function generateArchitectureModeConnectionPath(
       { x: bottomUTrimmedEnd.x, y: midY },
       { x: bottomUTrimmedEnd.x, y: bottomUTrimmedEnd.y }
     ]
-    return buildRoundedPathFromPoints(points, 12)
+    return buildRoundedPathFromPoints(points, 10)
   }
 
   // Horizontal U-shapes for close proximity
@@ -837,7 +837,7 @@ function generateArchitectureModeConnectionPath(
       { x: midX, y: rightUTrimmedEnd.y },
       { x: rightUTrimmedEnd.x, y: rightUTrimmedEnd.y }
     ]
-    return buildRoundedPathFromPoints(points, 12)
+    return buildRoundedPathFromPoints(points, 10)
   }
   const rightU = maybeRightU(); if (rightU) { return rightU }
 
@@ -861,7 +861,7 @@ function generateArchitectureModeConnectionPath(
       { x: midX, y: leftUTrimmedEnd.y },
       { x: leftUTrimmedEnd.x, y: leftUTrimmedEnd.y }
     ]
-    return buildRoundedPathFromPoints(points, 12)
+    return buildRoundedPathFromPoints(points, 10)
   }
   const leftU = maybeLeftU(); if (leftU) { return leftU }
 

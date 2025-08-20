@@ -88,7 +88,7 @@ function buildSharpOrthogonalPath(points: PortPosition[]): string {
 }
 
 /** Build an orthogonal SVG path with rounded corners from ordered waypoints */
-function buildRoundedOrthogonalPath(points: PortPosition[], radius = 12, minSegment = 10): string {
+function buildRoundedOrthogonalPath(points: PortPosition[], radius = 10, minSegment = 10): string {
   if (points.length < 2) { return '' }
   if (points.length === 2) {
     // No bends – straight line
@@ -174,7 +174,7 @@ function buildRoundedOrthogonalPath(points: PortPosition[], radius = 12, minSegm
 }
 
 // Public lightweight facade so callers with explicit waypoints (e.g., U-shape) can reuse identical rounding
-export function buildRoundedPathFromPoints(points: PortPosition[], radius = 12): string {
+export function buildRoundedPathFromPoints(points: PortPosition[], radius = 10): string {
   return buildRoundedOrthogonalPath(points, radius)
 }
 
@@ -568,7 +568,7 @@ function inflateRect(r: { x: number; y: number; width: number; height: number },
 export function generateAdaptiveOrthogonalRoundedPath(
   source: PortPosition,
   target: PortPosition,
-  radius = 12,
+  radius = 10,
   options?: AdaptivePathOptions
 ): string {
   // Reuse shared helpers and emit rounded-corner orthogonal paths

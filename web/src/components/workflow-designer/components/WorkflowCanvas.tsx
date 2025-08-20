@@ -1902,7 +1902,7 @@ function WorkflowCanvas({
                   onPortDragEnd(portHit.nodeId, portHit.portId, canvasX, canvasY);
                 } else {
                   // No port found; treat as canvas background drop
-                  onPortDragEnd('__CANVAS_DROP__', undefined, canvasX, canvasY);
+                  onPortDragEnd(undefined, undefined, canvasX, canvasY);
                 }
               })
           );
@@ -2073,7 +2073,7 @@ function WorkflowCanvas({
                     canvasY
                   );
                   // Signal canvas background drop with special values
-                  onPortDragEnd('__CANVAS_DROP__', undefined, canvasX, canvasY);
+                  onPortDragEnd(undefined, undefined, canvasX, canvasY);
                   return;
                 }
               }
@@ -2233,7 +2233,7 @@ function WorkflowCanvas({
               if (result.nodeId && result.portId) {
                 onPortDragEnd(result.nodeId, result.portId, canvasX, canvasY);
               } else {
-                onPortDragEnd('__CANVAS_DROP__', undefined, canvasX, canvasY);
+                onPortDragEnd(undefined, undefined, canvasX, canvasY);
               }
               dragConnectionDataRef.current = null;
             })
@@ -2564,7 +2564,7 @@ function WorkflowCanvas({
                     if (result.nodeId && result.portId) {
                       onPortDragEnd(result.nodeId, result.portId, canvasX, canvasY);
                     } else {
-                      onPortDragEnd('__CANVAS_DROP__', undefined, canvasX, canvasY);
+                      onPortDragEnd(undefined, undefined, canvasX, canvasY);
                     }
                   })
               )

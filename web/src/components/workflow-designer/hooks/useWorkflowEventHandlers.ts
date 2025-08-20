@@ -3,7 +3,6 @@ import type * as d3 from 'd3'
 import { useWorkflowContext } from '../contexts/WorkflowContext'
 import { useWorkflowOperations } from './useWorkflowOperations'
 import { useWorkflowCanvas } from './useWorkflowCanvas'
-import { suggestNextNodeType } from '../utils/node-suggestions'
 import { ArchitectureNodeDefinitions } from '../types/architecture'
 import type { NodeDefinition } from '../types'
 import type { WorkflowNode } from './useNodeSelection'
@@ -276,49 +275,9 @@ export function useWorkflowEventHandlers() {
       return
     }
 
-    // Handle canvas background drop (create new node + connection)
-    if (targetNodeId === '__CANVAS_DROP__' && canvasX !== undefined && canvasY !== undefined) {
-      const { nodeId: sourceNodeId, portId: sourcePortId, type } = currentConnectionState.connectionStart
-
-      console.log('🎨 Canvas background drop detected, creating new node and connection:', {
-        sourceNodeId,
-        sourcePortId,
-        sourceType: type,
-        dropPosition: { x: canvasX, y: canvasY }
-      })
-
-      // Only allow from output ports
-      if (type === 'output') {
-        console.log('✅ Creating new node from canvas drop')
-
-        // Pick a sensible default next node type
-        const sourceNode = state.nodes.find(n => n.id === sourceNodeId)
-        const newType = suggestNextNodeType(sourceNode?.type, state.designerMode)
-        // Create a new node at drop position
-        const newNode = operations.addNode(newType, { x: canvasX, y: canvasY })
-
-        if (newNode) {
-          console.log('✅ New node created:', newNode.id)
-
-          // Create connection from source output to new node's first input port
-          if (newNode.inputs && newNode.inputs.length > 0) {
-            const targetInputPort = newNode.inputs[0]
-            const result = operations.createConnection(sourceNodeId, sourcePortId, newNode.id, targetInputPort.id)
-
-            if (result) {
-              console.log('✅ Connection created successfully to new node')
-            } else {
-              console.log('❌ Connection creation failed to new node')
-            }
-          } else {
-            console.log('⚠️ New node has no input ports to connect to')
-          }
-        } else {
-          console.log('❌ Failed to create new node')
-        }
-      } else {
-        console.log('❌ Canvas drop only supported from output ports')
-      }
+    // Handle canvas background drop: disabled auto-create. Simply cancel without creating a node.
+    if (targetNodeId === '__CANVAS_DROP__') {
+      console.warn('🛑 Canvas background drop detected – auto node creation is disabled. Cancelling connection.')
     }
     // Handle regular port-to-port connections
     else if (targetNodeId && targetPortId) {
@@ -355,7 +314,7 @@ export function useWorkflowEventHandlers() {
 
     // Clear connection state after drag end
     dispatch({ type: 'CLEAR_CONNECTION_STATE' })
-  }, [operations, dispatch, state.nodes, state.designerMode])
+  }, [operations, dispatch])
 
   // Canvas internal click handler (for WorkflowCanvas component)
   const handleCanvasClickInternal = useCallback(() => {

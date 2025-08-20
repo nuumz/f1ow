@@ -1,5 +1,7 @@
 # Multiple Connections in Architecture Mode
 
+> Canonical spec: See `08-connection-spec.md` for consolidated rules and rendering details.
+
 ## 🎯 Overview
 
 The f1ow Workflow Engine now supports multiple connections between nodes in **Architecture Mode**, specifically designed to accommodate legacy systems with multiple endpoints and complex architectural patterns.
@@ -44,7 +46,7 @@ Enhanced automatic detection criteria:
 - Paths are generated via an adaptive orthogonal router with rounded corners.
 - For “short horizontal” layouts, U-shape routing keeps the termination side consistent (left→left, right→right).
 - Bottom-to-bottom approaches use a U-shape under both nodes to maintain clarity.
-- Arrowheads are trimmed outward (~5.5px) to avoid entering node frames.
+- Arrowheads are trimmed strictly by side (Left: x-5, Right: x+5, Top: y-5, Bottom: y+5) with HALF_MARKER=5 so markers never enter node frames.
 
 ## 🎨 Visual Elements
 
@@ -137,16 +139,13 @@ if (targetPortConnected) {
 const isLegacyTarget =
   targetNode &&
   (targetNode.config?.isLegacyEndpoint ||
-    targetNode.type?.includes("legacy") ||
+    targetNode.type?.includes('legacy') ||
     (targetNode.inputs && targetNode.inputs.length > 3) ||
-    state.connections.filter((c) => c.targetNodeId === targetNodeId).length >=
-      2);
+    state.connections.filter((c) => c.targetNodeId === targetNodeId).length >= 2);
 
 // Allow multiple connections for legacy systems
 if (isLegacyTarget || isLegacySource) {
-  console.log(
-    "🏗️ Architecture mode: Allowing multiple connections for legacy system"
-  );
+  console.log('🏗️ Architecture mode: Allowing multiple connections for legacy system');
   return true;
 }
 
@@ -246,24 +245,18 @@ In architecture mode, AI model nodes can connect to multiple sources:
 The system provides detailed logging for connection operations:
 
 ```javascript
-console.log(
-  "📍 Node background drop (architecture mode) - connecting to port:",
-  nodeId,
-  portId
-);
-console.log("🔍 Port canAccept=true, hasConnection=false");
+console.log('📍 Node background drop (architecture mode) - connecting to port:', nodeId, portId);
+console.log('🔍 Port canAccept=true, hasConnection=false');
 ```
 
 ### Common Issues
 
 1. **Connections Not Appearing**
-
    - Check if in correct mode (Architecture vs Workflow)
    - Verify node types support multiple connections
    - Check console for validation errors
 
 2. **Port Highlighting Issues**
-
    - Ensure proper hover states
    - Check CSS class application
    - Verify designer mode state

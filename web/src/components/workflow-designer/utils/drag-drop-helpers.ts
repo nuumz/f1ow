@@ -163,3 +163,122 @@ export function resolveDragEndTarget(
     }
     return {}
 }
+
+/**
+ * Helper: derive SVG element from a native sourceEvent with optional fallback
+ */
+export function getSvgFromSourceEvent(
+    sourceEvent: Event | null | undefined,
+    fallbackSvg?: SVGSVGElement | null
+): SVGSVGElement | null {
+    if (!sourceEvent?.target) {
+        return fallbackSvg || null
+    }
+    const target = sourceEvent.target as Element
+    if (target instanceof SVGSVGElement) {
+        return target
+    }
+    const svg = target.closest('svg')
+    return svg || fallbackSvg || null
+}
+
+/**
+ * Helper: get canvas coordinates (SVG viewport space) from a native sourceEvent.
+ */
+export function getCanvasCoordsFromSourceEvent(
+    sourceEvent: Event | null | undefined,
+    fallbackSvg?: SVGSVGElement | null
+): [number, number] {
+    const svgElement = getSvgFromSourceEvent(sourceEvent, fallbackSvg)
+    if (!svgElement) {
+        return [0, 0]
+    }
+    const [sx, sy] = d3.pointer(sourceEvent, svgElement)
+    const transform = d3.zoomTransform(svgElement)
+    return transform.invert([sx, sy])
+}
+
+/**
+ * Factory: create standard D3 drag callbacks for ports to avoid duplication.
+ * - startAsType controls whether the drag starts as 'output' or 'input'
+ * - requireTargetOnEnd enforces valid drop before calling onPortDragEnd (else ignored)
+ */
+export function createPortDragCallbacks(params: {
+    startAsType: 'output' | 'input'
+    onPortDragStart: (nodeId: string, portId: string, type: 'input' | 'output') => void
+    onPortDrag: (x: number, y: number) => void
+    onPortDragEnd: (nodeId?: string, portId?: string, x?: number, y?: number) => void
+    nodes: WorkflowNode[]
+    getCapturedStart: () => { nodeId: string; portId: string; type: 'input' | 'output' } | null
+    setCapturedStart: (v: { nodeId: string; portId: string; type: 'input' | 'output' } | null) => void
+    getHitTestPortRadius: (pd: PortDatum) => number
+    resolve: (
+        svg: SVGSVGElement,
+        canvasX: number,
+        canvasY: number,
+        nodes: WorkflowNode[],
+        capturedStart: { nodeId: string; portId: string; type: 'input' | 'output' } | null,
+        radiusAccessor: (pd: PortDatum) => number
+    ) => { nodeId?: string; portId?: string }
+    logTag?: string
+    requireTargetOnEnd?: boolean
+}) {
+    const {
+        startAsType,
+        onPortDragStart,
+        onPortDrag,
+        onPortDragEnd,
+        nodes,
+        getCapturedStart,
+        setCapturedStart,
+        getHitTestPortRadius,
+        resolve,
+        logTag,
+        requireTargetOnEnd,
+    } = params
+
+    function onStart(event: d3.D3DragEvent<Element, unknown, unknown>, d: { nodeId: string; id: string }) {
+        event?.sourceEvent?.stopPropagation?.()
+        event?.sourceEvent?.preventDefault?.()
+        const nodeId = d.nodeId
+        const portId = d.id
+        setCapturedStart({ nodeId, portId, type: startAsType })
+        if (logTag) {
+            console.warn(`🚀 ${logTag} drag START:`, nodeId, portId)
+            console.warn('🔒 Stored drag connection data:', getCapturedStart())
+        }
+        const [canvasX, canvasY] = getCanvasCoordsFromSourceEvent(event?.sourceEvent)
+        onPortDragStart(nodeId, portId, startAsType)
+        onPortDrag(canvasX, canvasY)
+    }
+
+    function onDrag(event: d3.D3DragEvent<Element, unknown, unknown>) {
+        const [canvasX, canvasY] = getCanvasCoordsFromSourceEvent(event?.sourceEvent as Event)
+        if (logTag) {
+            console.warn(`🚀 ${logTag} DRAGGING to:`, canvasX, canvasY)
+        }
+        onPortDrag(canvasX, canvasY)
+    }
+
+    function onEnd(event: d3.D3DragEvent<Element, unknown, unknown>) {
+        if (logTag) {
+            console.warn(`🚀 ${logTag} drag END`)
+        }
+        const svg = getSvgFromSourceEvent(event?.sourceEvent as Event)
+        const [canvasX, canvasY] = getCanvasCoordsFromSourceEvent(event?.sourceEvent as Event)
+        if (svg) {
+            const result = resolve(svg, canvasX, canvasY, nodes, getCapturedStart(), getHitTestPortRadius)
+            if (result.nodeId && result.portId) {
+                onPortDragEnd(result.nodeId, result.portId, canvasX, canvasY)
+            } else if (!requireTargetOnEnd) {
+                onPortDragEnd(undefined, undefined, canvasX, canvasY)
+            }
+        }
+        setCapturedStart(null)
+        if (logTag) {
+            console.warn('🧹 Cleared drag connection data')
+        }
+    }
+
+    return { onStart, onDrag, onEnd }
+}

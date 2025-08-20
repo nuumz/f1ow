@@ -149,6 +149,38 @@
   - Selection tools (single, multi-select)
 - **Export/Import** workflows as JSON
 
+### 2. Connection Path System
+
+The Connection Path System is a sophisticated visual rendering system that handles node interconnections with advanced algorithms and optimizations.
+
+#### Dual-Mode Rendering
+- **Workflow Mode**: Smooth Bézier curves for process flow visualization
+- **Architecture Mode**: Orthogonal Manhattan-style routing for system diagrams
+
+#### Path Generation Algorithms
+- **Adaptive Lead Length**: Dynamic adjustment based on node proximity
+- **U-Shape Routing**: Intelligent detection and routing for close connections
+- **Obstacle Avoidance**: Path calculation to avoid node overlaps
+- **Smart Port Selection**: Automatic optimal port selection for connections
+
+#### Performance Optimizations
+- **Multi-Level Caching**: Path, geometry, and drag position caches
+- **Probabilistic Cache Cleanup**: Adaptive cleanup based on memory pressure (2%-10% sampling)
+- **Drag Position Overrides**: Temporary position updates without cache invalidation
+- **Batch Updates**: RAF scheduling for smooth animations
+
+#### Port Positioning System
+- **Shape-Aware Calculations**: Different algorithms for rectangle, diamond, circle nodes
+- **Variant Scaling**: Support for standard and compact node variants
+- **Bottom Port Distribution**: Optimized spacing for multiple bottom ports
+- **Side Port Support**: Virtual ports for flexible architecture connections
+
+#### Connection Management
+- **Validation Rules**: Mode-specific validation with cycle detection
+- **Connection Grouping**: Bundle multiple connections with count labels
+- **Interactive Features**: Hover effects, click selection, context menus
+- **Error Handling**: Fallback paths and comprehensive validation
+
 ### 2. Execution Engine
 - **DAG-based** execution model
 - **Parallel execution** support

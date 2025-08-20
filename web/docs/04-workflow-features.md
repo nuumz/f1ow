@@ -248,7 +248,10 @@ const WorkflowCanvas = () => {
 }
 ```
 
-#### Connection System
+#### Advanced Connection System
+
+The connection system implements sophisticated path routing algorithms with performance optimizations:
+
 ```typescript
 interface ConnectionManager {
   // Create connection between nodes
@@ -267,12 +270,25 @@ interface ConnectionManager {
     toInput: NodeInput
   ) => boolean
   
-  // Auto-route connection paths
+  // Auto-route connection paths with mode-specific algorithms
   calculatePath: (
     fromPosition: Position,
     toPosition: Position,
-    pathType: 'straight' | 'curved' | 'orthogonal'
+    pathType: 'bezier' | 'orthogonal' | 'u-shape',
+    options?: {
+      avoidNodes?: WorkflowNode[]
+      adaptiveLeadLength?: boolean
+      cacheKey?: string
+    }
   ) => string
+  
+  // Performance optimization features
+  caching: {
+    pathCache: Map<string, string>
+    geometryCache: Map<string, NodeGeometry>
+    invalidateNode: (nodeId: string) => void
+    performCleanup: () => void
+  }
 }
 
 // Connection validation rules

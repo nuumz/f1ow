@@ -25,7 +25,7 @@ import {
   ensureArrowMarkers,
 } from '../utils/marker-utils';
 import { GridPerformanceMonitor } from '../utils/performance-monitor';
-import { ensureDualGridPatterns, renderDualGridRects, GridUtils } from '../utils/grid-patterns';
+import { createGrid } from '../utils/grid-patterns';
 import {
   PERFORMANCE_CONSTANTS,
   GRID_CONSTANTS,
@@ -39,7 +39,14 @@ import {
   type DesignerMode,
 } from '../utils/connection-utils';
 import { getVisibleCanvasBounds } from '../utils/canvas-utils';
-import { calculatePortPosition } from '../utils/port-positioning';
+import {
+  calculatePortPosition,
+  computeRectPortPositions,
+  computeCirclePortPositions,
+  computeDiamondPortPositions,
+} from '../utils/port-positioning';
+import { canBottomPortAcceptConnection, getPortHighlightClass } from '../utils/port-visuals';
+import { createFilledPolygonFromPath } from '../utils/path-generation';
 import {
   createD3SelectionCache,
   createRafScheduler,
@@ -62,6 +69,15 @@ import {
   setupRovingTabIndex,
   attachRovingHandlers,
 } from '../utils/accessibility-helpers';
+import {
+  processBatchedVisualUpdates,
+  processBatchedConnectionUpdates,
+  updateDraggedNodePosition,
+  resetNodeVisualStyle,
+  clearAllVisualCaches,
+  type DragPositionConfig,
+  type VisualCacheConfig,
+} from '../utils/visual-state-manager';
 
 // Shared aliases to reduce repetition and satisfy lint rules
 type MarkerState = 'default' | 'selected' | 'hover';
@@ -510,104 +526,23 @@ function WorkflowCanvas({
   const GRID_CACHE_DURATION = PERFORMANCE_CONSTANTS.GRID_CACHE_DURATION;
 
   // High-performance pattern-based grid creation with enhanced caching and performance monitoring
-  const createGrid = useCallback(
+  const createGridCallback = useCallback(
     (
       gridLayer: d3.Selection<SVGGElement, unknown, null, undefined>,
       transform: { x: number; y: number; k: number },
       viewportWidth: number,
       viewportHeight: number
     ) => {
-      const startTime = performance.now();
-
-      // Early exit and cleanup if grid is hidden
-      if (!showGrid) {
-        gridLayer.selectAll('.grid-pattern-rect').remove();
-        return;
-      }
-
-      // Resolve owning SVG and defs
-      const owningSvg = gridLayer.node()?.ownerSVGElement;
-      if (!owningSvg) {
-        return;
-      }
-      const svgSelection = d3.select(owningSvg);
-      let defs = svgSelection.select<SVGDefsElement>('defs');
-      if (defs.empty()) {
-        defs = svgSelection.insert<SVGDefsElement>('defs', ':first-child');
-      }
-
-      // Ensure patterns exist (base + major) via utility
-      const baseSize = GRID_CONSTANTS.BASE_GRID_SIZE;
-      const { patternId, majorPatternId } = ensureDualGridPatterns(defs, transform.k, baseSize);
-
-      // PERFORMANCE: Selective clearing - only remove grid elements, preserve other content
-      gridLayer.selectAll('.grid-pattern-rect').remove();
-
-      // Enhanced bounds calculation with intelligent padding using GridUtils
-      const padding = GridUtils.calculateIntelligentPadding(transform.k);
-      const bounds = getVisibleCanvasBounds(transform, viewportWidth, viewportHeight, padding);
-
-      // Validate bounds to prevent invalid rectangles
-      if (bounds.width <= 0 || bounds.height <= 0) {
-        console.warn('🚨 Grid: Invalid bounds calculated', bounds);
-        return;
-      }
-
-      // Render layered rects via utility
-      renderDualGridRects(gridLayer, bounds, patternId, majorPatternId);
-
-      // Enhanced cache with all necessary data and performance tracking
-      const renderTime = performance.now() - startTime;
-      gridPerformanceRef.current?.recordRender(renderTime);
-
-      // Store current viewport size for debugging/inspection
-      gridLayer.attr(
-        'data-grid-size',
-        `${Math.round(viewportWidth)}x${Math.round(viewportHeight)}`
-      );
-
-      // Update grid cache
-      const now = performance.now();
-      const cacheKey = JSON.stringify({
-        k: transform.k,
-        x: Math.round(transform.x),
-        y: Math.round(transform.y),
-        vw: Math.round(viewportWidth),
-        vh: Math.round(viewportHeight),
+      createGrid(gridLayer, transform, viewportWidth, viewportHeight, {
+        showGrid,
+        gridCacheRef,
+        gridPerformanceRef,
+        getVisibleCanvasBounds,
+        GRID_CONSTANTS,
+        dbg,
       });
-      gridCacheRef.current = {
-        transform: cacheKey,
-        pattern: `${patternId},${majorPatternId}`,
-        lastRenderTime: now,
-        viewport: { width: viewportWidth, height: viewportHeight },
-        bounds,
-      };
-
-      // Reduced performance logging - only show summary periodically in dev
-      if (process.env.NODE_ENV === 'development' && gridPerformanceRef.current) {
-        const metrics = gridPerformanceRef.current.getMetrics();
-        if (metrics.renderCount % GRID_CONSTANTS.PERFORMANCE_LOG_INTERVAL === 0) {
-          dbg.warn('🔍 Grid Performance Summary (every 100 renders)', {
-            renderTime: `${renderTime.toFixed(2)}ms`,
-            avgRenderTime: `${metrics.avgRenderTime.toFixed(2)}ms`,
-            cacheHitRate: `${metrics.cacheHitRate.toFixed(1)}%`,
-            totalRenders: metrics.renderCount,
-          });
-        }
-        const report = gridPerformanceRef.current.getPerformanceReport();
-        if (
-          (report.status === 'warning' || report.status === 'poor') &&
-          metrics.renderCount % GRID_CONSTANTS.PERFORMANCE_WARNING_INTERVAL === 0
-        ) {
-          console.warn(
-            `🚨 Grid Performance ${report.status.toUpperCase()} (every 50th):`,
-            report.summary
-          );
-        }
-      }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [showGrid] // GRID_CACHE_DURATION is const and doesn't need to be included
+    [showGrid, dbg]
   );
 
   // Enhanced cache and memory management utilities (connection path cache handled by hook)
@@ -685,231 +620,10 @@ function WorkflowCanvas({
   // Track current drag positions to prevent position conflicts
   const currentDragPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
 
-  /**
-   * Function to check if a bottom port can accept additional connections
-   * Based on business rules for different port types:
-   * - ai-model: Single connection only (no plus button when connected)
-   * - memory: Single connection only (no plus button when connected)
-   * - tool: Multiple connections allowed (always show plus button)
-   * - Other array types: Multiple connections allowed
-   * - Other single types: Single connection only
-   */
-  const canBottomPortAcceptConnection = useCallback(
-    (
-      nodeId: string,
-      portId: string,
-      connections: Connection[],
-      designerMode?: 'workflow' | 'architecture'
-    ) => {
-      // Get the node to check its bottom ports configuration
-      const node = nodeMap.get(nodeId);
-      if (!node?.bottomPorts) {
-        return false;
-      }
-
-      const port = node.bottomPorts.find((p) => p.id === portId);
-      if (!port) {
-        return false;
-      }
-
-      // Count existing connections for this port
-      const existingConnections = connections.filter(
-        (conn: Connection) => conn.sourceNodeId === nodeId && conn.sourcePortId === portId
-      );
-
-      // In architecture mode, allow multiple connections across all bottom ports
-      if (designerMode === 'architecture') {
-        return true;
-      }
-
-      // Original workflow mode logic (stricter validation)
-      switch (portId) {
-        case 'ai-model':
-          // AI Model port: Only allows 1 connection (can replace existing)
-          // Show plus button only when no connection exists
-          return existingConnections.length === 0;
-
-        case 'memory':
-          // Memory port: Typically allows only 1 connection
-          return existingConnections.length === 0;
-
-        case 'tool':
-          // Tool port: Allows multiple connections (array of tools)
-          return true;
-
-        default:
-          // For other ports, check if dataType suggests multiple connections
-          if (port.dataType === 'array') {
-            // Array types can accept multiple connections
-            return true;
-          } else {
-            // Single value types typically allow only one connection
-            return existingConnections.length === 0;
-          }
-      }
-    },
-    [nodeMap]
-  );
-
-  // Helper function to check if a port has multiple connections
-  const hasMultipleConnections = useCallback(
-    (nodeId: string, portId: string, portType: 'input' | 'output') => {
-      if (portType === 'input') {
-        return (
-          connections.filter(
-            (conn: Connection) => conn.targetNodeId === nodeId && conn.targetPortId === portId
-          ).length > 1
-        );
-      } else {
-        return (
-          connections.filter(
-            (conn: Connection) => conn.sourceNodeId === nodeId && conn.sourcePortId === portId
-          ).length > 1
-        );
-      }
-    },
-    [connections]
-  );
-
-  // Legacy endpoint detection removed - no longer needed since legacy badges are removed
-
-  // Enhanced port highlighting for architecture mode
-  const getPortHighlightClass = useCallback(
-    (nodeId: string, portId: string, portType: 'input' | 'output') => {
-      if (workflowContextState.designerMode !== 'architecture') {
-        return '';
-      }
-
-      const isMultiple = hasMultipleConnections(nodeId, portId, portType);
-      const classes = [];
-
-      if (isMultiple) {
-        classes.push('has-multiple-connections');
-      }
-
-      return classes.join(' ');
-    },
-    [workflowContextState.designerMode, hasMultipleConnections]
-  );
-
   // Helper function to create a filled polygon from a path with thickness
-  const createFilledPolygonFromPath = useCallback(
+  const createFilledPolygonFromPathCallback = useCallback(
     (pathString: string, thickness: number = 6): string => {
-      if (!pathString) {
-        return '';
-      }
-
-      try {
-        // Create a temporary SVG path element in memory to get path data
-        const tempSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        tempSvg.style.position = 'absolute';
-        tempSvg.style.visibility = 'hidden';
-        tempSvg.style.width = '1px';
-        tempSvg.style.height = '1px';
-
-        const tempPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        tempPath.setAttribute('d', pathString);
-        tempSvg.appendChild(tempPath);
-
-        // Add to SVG container temporarily (not body)
-        const svgContainer = svgRef.current;
-        if (!svgContainer) {
-          return pathString;
-        }
-        svgContainer.appendChild(tempSvg);
-
-        // Get total length and sample points along the path
-        const pathLength = tempPath.getTotalLength();
-        const numSamples = Math.max(20, Math.floor(pathLength / 10)); // Sample every 10 pixels
-        const points: Array<{ x: number; y: number }> = [];
-
-        for (let i = 0; i <= numSamples; i++) {
-          const distance = (i / numSamples) * pathLength;
-          const point = tempPath.getPointAtLength(distance);
-          points.push({ x: point.x, y: point.y });
-        }
-
-        // Remove temporary SVG
-        svgContainer.removeChild(tempSvg);
-
-        if (points.length < 2) {
-          return pathString;
-        }
-
-        // Calculate perpendicular offsets for each point
-        const leftPoints: Array<{ x: number; y: number }> = [];
-        const rightPoints: Array<{ x: number; y: number }> = [];
-
-        for (let i = 0; i < points.length; i++) {
-          const curr = points[i];
-          let dx = 0,
-            dy = 0;
-
-          if (i === 0) {
-            // First point - use direction to next point
-            const next = points[i + 1];
-            dx = next.x - curr.x;
-            dy = next.y - curr.y;
-          } else if (i === points.length - 1) {
-            // Last point - use direction from previous point
-            const prev = points[i - 1];
-            dx = curr.x - prev.x;
-            dy = curr.y - prev.y;
-          } else {
-            // Middle points - use average of directions
-            const prev = points[i - 1];
-            const next = points[i + 1];
-            dx = next.x - prev.x;
-            dy = next.y - prev.y;
-          }
-
-          // Normalize direction vector
-          const len = Math.sqrt(dx * dx + dy * dy);
-          if (len > 0) {
-            dx /= len;
-            dy /= len;
-          } else {
-            dx = 0;
-            dy = 1;
-          }
-
-          // Calculate perpendicular vector (rotate 90 degrees)
-          const perpX = -dy * thickness;
-          const perpY = dx * thickness;
-
-          // Add offset points on both sides
-          leftPoints.push({ x: curr.x + perpX, y: curr.y + perpY });
-          rightPoints.push({ x: curr.x - perpX, y: curr.y - perpY });
-        }
-
-        // Build the polygon path
-        let polygonPath = `M ${leftPoints[0].x} ${leftPoints[0].y}`;
-
-        // Trace left side
-        for (let i = 1; i < leftPoints.length; i++) {
-          polygonPath += ` L ${leftPoints[i].x} ${leftPoints[i].y}`;
-        }
-
-        // Add arc at the end
-        const endRadius = thickness;
-        polygonPath += ` A ${endRadius} ${endRadius} 0 0 1 ${
-          rightPoints[rightPoints.length - 1].x
-        } ${rightPoints[rightPoints.length - 1].y}`;
-
-        // Trace right side (in reverse)
-        for (let i = rightPoints.length - 2; i >= 0; i--) {
-          polygonPath += ` L ${rightPoints[i].x} ${rightPoints[i].y}`;
-        }
-
-        // Add arc at the start and close path
-        polygonPath += ` A ${endRadius} ${endRadius} 0 0 1 ${leftPoints[0].x} ${leftPoints[0].y}`;
-        polygonPath += ' Z';
-
-        return polygonPath;
-      } catch (error) {
-        console.warn('Error creating filled polygon:', error);
-        return pathString;
-      }
+      return createFilledPolygonFromPath(pathString, thickness, svgRef.current);
     },
     [svgRef]
   );
@@ -974,63 +688,6 @@ function WorkflowCanvas({
   // Rect-like (rectangle/square) port positions. For squares, the rendered path uses an inner 0.8 scale
   // (see shape-utils.getShapePath for 'square'), so use the inner edge for port centers to match
   // connection anchors from shape-utils.getPortPositions.
-  function computeRectPortPositions(
-    dimensions: { width: number; height: number },
-    portCount: number,
-    portType: 'input' | 'output',
-    shape: 'rectangle' | 'square'
-  ): Array<{ x: number; y: number }> {
-    const spacing = dimensions.height / (portCount + 1);
-    const positions: Array<{ x: number; y: number }> = [];
-    for (let i = 0; i < portCount; i++) {
-      const y = -dimensions.height / 2 + spacing * (i + 1);
-      // For squares, the path inner half-size is width/2 * 0.8; for rectangles it's width/2
-      const half = shape === 'square' ? (dimensions.width / 2) * 0.8 : dimensions.width / 2;
-      const x = portType === 'input' ? -half : half;
-      positions.push({ x, y });
-    }
-    return positions;
-  }
-
-  function computeCirclePortPositions(
-    dimensions: { width: number; height: number },
-    portCount: number
-  ): Array<{ x: number; y: number }> {
-    const angleStep = (Math.PI * 2) / Math.max(1, portCount);
-    const radius = Math.min(dimensions.width, dimensions.height) / 2;
-    const positions: Array<{ x: number; y: number }> = [];
-    for (let i = 0; i < portCount; i++) {
-      const angle = angleStep * i;
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius;
-      positions.push({ x, y });
-    }
-    return positions;
-  }
-
-  function computeDiamondPortPositions(
-    dimensions: { width: number; height: number },
-    portCount: number,
-    portType: 'input' | 'output'
-  ): Array<{ x: number; y: number }> {
-    const halfWidth = dimensions.width / 2;
-    const effectiveHalfHeight = (dimensions.height / 2) * 0.75;
-    const effectiveHeight = effectiveHalfHeight * 2;
-    const spacing = Math.min(25, effectiveHeight / (portCount + 1));
-    const startY = -((portCount - 1) * spacing) / 2;
-    const positions: Array<{ x: number; y: number }> = [];
-    for (let i = 0; i < portCount; i++) {
-      const y = startY + i * spacing;
-      const widthAtY = Math.max(
-        0,
-        halfWidth * (1 - Math.min(1, Math.abs(y) / Math.max(1e-6, effectiveHalfHeight)))
-      );
-      const x = (portType === 'input' ? -1 : 1) * widthAtY;
-      positions.push({ x, y });
-    }
-    return positions;
-  }
-
   // Memoized port positions calculation using configurable dimensions
   const getConfigurablePortPositions = useMemo(() => {
     const positionsCache = new Map<string, any>();
@@ -1073,48 +730,17 @@ function WorkflowCanvas({
   // Removed local bottom port layout; use calculatePortPosition for accuracy across modes/variants
 
   // Enhanced visual feedback system with batching and caching
-  const processBatchedVisualUpdates = useCallback(() => {
-    if (visualUpdateQueueRef.current.size === 0) {
-      return;
-    }
-    const start = performance.now();
-    if (!(window as any).__wfAdaptive) {
-      (window as any).__wfAdaptive = { vBudget: 4, lastDuration: 0 };
-    }
-    const adaptive = (window as any).__wfAdaptive as {
-      vBudget: number;
-      lastDuration: number;
-    };
-    const MAX_MS = adaptive.vBudget;
-    for (const nodeId of Array.from(visualUpdateQueueRef.current)) {
-      if (performance.now() - start > MAX_MS) {
-        break;
+  const processBatchedVisualUpdatesCallback = useCallback(() => {
+    const hasMore = processBatchedVisualUpdates(
+      visualUpdateQueueRef.current,
+      allNodeElementsRef.current,
+      () => {
+        batchedVisualUpdateRef.current = null;
       }
-      const element = allNodeElementsRef.current.get(nodeId);
-      if (!element) {
-        visualUpdateQueueRef.current.delete(nodeId);
-        continue;
-      }
-      const nodeElement = d3.select(element);
-      const nodeBackground = nodeElement.select('.node-background');
-      nodeElement
-        .style('opacity', 0.9)
-        .style('filter', 'drop-shadow(0 6px 12px rgba(0, 0, 0, 0.3))');
-      nodeBackground.attr('stroke', '#2196F3').attr('stroke-width', 3);
-      visualUpdateQueueRef.current.delete(nodeId);
-    }
-    if (visualUpdateQueueRef.current.size > 0) {
-      batchedVisualUpdateRef.current = requestAnimationFrame(processBatchedVisualUpdates);
-    } else {
-      batchedVisualUpdateRef.current = null;
-    }
-    const duration = performance.now() - start;
-    adaptive.lastDuration = duration;
-    const usage = duration / MAX_MS;
-    if (usage < 0.6 && adaptive.vBudget < 6) {
-      adaptive.vBudget += 0.25;
-    } else if (usage > 0.9 && adaptive.vBudget > 2) {
-      adaptive.vBudget -= 0.25;
+    );
+
+    if (hasMore) {
+      batchedVisualUpdateRef.current = requestAnimationFrame(processBatchedVisualUpdatesCallback);
     }
   }, []);
 
@@ -1145,161 +771,87 @@ function WorkflowCanvas({
   }, [connections]);
 
   // Batched connection update system for better performance
-  const processBatchedConnectionUpdates = useCallback(() => {
-    if (connectionUpdateQueueRef.current.size === 0) {
-      return;
-    }
-
-    // PERFORMANCE: Use cached DOM selections to avoid repeated queries
+  const processBatchedConnectionUpdatesCallback = useCallback(() => {
     const connectionLayer = getCachedSelection('connectionLayer');
     if (!connectionLayer) {
       return;
     }
 
-    // PERFORMANCE: Optimized batching - process more items but with time slicing
-    const nodesToProcess = Array.from(connectionUpdateQueueRef.current);
-    const startTime = performance.now();
-    if (!(window as any).__wfConnAdaptive) {
-      (window as any).__wfConnAdaptive = { cBudget: 8, lastDuration: 0 };
-    }
-    const connAdaptive = (window as any).__wfConnAdaptive as {
-      cBudget: number;
-      lastDuration: number;
-    };
-    const maxProcessingTime = connAdaptive.cBudget;
-    // Time-slice processing counter removed as it's not used for reporting
-
-    for (const nodeId of nodesToProcess) {
-      // Time-slice processing to avoid blocking main thread
-      if (performance.now() - startTime > maxProcessingTime) {
-        break;
+    const hasMore = processBatchedConnectionUpdates(
+      connectionUpdateQueueRef.current,
+      nodeConnectionsMap,
+      connectionLayer,
+      getConnectionPath,
+      () => {
+        batchedConnectionUpdateRef.current = null;
       }
+    );
 
-      const affectedConnections = nodeConnectionsMap.get(nodeId) || [];
-      if (affectedConnections.length === 0) {
-        connectionUpdateQueueRef.current.delete(nodeId);
-        continue;
-      }
-
-      // PERFORMANCE: Batch DOM operations together
-      const connectionElements = affectedConnections
-        .map((conn) => ({
-          conn,
-          element: connectionLayer.select(`[data-connection-id="${conn.id}"]`),
-        }))
-        .filter(({ element }) => !element.empty());
-
-      // Update all paths in a single batch
-      connectionElements.forEach(({ conn, element }) => {
-        const pathElement = element.select('.connection-path');
-        const newPath = getConnectionPath(conn, true);
-        pathElement.attr('d', newPath);
-      });
-
-      connectionUpdateQueueRef.current.delete(nodeId);
+    if (hasMore) {
+      batchedConnectionUpdateRef.current = requestAnimationFrame(
+        processBatchedConnectionUpdatesCallback
+      );
     }
+  }, [nodeConnectionsMap, getConnectionPath, getCachedSelection]);
 
-    // Schedule next batch if there are more connections to process
-    if (connectionUpdateQueueRef.current.size > 0) {
-      batchedConnectionUpdateRef.current = requestAnimationFrame(processBatchedConnectionUpdates);
-    } else {
-      batchedConnectionUpdateRef.current = null;
-    }
-    const duration = performance.now() - startTime;
-    connAdaptive.lastDuration = duration;
-    const usage = duration / maxProcessingTime;
-    if (usage < 0.55 && connAdaptive.cBudget < 10) {
-      connAdaptive.cBudget += 0.5;
-    } else if (usage > 0.9 && connAdaptive.cBudget > 4) {
-      connAdaptive.cBudget -= 0.5;
-    }
-  }, [nodeConnectionsMap, getConnectionPath, getCachedSelection]); // Include required dependencies
-
-  const updateDraggedNodePosition = useCallback(
+  const updateDraggedNodePositionCallback = useCallback(
     (nodeId: string, newX: number, newY: number) => {
-      // Always update node position immediately for smooth dragging
-      if (draggedElementRef.current) {
-        draggedElementRef.current.attr('transform', `translate(${newX}, ${newY})`);
-      }
+      const dragConfig: DragPositionConfig = {
+        draggedElement: draggedElementRef.current,
+        currentDragPositions: currentDragPositionsRef.current,
+        updateConnDragPos,
+        nodeConnectionsMap,
+        connectionUpdateQueue: connectionUpdateQueueRef.current,
+        lastDragUpdate: lastDragUpdateRef,
+        dragUpdateThrottle,
+        startBatchedConnectionUpdates: () => {
+          if (!batchedConnectionUpdateRef.current) {
+            batchedConnectionUpdateRef.current = requestAnimationFrame(
+              processBatchedConnectionUpdatesCallback
+            );
+          }
+        },
+      };
 
-      // Store current drag position
-      currentDragPositionsRef.current.set(nodeId, { x: newX, y: newY });
-      // Sync with connection paths hook for live path updates during drag
-      updateConnDragPos(nodeId, { x: newX, y: newY });
-
-      // Throttle connection updates to improve performance
-      const now = Date.now();
-      if (now - lastDragUpdateRef.current < dragUpdateThrottle) {
-        return;
-      }
-      lastDragUpdateRef.current = now;
-
-      // Queue connection updates for batched processing
-      const affectedConnections = nodeConnectionsMap.get(nodeId) || [];
-      if (affectedConnections.length > 0) {
-        connectionUpdateQueueRef.current.add(nodeId);
-
-        // Start batched processing if not already running
-        if (!batchedConnectionUpdateRef.current) {
-          batchedConnectionUpdateRef.current = requestAnimationFrame(
-            processBatchedConnectionUpdates
-          );
-        }
-      }
+      updateDraggedNodePosition(nodeId, newX, newY, dragConfig);
     },
-    [nodeConnectionsMap, processBatchedConnectionUpdates, dragUpdateThrottle, updateConnDragPos]
+    [
+      nodeConnectionsMap,
+      dragUpdateThrottle,
+      updateConnDragPos,
+      processBatchedConnectionUpdatesCallback,
+    ]
   );
 
-  const resetNodeVisualStyle = useCallback(
+  const resetNodeVisualStyleCallback = useCallback(
     (nodeElement: any, nodeId: string) => {
-      const isSelected = isNodeSelected(nodeId);
-      const nodeBackground = nodeElement.select('.node-background');
-      const node = nodeMap.get(nodeId);
-
-      if (isSelected) {
-        nodeElement
-          .style('opacity', 1)
-          .style('filter', 'drop-shadow(0 0 8px rgba(33, 150, 243, 0.5))');
-        nodeBackground.attr('stroke', '#2196F3').attr('stroke-width', 3);
-      } else {
-        nodeElement.style('opacity', 1).style('filter', 'none');
-        if (node) {
-          nodeBackground
-            .attr('stroke', getNodeColor(node.type, node.status))
-            .attr('stroke-width', 2);
-        }
-      }
+      resetNodeVisualStyle(nodeElement, nodeId, isNodeSelected, nodeMap);
     },
     [isNodeSelected, nodeMap]
   );
 
   // Enhanced cache management with memory optimization
-  const clearAllCaches = useCallback(() => {
-    // Clear connection path cache in hook
-    clearConnCache();
-    nodePositionCacheRef.current.clear();
-    // Removed: lastConnectionPathsRef (replaced by hook cache)
-    currentDragPositionsRef.current.clear();
-    clearAllDragPositions();
-    connectionUpdateQueueRef.current.clear();
-    visualUpdateQueueRef.current.clear();
-    zIndexManager.clearState();
-    rafScheduler.clear();
-    if (batchedConnectionUpdateRef.current) {
-      cancelAnimationFrame(batchedConnectionUpdateRef.current);
-      batchedConnectionUpdateRef.current = null;
-    }
-    if (batchedVisualUpdateRef.current) {
-      cancelAnimationFrame(batchedVisualUpdateRef.current);
-      batchedVisualUpdateRef.current = null;
-    }
-    // rafScheduler handles internal RAF cleanup
+  const clearAllCachesCallback = useCallback(() => {
+    const cacheConfig: VisualCacheConfig = {
+      nodePositionCache: nodePositionCacheRef.current,
+      currentDragPositions: currentDragPositionsRef.current,
+      connectionUpdateQueue: connectionUpdateQueueRef.current,
+      visualUpdateQueue: visualUpdateQueueRef.current,
+      clearConnCache,
+      clearAllDragPositions,
+      zIndexManager,
+      rafScheduler,
+      batchedConnectionUpdateRef,
+      batchedVisualUpdateRef,
+    };
+
+    clearAllVisualCaches(cacheConfig);
   }, [clearConnCache, clearAllDragPositions, zIndexManager, rafScheduler]);
 
   // Clear caches when nodes change
   useEffect(() => {
-    clearAllCaches();
-  }, [nodes, clearAllCaches]);
+    clearAllCachesCallback();
+  }, [nodes, clearAllCachesCallback]);
 
   // Clear connection paths when connections change
   useEffect(() => {
@@ -1562,7 +1114,7 @@ function WorkflowCanvas({
         const newY = dragData.initialY + deltaY;
 
         // Throttle visual updates with debounced RAF
-        updateDraggedNodePosition(d.id, newX, newY);
+        updateDraggedNodePositionCallback(d.id, newX, newY);
 
         // Notify parent component
         onNodeDrag(d.id, newX, newY);
@@ -1605,7 +1157,7 @@ function WorkflowCanvas({
         visualUpdateQueueRef.current.delete(d.id);
 
         // Reset visual styles
-        resetNodeVisualStyle(nodeElement, d.id);
+        resetNodeVisualStyleCallback(nodeElement, d.id);
 
         // Reorganize z-index immediately after drag ends to restore proper order
         zIndexManager.organizeNodeZIndexImmediate(); // immediate layering
@@ -1973,8 +1525,20 @@ function WorkflowCanvas({
               (conn.sourceNodeId === d.nodeId && conn.sourcePortId === d.id) ||
               (conn.targetNodeId === d.nodeId && conn.targetPortId === d.id)
           );
-          const inputHL = getPortHighlightClass(d.nodeId, d.id, 'input');
-          const outputHL = getPortHighlightClass(d.nodeId, d.id, 'output');
+          const inputHL = getPortHighlightClass(
+            d.nodeId,
+            d.id,
+            'input',
+            connections,
+            workflowContextState.designerMode
+          );
+          const outputHL = getPortHighlightClass(
+            d.nodeId,
+            d.id,
+            'output',
+            connections,
+            workflowContextState.designerMode
+          );
           const classes = ['side-port-group', 'port-group'];
           // Architecture mode rule update:
           // - Always keep side-ports as 'side-port-group' only (no input-port-group/output-port-group)
@@ -2125,6 +1689,7 @@ function WorkflowCanvas({
               d.nodeId,
               d.id,
               connections,
+              nodeMap,
               workflowContextState.designerMode
             );
           }
@@ -2142,6 +1707,7 @@ function WorkflowCanvas({
               d.nodeId,
               d.id,
               connections,
+              nodeMap,
               workflowContextState.designerMode
             );
             if (canAcceptMore) {
@@ -2183,6 +1749,7 @@ function WorkflowCanvas({
             d.nodeId,
             d.id,
             connections,
+            nodeMap,
             workflowContextState.designerMode
           );
           if (process.env.NODE_ENV === 'development') {
@@ -2454,7 +2021,7 @@ function WorkflowCanvas({
         connections,
         onConnectionClick,
         getConnectionPath: (c) => getConnectionPath(c),
-        createFilledPolygonFromPath,
+        createFilledPolygonFromPath: createFilledPolygonFromPathCallback,
         getConnectionMarker,
         getConnectionGroupInfo: (id, list) => getConnectionGroupInfo(id, list),
         workflowMode: workflowContextState.designerMode as DesignerMode,
@@ -2469,7 +2036,7 @@ function WorkflowCanvas({
     workflowContextState.designerMode,
     nodeMap,
     onConnectionClick,
-    createFilledPolygonFromPath,
+    createFilledPolygonFromPathCallback,
     getConnectionMarker,
     svgRef,
     zIndexManager,
@@ -2516,7 +2083,7 @@ function WorkflowCanvas({
       const gridLayerElement = gridLayer.node();
       if (gridLayerElement) {
         const typedGridLayer = d3.select(gridLayerElement as SVGGElement);
-        createGrid(typedGridLayer, canvasTransform, rect.width, rect.height);
+        createGridCallback(typedGridLayer, canvasTransform, rect.width, rect.height);
       }
     } catch (error) {
       console.error('Error in grid rendering effect:', error);
@@ -2725,8 +2292,8 @@ function WorkflowCanvas({
 
     // Update grid and toolbar
     const rect = svgRef.current.getBoundingClientRect();
-    createGrid(gridLayer as any, canvasTransform, rect.width, rect.height);
-  }, [canvasTransform, isInitialized, createGrid, svgRef]);
+    createGridCallback(gridLayer as any, canvasTransform, rect.width, rect.height);
+  }, [canvasTransform, isInitialized, createGridCallback, svgRef]);
 
   // Cleanup effect
   useEffect(() => {

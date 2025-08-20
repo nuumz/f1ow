@@ -978,3 +978,127 @@ function generateVerticalToHorizontal3Bend(
 
   return points
 }
+
+/**
+ * Creates a filled polygon from a path with specified thickness
+ * Useful for creating thick connection paths or hover targets
+ */
+export function createFilledPolygonFromPath(
+  pathString: string,
+  thickness: number = 6,
+  svgContainer?: SVGSVGElement | null
+): string {
+  if (!pathString) {
+    return ''
+  }
+
+  try {
+    // Create a temporary SVG path element in memory to get path data
+    const tempSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    tempSvg.style.position = 'absolute'
+    tempSvg.style.visibility = 'hidden'
+    tempSvg.style.width = '1px'
+    tempSvg.style.height = '1px'
+
+    const tempPath = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+    tempPath.setAttribute('d', pathString)
+    tempSvg.appendChild(tempPath)
+
+    // Add to SVG container temporarily (not body)
+    if (!svgContainer) {
+      return pathString
+    }
+    svgContainer.appendChild(tempSvg)
+
+    // Get total length and sample points along the path
+    const pathLength = tempPath.getTotalLength()
+    const numSamples = Math.max(20, Math.floor(pathLength / 10)) // Sample every 10 pixels
+    const points: Array<{ x: number; y: number }> = []
+
+    for (let i = 0; i <= numSamples; i++) {
+      const distance = (i / numSamples) * pathLength
+      const point = tempPath.getPointAtLength(distance)
+      points.push({ x: point.x, y: point.y })
+    }
+
+    // Remove temporary SVG
+    svgContainer.removeChild(tempSvg)
+
+    if (points.length < 2) {
+      return pathString
+    }
+
+    // Calculate perpendicular offsets for each point
+    const leftPoints: Array<{ x: number; y: number }> = []
+    const rightPoints: Array<{ x: number; y: number }> = []
+
+    for (let i = 0; i < points.length; i++) {
+      const curr = points[i]
+      let dx = 0,
+        dy = 0
+
+      if (i === 0) {
+        // First point - use direction to next point
+        const next = points[i + 1]
+        dx = next.x - curr.x
+        dy = next.y - curr.y
+      } else if (i === points.length - 1) {
+        // Last point - use direction from previous point
+        const prev = points[i - 1]
+        dx = curr.x - prev.x
+        dy = curr.y - prev.y
+      } else {
+        // Middle points - use average of directions
+        const prev = points[i - 1]
+        const next = points[i + 1]
+        dx = next.x - prev.x
+        dy = next.y - prev.y
+      }
+
+      // Normalize direction vector
+      const len = Math.sqrt(dx * dx + dy * dy)
+      if (len > 0) {
+        dx /= len
+        dy /= len
+      } else {
+        dx = 0
+        dy = 1
+      }
+
+      // Calculate perpendicular vector (rotate 90 degrees)
+      const perpX = -dy * thickness
+      const perpY = dx * thickness
+
+      // Add offset points on both sides
+      leftPoints.push({ x: curr.x + perpX, y: curr.y + perpY })
+      rightPoints.push({ x: curr.x - perpX, y: curr.y - perpY })
+    }
+
+    // Build the polygon path
+    let polygonPath = `M ${leftPoints[0].x} ${leftPoints[0].y}`
+
+    // Trace left side
+    for (let i = 1; i < leftPoints.length; i++) {
+      polygonPath += ` L ${leftPoints[i].x} ${leftPoints[i].y}`
+    }
+
+    // Add arc at the end
+    const endRadius = thickness
+    polygonPath += ` A ${endRadius} ${endRadius} 0 0 1 ${rightPoints[rightPoints.length - 1].x
+      } ${rightPoints[rightPoints.length - 1].y}`
+
+    // Trace right side (in reverse)
+    for (let i = rightPoints.length - 2; i >= 0; i--) {
+      polygonPath += ` L ${rightPoints[i].x} ${rightPoints[i].y}`
+    }
+
+    // Add arc at the start and close path
+    polygonPath += ` A ${endRadius} ${endRadius} 0 0 1 ${leftPoints[0].x} ${leftPoints[0].y}`
+    polygonPath += ' Z'
+
+    return polygonPath
+  } catch (error) {
+    console.warn('Error creating filled polygon:', error)
+    return pathString
+  }
+}

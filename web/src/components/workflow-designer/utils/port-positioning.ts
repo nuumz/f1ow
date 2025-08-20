@@ -60,21 +60,21 @@ export function calculateBottomPortRelativeX(
     // Single port: center it
     return 0
   }
-  
+
   if (portCount === 2) {
     // Two ports: optimized positioning for visual balance
     const spacing = usableWidth / 3 // Divide available space into thirds
     const positions = [-spacing, spacing] // Place at 1/3 and 2/3 positions
     return positions[portIndex] || 0
   }
-  
+
   if (portCount === 3) {
     // Three ports: center one, balance others
     const halfWidth = usableWidth / 2
     const positions = [-halfWidth, 0, halfWidth]
     return positions[portIndex] || 0
   }
-  
+
   // Multiple ports (4+): distribute evenly with optimal spacing
   const spacing = usableWidth / (portCount - 1)
   return -usableWidth / 2 + spacing * portIndex
@@ -94,7 +94,7 @@ export function calculateBottomPortLayout(
   const scale = getVariantScale(variant)
   const usableWidth = calculateUsableWidth(nodeWidth)
   const relativeX = calculateBottomPortRelativeX(portIndex, portCount, usableWidth)
-  
+
   return {
     usableWidth,
     relativeX,
@@ -113,25 +113,25 @@ export function calculateBottomPortPosition(
   if (!node.bottomPorts) {
     return null
   }
-  
+
   const bottomPort = node.bottomPorts.find(p => p.id === portId)
   if (!bottomPort) {
     return null
   }
-  
+
   const bottomPortIndex = node.bottomPorts.indexOf(bottomPort)
   const dimensions = getShapeAwareDimensions(node)
   const nodeHeight = dimensions.height || 80
-  
+
   const layout = calculateBottomPortLayout(node, bottomPortIndex, variant)
-  
+
   const portX = node.x + (layout.relativeX * layout.scale)
   // If the node is a diamond, its rendered bottom tip is at 0.75 * halfHeight
   const shape = getNodeShape(node.type)
   const halfH = (nodeHeight / 2)
   const bottomOffset = shape === 'diamond' ? halfH * 0.75 : halfH
   const portY = node.y + (bottomOffset * layout.scale)
-  
+
   return { x: portX, y: portY }
 }
 
@@ -148,14 +148,14 @@ export function calculateRegularPortPosition(
   const ports = portType === 'input' ? node.inputs : node.outputs
   const port = ports.find(p => p.id === portId)
   const portIndex = port ? ports.indexOf(port) : 0
-  
+
   // Get shape-aware port positions
   const portPositions = getPortPositions(node, portType)
   const basePosition = portPositions[portIndex] || { x: 0, y: 0 }
-  
+
   // Apply variant scaling
   const scale = getVariantScale(variant)
-  
+
   return {
     x: node.x + (basePosition.x * scale),
     y: node.y + (basePosition.y * scale)
@@ -179,7 +179,7 @@ export function calculatePortPosition(
       return bottomPortPosition
     }
   }
-  
+
   // Handle regular input/output ports
   const normalizedPortType: RegularPortKind = portType === 'bottom' ? 'output' : portType
   return calculateRegularPortPosition(node, portId, normalizedPortType, variant)
@@ -212,15 +212,15 @@ export function getAllNodePortPositions(
   const inputs = node.inputs.map(port =>
     calculatePortPosition(node, port.id, 'input', variant)
   )
-  
+
   const outputs = node.outputs.map(port =>
     calculatePortPosition(node, port.id, 'output', variant)
   )
-  
+
   const bottomPorts = (node.bottomPorts || []).map(port =>
     calculatePortPosition(node, port.id, 'bottom', variant)
   )
-  
+
   return { inputs, outputs, bottomPorts }
 }
 
@@ -265,4 +265,77 @@ export function getPortType(node: WorkflowNode, portId: string): PortKind | null
     return 'bottom'
   }
   return null
+}
+
+/**
+ * Computes port positions for rectangular and square shapes
+ * For squares, the rendered path uses an inner 0.8 scale, so use the inner edge for port centers
+ */
+export function computeRectPortPositions(
+  dimensions: { width: number; height: number },
+  portCount: number,
+  portType: 'input' | 'output',
+  shape: 'rectangle' | 'square'
+): Array<{ x: number; y: number }> {
+  const spacing = dimensions.height / (portCount + 1)
+  const positions: Array<{ x: number; y: number }> = []
+
+  for (let i = 0; i < portCount; i++) {
+    const y = -dimensions.height / 2 + spacing * (i + 1)
+    // For squares, the path inner half-size is width/2 * 0.8; for rectangles it's width/2
+    const half = shape === 'square' ? (dimensions.width / 2) * 0.8 : dimensions.width / 2
+    const x = portType === 'input' ? -half : half
+    positions.push({ x, y })
+  }
+
+  return positions
+}
+
+/**
+ * Computes port positions for circular shapes
+ */
+export function computeCirclePortPositions(
+  dimensions: { width: number; height: number },
+  portCount: number
+): Array<{ x: number; y: number }> {
+  const angleStep = (Math.PI * 2) / Math.max(1, portCount)
+  const radius = Math.min(dimensions.width, dimensions.height) / 2
+  const positions: Array<{ x: number; y: number }> = []
+
+  for (let i = 0; i < portCount; i++) {
+    const angle = angleStep * i
+    const x = Math.cos(angle) * radius
+    const y = Math.sin(angle) * radius
+    positions.push({ x, y })
+  }
+
+  return positions
+}
+
+/**
+ * Computes port positions for diamond shapes
+ */
+export function computeDiamondPortPositions(
+  dimensions: { width: number; height: number },
+  portCount: number,
+  portType: 'input' | 'output'
+): Array<{ x: number; y: number }> {
+  const halfWidth = dimensions.width / 2
+  const effectiveHalfHeight = (dimensions.height / 2) * 0.75
+  const effectiveHeight = effectiveHalfHeight * 2
+  const spacing = Math.min(25, effectiveHeight / (portCount + 1))
+  const startY = -((portCount - 1) * spacing) / 2
+  const positions: Array<{ x: number; y: number }> = []
+
+  for (let i = 0; i < portCount; i++) {
+    const y = startY + i * spacing
+    const widthAtY = Math.max(
+      0,
+      halfWidth * (1 - Math.min(1, Math.abs(y) / Math.max(1e-6, effectiveHalfHeight)))
+    )
+    const x = (portType === 'input' ? -1 : 1) * widthAtY
+    positions.push({ x, y })
+  }
+
+  return positions
 }

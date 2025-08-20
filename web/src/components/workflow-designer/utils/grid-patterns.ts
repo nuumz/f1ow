@@ -3,7 +3,47 @@
   Creates base dot grid (id: workflow-grid) + major overlay (id: workflow-grid-major)
   with intelligent scaling and caching for optimal performance.
 */
-import type * as d3 from 'd3'
+import * as d3 from 'd3'
+import type React from 'react'
+
+export interface GridCacheRef {
+    transform: string
+    pattern: string
+    lastRenderTime: number
+    viewport: { width: number; height: number }
+    bounds: {
+        minX: number
+        minY: number
+        maxX: number
+        maxY: number
+        width: number
+        height: number
+    }
+}
+
+// Type definitions for dependencies
+export interface GridConstants {
+    BASE_GRID_SIZE: number
+    PERFORMANCE_LOG_INTERVAL: number
+    PERFORMANCE_WARNING_INTERVAL: number
+}
+
+export interface GridPerformanceMonitor {
+    recordRender(renderTime: number): void
+    getMetrics(): {
+        renderCount: number
+        avgRenderTime: number
+        cacheHitRate: number
+    }
+    getPerformanceReport(): {
+        status: 'good' | 'warning' | 'poor' | 'excellent'
+        summary: string
+    }
+}
+
+export interface DebugLogger {
+    warn(message: string, data?: unknown): void
+}
 
 export interface DualPatternOptions {
     baseColor?: string
@@ -169,4 +209,123 @@ export function renderDualGridRects(
         .attr('fill', `url(#${majorPatternId})`)
         .style('pointer-events', 'none')
         .style('will-change', 'transform')
+}
+
+// High-performance pattern-based grid creation with enhanced caching and performance monitoring
+export function createGrid(
+    gridLayer: d3.Selection<SVGGElement, unknown, null, undefined>,
+    transform: { x: number; y: number; k: number },
+    viewportWidth: number,
+    viewportHeight: number,
+    options: {
+        showGrid: boolean
+        gridCacheRef: React.MutableRefObject<GridCacheRef | null>
+        gridPerformanceRef: React.MutableRefObject<GridPerformanceMonitor | null>
+        getVisibleCanvasBounds: (
+            transform: { x: number; y: number; k: number },
+            viewportWidth: number,
+            viewportHeight: number,
+            padding: number
+        ) => { minX: number; minY: number; maxX: number; maxY: number; width: number; height: number }
+        GRID_CONSTANTS: GridConstants
+        dbg?: DebugLogger
+    }
+) {
+    const {
+        showGrid,
+        gridCacheRef,
+        gridPerformanceRef,
+        getVisibleCanvasBounds,
+        GRID_CONSTANTS,
+        dbg
+    } = options
+
+    const startTime = performance.now()
+
+    // Early exit and cleanup if grid is hidden
+    if (!showGrid) {
+        gridLayer.selectAll('.grid-pattern-rect').remove()
+        return
+    }
+
+    // Resolve owning SVG and defs
+    const owningSvg = gridLayer.node()?.ownerSVGElement
+    if (!owningSvg) {
+        return
+    }
+    const svgSelection = d3.select(owningSvg)
+    let defs = svgSelection.select<SVGDefsElement>('defs')
+    if (defs.empty()) {
+        defs = svgSelection.insert<SVGDefsElement>('defs', ':first-child')
+    }
+
+    // Ensure patterns exist (base + major) via utility
+    const baseSize = GRID_CONSTANTS.BASE_GRID_SIZE
+    const { patternId, majorPatternId } = ensureDualGridPatterns(defs, transform.k, baseSize)
+
+    // PERFORMANCE: Selective clearing - only remove grid elements, preserve other content
+    gridLayer.selectAll('.grid-pattern-rect').remove()
+
+    // Enhanced bounds calculation with intelligent padding using GridUtils
+    const padding = GridUtils.calculateIntelligentPadding(transform.k)
+    const bounds = getVisibleCanvasBounds(transform, viewportWidth, viewportHeight, padding)
+
+    // Validate bounds to prevent invalid rectangles
+    if (bounds.width <= 0 || bounds.height <= 0) {
+        console.warn('🚨 Grid: Invalid bounds calculated', bounds)
+        return
+    }
+
+    // Render layered rects via utility
+    renderDualGridRects(gridLayer, bounds, patternId, majorPatternId)
+
+    // Enhanced cache with all necessary data and performance tracking
+    const renderTime = performance.now() - startTime
+    gridPerformanceRef.current?.recordRender(renderTime)
+
+    // Store current viewport size for debugging/inspection
+    gridLayer.attr(
+        'data-grid-size',
+        `${Math.round(viewportWidth)}x${Math.round(viewportHeight)}`
+    )
+
+    // Update grid cache
+    const now = performance.now()
+    const cacheKey = JSON.stringify({
+        k: transform.k,
+        x: Math.round(transform.x),
+        y: Math.round(transform.y),
+        vw: Math.round(viewportWidth),
+        vh: Math.round(viewportHeight),
+    })
+    gridCacheRef.current = {
+        transform: cacheKey,
+        pattern: `${patternId},${majorPatternId}`,
+        lastRenderTime: now,
+        viewport: { width: viewportWidth, height: viewportHeight },
+        bounds,
+    }
+
+    // Reduced performance logging - only show summary periodically in dev
+    if (process.env.NODE_ENV === 'development' && gridPerformanceRef.current && dbg) {
+        const metrics = gridPerformanceRef.current.getMetrics()
+        if (metrics.renderCount % GRID_CONSTANTS.PERFORMANCE_LOG_INTERVAL === 0) {
+            dbg.warn('🔍 Grid Performance Summary (every 100 renders)', {
+                renderTime: `${renderTime.toFixed(2)}ms`,
+                avgRenderTime: `${metrics.avgRenderTime.toFixed(2)}ms`,
+                cacheHitRate: `${metrics.cacheHitRate.toFixed(1)}%`,
+                totalRenders: metrics.renderCount,
+            })
+        }
+        const report = gridPerformanceRef.current.getPerformanceReport()
+        if (
+            (report.status === 'warning' || report.status === 'poor') &&
+            metrics.renderCount % GRID_CONSTANTS.PERFORMANCE_WARNING_INTERVAL === 0
+        ) {
+            console.warn(
+                `🚨 Grid Performance ${report.status.toUpperCase()} (every 50th):`,
+                report.summary
+            )
+        }
+    }
 }

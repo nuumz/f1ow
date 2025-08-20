@@ -87,6 +87,97 @@ function buildSharpOrthogonalPath(points: PortPosition[]): string {
   return points.map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`)).join(' ')
 }
 
+/** Build an orthogonal SVG path with rounded corners from ordered waypoints */
+function buildRoundedOrthogonalPath(points: PortPosition[], radius = 12, minSegment = 10): string {
+  if (points.length < 2) { return '' }
+  if (points.length === 2) {
+    // No bends – straight line
+    const [a, b] = points
+    return `M ${a.x} ${a.y} L ${b.x} ${b.y}`
+  }
+
+  const cmds: string[] = []
+  const first = points[0]
+  cmds.push(`M ${first.x} ${first.y}`)
+
+  // Track the last point we emitted (after the previous corner's exit)
+  let lastOut: PortPosition | null = null
+
+  for (let i = 1; i < points.length - 1; i++) {
+    const prev = points[i - 1]
+    const corner = points[i]
+    const next = points[i + 1]
+
+    const isPrevVert = prev.x === corner.x
+    const isPrevHorz = prev.y === corner.y
+    const isNextVert = next.x === corner.x
+    const isNextHorz = next.y === corner.y
+
+    // If any segment is not axis-aligned, fallback to sharp path for safety
+    if ((!isPrevVert && !isPrevHorz) || (!isNextVert && !isNextHorz)) {
+      return buildSharpOrthogonalPath(points)
+    }
+
+    const inLen = isPrevVert ? Math.abs(corner.y - prev.y) : Math.abs(corner.x - prev.x)
+    const outLen = isNextVert ? Math.abs(next.y - corner.y) : Math.abs(next.x - corner.x)
+    // Effective radius limited by segment lengths to avoid overshoot
+    const effR = Math.max(0, Math.min(radius, Math.max(0, inLen / 2 - 1), Math.max(0, outLen / 2 - 1)))
+
+    // If segments are too short, emit a sharp corner
+    if (effR < Math.max(2, minSegment / 4)) {
+      // Ensure continuous line from previous emission
+      const moveFrom: PortPosition = lastOut ?? prev
+      if (!(moveFrom.x === corner.x && moveFrom.y === corner.y)) {
+        cmds.push(`L ${corner.x} ${corner.y}`)
+      }
+      lastOut = corner
+      continue
+    }
+
+    // Entry point by retracting effR from corner along inbound axis
+    let entry: PortPosition
+    if (isPrevVert) {
+      const dir = Math.sign(corner.y - prev.y) || 1
+      entry = { x: corner.x, y: corner.y - dir * effR }
+    } else { // inbound horizontal
+      const dir = Math.sign(corner.x - prev.x) || 1
+      entry = { x: corner.x - dir * effR, y: corner.y }
+    }
+
+    // Exit point by advancing effR from corner along outbound axis
+    let exit: PortPosition
+    if (isNextVert) {
+      const dir = Math.sign(next.y - corner.y) || 1
+      exit = { x: corner.x, y: corner.y + dir * effR }
+    } else { // outbound horizontal
+      const dir = Math.sign(next.x - corner.x) || 1
+      exit = { x: corner.x + dir * effR, y: corner.y }
+    }
+
+    // Draw line up to entry, then a quadratic curve at the corner to exit
+    const moveFrom: PortPosition = lastOut ?? prev
+    if (!(moveFrom.x === entry.x && moveFrom.y === entry.y)) {
+      cmds.push(`L ${entry.x} ${entry.y}`)
+    }
+    cmds.push(`Q ${corner.x} ${corner.y} ${exit.x} ${exit.y}`)
+    lastOut = exit
+  }
+
+  const last = points[points.length - 1]
+  // Continue from lastOut (if any) to last point
+  const tailFrom = lastOut ?? points[points.length - 2]
+  if (!(tailFrom.x === last.x && tailFrom.y === last.y)) {
+    cmds.push(`L ${last.x} ${last.y}`)
+  }
+
+  return cmds.join(' ')
+}
+
+// Public lightweight facade so callers with explicit waypoints (e.g., U-shape) can reuse identical rounding
+export function buildRoundedPathFromPoints(points: PortPosition[], radius = 12): string {
+  return buildRoundedOrthogonalPath(points, radius)
+}
+
 /** Enforce adaptive lead segments based on total available distance for nearby nodes */
 function enforceFixedSegments(
   pts: PortPosition[],
@@ -472,15 +563,15 @@ function inflateRect(r: { x: number; y: number; width: number; height: number },
   return { x: r.x - pad, y: r.y - pad, width: r.width + pad * 2, height: r.height + pad * 2 }
 }
 
-// Rounded path helper removed (logic switched to sharp 90° only for adaptive variant)
+// Rounded path helper reinstated for adaptive variant per spec (FR-ARCH-ROUTING)
 
 export function generateAdaptiveOrthogonalRoundedPath(
   source: PortPosition,
   target: PortPosition,
-  radius = 14,
+  radius = 12,
   options?: AdaptivePathOptions
 ): string {
-  // Reuse shared helpers buildSharpOrthogonalPath & enforceFixedSegments
+  // Reuse shared helpers and emit rounded-corner orthogonal paths
 
   const obstacles = (options?.obstacles || [])
     .map(o => options?.clearance ? inflateRect(o, options.clearance) : o)
@@ -506,14 +597,14 @@ export function generateAdaptiveOrthogonalRoundedPath(
     const FIXED = FIXED_LEAD_LENGTH
     const orientedPoints = handleOrientedRouting(start, end, startOrientation, endOrientation, FIXED)
     if (orientedPoints) {
-      return buildSharpOrthogonalPath(orientedPoints)
+      return buildRoundedOrthogonalPath(orientedPoints, radius)
     }
 
     // General case (non-horizontal start) keeps previous behavior with fixed length enforcement.
     if (candidatePoints.length >= 3) {
-      return buildSharpOrthogonalPath(enforceFixedSegments(candidatePoints, FIXED_LEAD_LENGTH, true))
+      return buildRoundedOrthogonalPath(enforceFixedSegments(candidatePoints, FIXED_LEAD_LENGTH, true), radius)
     }
-    return buildSharpOrthogonalPath(candidatePoints)
+    return buildRoundedOrthogonalPath(candidatePoints, radius)
   }
 
   // Introduce dogleg: push path outward along primary axis
@@ -559,9 +650,9 @@ export function generateAdaptiveOrthogonalRoundedPath(
   checkAndMaybeSecondary()
 
   if (doglegPoints.length >= 3) {
-    return buildSharpOrthogonalPath(enforceFixedSegments(doglegPoints, FIXED_LEAD_LENGTH, true))
+    return buildRoundedOrthogonalPath(enforceFixedSegments(doglegPoints, FIXED_LEAD_LENGTH, true), radius)
   }
-  return buildSharpOrthogonalPath(doglegPoints)
+  return buildRoundedOrthogonalPath(doglegPoints, radius)
 }
 
 /**

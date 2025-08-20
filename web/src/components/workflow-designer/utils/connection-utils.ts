@@ -75,7 +75,8 @@ import {
   validatePathInputs,
   generateAdaptiveOrthogonalRoundedPathSmart,
   FIXED_LEAD_LENGTH,
-  type PathConfig
+  type PathConfig,
+  buildRoundedPathFromPoints
 } from './path-generation'
 import {
   getConnectionGroupInfo as getConnectionGroupInfoCore,
@@ -804,14 +805,15 @@ function generateArchitectureModeConnectionPath(
     const boxesBottom = Math.max(srcBox.y + srcBox.height, tgtBox.y + tgtBox.height)
     const minBelow = Math.max(sourcePos.y, preciseEnd.y) + FIXED_LEAD_LENGTH
     const midY = Math.max(boxesBottom + safeClear, minBelow)
-    // Trim with shared helper to ensure arrowhead aligns to bottom edge
+    // Build rounded U path via explicit waypoints
     const bottomUTrimmedEnd = trimPointBySide(preciseEnd, '__side-bottom', sourcePos, HALF_MARKER)
-    return [
-      `M ${sourcePos.x} ${sourcePos.y}`,
-      `L ${sourcePos.x} ${midY}`,
-      `L ${bottomUTrimmedEnd.x} ${midY}`,
-      `L ${bottomUTrimmedEnd.x} ${bottomUTrimmedEnd.y}`
-    ].join(' ')
+    const points = [
+      { x: sourcePos.x, y: sourcePos.y },
+      { x: sourcePos.x, y: midY },
+      { x: bottomUTrimmedEnd.x, y: midY },
+      { x: bottomUTrimmedEnd.x, y: bottomUTrimmedEnd.y }
+    ]
+    return buildRoundedPathFromPoints(points, 12)
   }
 
   // Horizontal U-shapes for close proximity
@@ -826,15 +828,16 @@ function generateArchitectureModeConnectionPath(
     const boxesRight = Math.max(srcBox.x + srcBox.width, tgtBox.x + tgtBox.width)
     const minRight = Math.max(sourcePos.x, forcedRightPos.x) + FIXED_LEAD_LENGTH
     const midX = Math.max(boxesRight + safeClear, minRight)
-    // Align end to the exact target port Y then trim using shared helper
+    // Align end to the exact target port Y then trim using shared helper and round corners
     const rightAligned = { x: forcedRightPos.x, y: targetPos.y }
     const rightUTrimmedEnd = trimPointBySide(rightAligned, '__side-right', sourcePos, HALF_MARKER)
-    return [
-      `M ${sourcePos.x} ${sourcePos.y}`,
-      `L ${midX} ${sourcePos.y}`,
-      `L ${midX} ${rightUTrimmedEnd.y}`,
-      `L ${rightUTrimmedEnd.x} ${rightUTrimmedEnd.y}`
-    ].join(' ')
+    const points = [
+      { x: sourcePos.x, y: sourcePos.y },
+      { x: midX, y: sourcePos.y },
+      { x: midX, y: rightUTrimmedEnd.y },
+      { x: rightUTrimmedEnd.x, y: rightUTrimmedEnd.y }
+    ]
+    return buildRoundedPathFromPoints(points, 12)
   }
   const rightU = maybeRightU(); if (rightU) { return rightU }
 
@@ -849,15 +852,16 @@ function generateArchitectureModeConnectionPath(
     const boxesLeft = Math.min(srcBox.x, tgtBox.x)
     const minLeft = Math.min(sourcePos.x, forcedLeftPos.x) - FIXED_LEAD_LENGTH
     const midX = Math.min(boxesLeft - safeClear, minLeft)
-    // Align end to the exact target port Y then trim using shared helper
+    // Align end to the exact target port Y then trim using shared helper and round corners
     const leftAligned = { x: forcedLeftPos.x, y: targetPos.y }
     const leftUTrimmedEnd = trimPointBySide(leftAligned, '__side-left', sourcePos, HALF_MARKER)
-    return [
-      `M ${sourcePos.x} ${sourcePos.y}`,
-      `L ${midX} ${sourcePos.y}`,
-      `L ${midX} ${leftUTrimmedEnd.y}`,
-      `L ${leftUTrimmedEnd.x} ${leftUTrimmedEnd.y}`
-    ].join(' ')
+    const points = [
+      { x: sourcePos.x, y: sourcePos.y },
+      { x: midX, y: sourcePos.y },
+      { x: midX, y: leftUTrimmedEnd.y },
+      { x: leftUTrimmedEnd.x, y: leftUTrimmedEnd.y }
+    ]
+    return buildRoundedPathFromPoints(points, 12)
   }
   const leftU = maybeLeftU(); if (leftU) { return leftU }
 

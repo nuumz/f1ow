@@ -15,6 +15,11 @@ export function useWorkflowEventHandlers() {
 
   // Use ref to store current connection state to avoid stale closure
   const connectionStateRef = useRef(state.connectionState)
+  // Track node count for adaptive throttling without re-creating callbacks
+  const nodesCountRef = useRef(state.nodes.length)
+  useEffect(() => {
+    nodesCountRef.current = state.nodes.length
+  }, [state.nodes.length])
 
   // Update ref when state changes
   useEffect(() => {
@@ -228,39 +233,35 @@ export function useWorkflowEventHandlers() {
 
   // Drag & Drop handlers for connections
   const handlePortDragStart = useCallback((nodeId: string, portId: string, portType: 'input' | 'output') => {
-    console.log('🔥 handlePortDragStart called:', { nodeId, portId, portType })
+    console.warn('🔥 handlePortDragStart called:', { nodeId, portId, portType })
 
     // Prevent duplicate calls - only allow if not already connecting
     const currentConnectionState = connectionStateRef.current
     if (currentConnectionState.isConnecting) {
-      console.log('⚠️ Already connecting, ignoring duplicate call')
+      console.warn('⚠️ Already connecting, ignoring duplicate call')
       return
     }
 
     // Only allow dragging from output ports
     if (portType === 'output') {
       dispatch({ type: 'START_CONNECTION', payload: { nodeId, portId, type: portType } })
-      console.log('✅ Connection started from output port')
+      console.warn('✅ Connection started from output port')
     } else {
-      console.log('❌ Cannot start connection from input port')
+      console.warn('❌ Cannot start connection from input port')
     }
   }, [dispatch])
 
+  // Use a ref to avoid order/dependency issues with throttled function
+  const throttledUpdatePreviewRef = useRef<(x: number, y: number) => void>(() => { })
   const handlePortDrag = useCallback((x: number, y: number) => {
-    // Update connection preview position in real-time
-    const currentConnectionState = connectionStateRef.current
-    console.log('🎯 handlePortDrag called:', { x, y, isConnecting: currentConnectionState.isConnecting })
-    if (currentConnectionState.isConnecting) {
-      console.log('🎯 Dispatching UPDATE_CONNECTION_PREVIEW:', { x, y })
-      dispatch({ type: 'UPDATE_CONNECTION_PREVIEW', payload: { x, y } })
-    }
-  }, [dispatch])
+    throttledUpdatePreviewRef.current(x, y)
+  }, [])
 
   const handlePortDragEnd = useCallback((targetNodeId?: string, targetPortId?: string, canvasX?: number, canvasY?: number) => {
     // Get fresh connection state from ref
     const currentConnectionState = connectionStateRef.current
 
-    console.log('🔥 handlePortDragEnd called:', {
+    console.warn('🔥 handlePortDragEnd called:', {
       targetNodeId,
       targetPortId,
       canvasX,
@@ -271,7 +272,7 @@ export function useWorkflowEventHandlers() {
 
     // Guard against multiple calls when not connecting
     if (!currentConnectionState.isConnecting || !currentConnectionState.connectionStart) {
-      console.log('⚠️ Not currently connecting, ignoring call')
+      console.warn('⚠️ Not currently connecting, ignoring call')
       return
     }
 
@@ -283,7 +284,7 @@ export function useWorkflowEventHandlers() {
     else if (targetNodeId && targetPortId) {
       const { nodeId: sourceNodeId, portId: sourcePortId, type } = currentConnectionState.connectionStart
 
-      console.log('🔗 Attempting to create connection:', {
+      console.warn('🔗 Attempting to create connection:', {
         sourceNodeId,
         sourcePortId,
         sourceType: type,
@@ -293,28 +294,120 @@ export function useWorkflowEventHandlers() {
 
       // Only allow output -> input connections
       if (type === 'output' && sourceNodeId !== targetNodeId) {
-        console.log('✅ Valid connection attempt: output -> input')
+        console.warn('✅ Valid connection attempt: output -> input')
 
         // Use operations for connection creation
         const result = operations.createConnection(sourceNodeId, sourcePortId, targetNodeId, targetPortId)
 
         if (result) {
-          console.log('✅ Connection created successfully')
+          console.warn('✅ Connection created successfully')
         } else {
-          console.log('❌ Connection creation failed')
+          console.warn('❌ Connection creation failed')
         }
       } else {
-        console.log('❌ Invalid connection:', {
+        console.warn('❌ Invalid connection:', {
           reason: type !== 'output' ? 'Not from output port' : 'Same node connection attempt'
         })
       }
     } else {
-      console.log('❌ Missing target information for connection')
+      console.warn('❌ Missing target information for connection')
     }
 
     // Clear connection state after drag end
     dispatch({ type: 'CLEAR_CONNECTION_STATE' })
   }, [operations, dispatch])
+
+  // =====================
+  // Performance: Throttled preview updates (RAF-based)
+  // =====================
+  const previewRafIdRef = useRef<number | null>(null)
+  const lastPreviewTsRef = useRef<number>(0)
+  const pendingPreviewRef = useRef<{ x: number; y: number } | null>(null)
+  const lastSentPreviewRef = useRef<{ x: number; y: number } | null>(null)
+
+  // Helper: compute adaptive interval based on graph size
+  const getMinIntervalMs = () => {
+    const n = nodesCountRef.current
+    if (n > 150) { return 24 }
+    if (n > 60) { return 16 }
+    return 12
+  }
+
+  // Dispatch once (guarded by connectionState)
+  const dispatchPreview = useCallback((x: number, y: number) => {
+    const last = lastSentPreviewRef.current
+    if (last && last.x === x && last.y === y) {
+      return
+    }
+    const current = connectionStateRef.current
+    if (current.isConnecting) {
+      dispatch({ type: 'UPDATE_CONNECTION_PREVIEW', payload: { x, y } })
+      lastSentPreviewRef.current = { x, y }
+    }
+  }, [dispatch])
+
+  // Public API used by handlers
+  const throttledUpdatePreview = useCallback((x: number, y: number) => {
+    pendingPreviewRef.current = { x, y }
+
+    if (previewRafIdRef.current !== null) {
+      return
+    }
+
+    previewRafIdRef.current = requestAnimationFrame(() => {
+      const now = performance.now()
+      const minInterval = getMinIntervalMs()
+
+      // If too soon, schedule next frame to try again with the latest pending
+      if (now - lastPreviewTsRef.current < minInterval) {
+        previewRafIdRef.current = requestAnimationFrame(() => {
+          // Use latest pending on next frame
+          const p = pendingPreviewRef.current
+          if (p) {
+            dispatchPreview(p.x, p.y)
+            lastPreviewTsRef.current = performance.now()
+          }
+          previewRafIdRef.current = null
+        })
+        return
+      }
+
+      const p = pendingPreviewRef.current
+      if (p) {
+        dispatchPreview(p.x, p.y)
+        lastPreviewTsRef.current = now
+        pendingPreviewRef.current = null
+      }
+      previewRafIdRef.current = null
+    })
+  }, [dispatchPreview])
+
+  // Keep the ref pointing to the latest throttled function
+  useEffect(() => {
+    throttledUpdatePreviewRef.current = throttledUpdatePreview
+  }, [throttledUpdatePreview])
+
+  // Cleanup on connection end/unmount to prevent leaks
+  useEffect(() => {
+    return () => {
+      if (previewRafIdRef.current !== null) {
+        cancelAnimationFrame(previewRafIdRef.current)
+        previewRafIdRef.current = null
+      }
+      pendingPreviewRef.current = null
+    }
+  }, [])
+
+  // When connection completes/cancels, reset preview throttling state
+  useEffect(() => {
+    if (!state.connectionState.isConnecting) {
+      if (previewRafIdRef.current !== null) {
+        cancelAnimationFrame(previewRafIdRef.current)
+        previewRafIdRef.current = null
+      }
+      pendingPreviewRef.current = null
+    }
+  }, [state.connectionState.isConnecting])
 
   // Canvas internal click handler (for WorkflowCanvas component)
   const handleCanvasClickInternal = useCallback(() => {
@@ -385,7 +478,7 @@ export function useWorkflowEventHandlers() {
 
         try {
           navigator.clipboard.writeText(JSON.stringify(clipboardData))
-          console.log('Copied to clipboard:', clipboardData)
+          console.warn('Copied to clipboard:', clipboardData)
         } catch (error) {
           console.warn('Failed to copy to clipboard:', error)
         }

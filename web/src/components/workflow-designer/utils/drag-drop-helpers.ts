@@ -111,17 +111,19 @@ function pointInsideNodeBackground(
     canvasX: number,
     canvasY: number
 ): boolean {
-    if (bgEl && typeof bgEl.isPointInFill === 'function') {
+    if (bgEl && typeof (bgEl as unknown as SVGGeometryElement).isPointInFill === 'function') {
         try {
-            const elemCtm = bgEl.getCTM()
-            if (elemCtm) {
+            const elemCtm = bgEl.getCTM?.()
+            if (elemCtm && typeof elemCtm.inverse === 'function') {
                 const local = new DOMPoint(canvasX, canvasY).matrixTransform(elemCtm.inverse())
                 const pt: DOMPointInit = { x: local.x, y: local.y }
-                return (
-                    bgEl.isPointInFill(pt) || (typeof bgEl.isPointInStroke === 'function' && bgEl.isPointInStroke(pt))
-                )
+                const geom = bgEl as unknown as SVGGeometryElement & { isPointInStroke?: (pt: DOMPointInit) => boolean }
+                const inFill = geom.isPointInFill(pt)
+                const inStroke = typeof geom.isPointInStroke === 'function' ? geom.isPointInStroke(pt) : false
+                return !!(inFill || inStroke)
             }
-        } catch {
+        } catch (error) {
+            console.warn('[drag-drop] pointInsideNodeBackground failed, fallback to bounds', error)
             // ignore and fallback below
         }
     }
@@ -151,17 +153,33 @@ export function resolveDragEndTarget(
     capturedStart: { nodeId: string; portId: string; type: 'input' | 'output' } | null,
     radiusAccessor: (pd: PortDatum) => number
 ): { nodeId?: string; portId?: string } {
-    const svgSelection = d3.select<SVGSVGElement, unknown>(svgElement)
-    const portHit = findNearestPortTarget(svgSelection as unknown as d3.Selection<SVGSVGElement, unknown, null, undefined>, canvasX, canvasY, radiusAccessor)
-    if (portHit) {
-        return { nodeId: portHit.nodeId, portId: portHit.portId }
+    try {
+        const svgSelection = d3.select<SVGSVGElement, unknown>(svgElement)
+        const portHit = findNearestPortTarget(
+            svgSelection as unknown as d3.Selection<SVGSVGElement, unknown, null, undefined>,
+            canvasX,
+            canvasY,
+            radiusAccessor
+        )
+        if (portHit) {
+            return { nodeId: portHit.nodeId, portId: portHit.portId }
+        }
+        const bgNodeId = findBackgroundDropTarget(
+            svgSelection as unknown as d3.Selection<SVGSVGElement, unknown, d3.BaseType, unknown>,
+            canvasX,
+            canvasY,
+            nodes,
+            capturedStart
+        )
+        if (bgNodeId) {
+            const targetNode = nodes.find((n) => n.id === bgNodeId)
+            return { nodeId: bgNodeId, portId: targetNode ? chooseBestInputPort(targetNode) : undefined }
+        }
+        return {}
+    } catch (error) {
+        console.error('[drag-drop] resolveDragEndTarget error', { error })
+        return {}
     }
-    const bgNodeId = findBackgroundDropTarget(svgSelection as unknown as d3.Selection<SVGSVGElement, unknown, d3.BaseType, unknown>, canvasX, canvasY, nodes, capturedStart)
-    if (bgNodeId) {
-        const targetNode = nodes.find((n) => n.id === bgNodeId)
-        return { nodeId: bgNodeId, portId: targetNode ? chooseBestInputPort(targetNode) : undefined }
-    }
-    return {}
 }
 
 /**
@@ -171,15 +189,24 @@ export function getSvgFromSourceEvent(
     sourceEvent: Event | null | undefined,
     fallbackSvg?: SVGSVGElement | null
 ): SVGSVGElement | null {
-    if (!sourceEvent?.target) {
+    try {
+        const evt = sourceEvent as Event | undefined
+        if (!evt || !(evt.target as Element | null)) {
+            return fallbackSvg || null
+        }
+        const target = evt.target as Element
+        if (!target) {
+            return fallbackSvg || null
+        }
+        if (target instanceof SVGSVGElement) {
+            return target
+        }
+        const svg = target.closest?.('svg')
+        return svg || fallbackSvg || null
+    } catch (error) {
+        console.warn('[drag-drop] getSvgFromSourceEvent failed', error)
         return fallbackSvg || null
     }
-    const target = sourceEvent.target as Element
-    if (target instanceof SVGSVGElement) {
-        return target
-    }
-    const svg = target.closest('svg')
-    return svg || fallbackSvg || null
 }
 
 /**
@@ -189,13 +216,21 @@ export function getCanvasCoordsFromSourceEvent(
     sourceEvent: Event | null | undefined,
     fallbackSvg?: SVGSVGElement | null
 ): [number, number] {
-    const svgElement = getSvgFromSourceEvent(sourceEvent, fallbackSvg)
-    if (!svgElement) {
+    try {
+        const svgElement = getSvgFromSourceEvent(sourceEvent, fallbackSvg)
+        if (!svgElement) {
+            return [0, 0]
+        }
+        const [sx, sy] = d3.pointer(sourceEvent as Event, svgElement)
+        const transform = d3.zoomTransform(svgElement)
+        const inv = typeof (transform as unknown as { invert?: (pt: [number, number]) => [number, number] }).invert === 'function'
+            ? transform.invert([sx, sy])
+            : ([sx, sy] as [number, number])
+        return inv
+    } catch (error) {
+        console.warn('[drag-drop] getCanvasCoordsFromSourceEvent failed', error)
         return [0, 0]
     }
-    const [sx, sy] = d3.pointer(sourceEvent, svgElement)
-    const transform = d3.zoomTransform(svgElement)
-    return transform.invert([sx, sy])
 }
 
 /**
@@ -238,45 +273,68 @@ export function createPortDragCallbacks(params: {
     } = params
 
     function onStart(event: d3.D3DragEvent<Element, unknown, unknown>, d: { nodeId: string; id: string }) {
-        event?.sourceEvent?.stopPropagation?.()
-        event?.sourceEvent?.preventDefault?.()
-        const nodeId = d.nodeId
-        const portId = d.id
-        setCapturedStart({ nodeId, portId, type: startAsType })
-        if (logTag) {
-            console.warn(`🚀 ${logTag} drag START:`, nodeId, portId)
-            console.warn('🔒 Stored drag connection data:', getCapturedStart())
+        try {
+            const se = event?.sourceEvent as Event | undefined
+                ; (se as unknown as { stopPropagation?: () => void })?.stopPropagation?.()
+                ; (se as unknown as { preventDefault?: () => void })?.preventDefault?.()
+            const nodeId = d?.nodeId
+            const portId = d?.id
+            if (!nodeId || !portId) {
+                console.warn('[drag-drop] Missing nodeId/portId on drag start, aborting')
+                return
+            }
+            setCapturedStart({ nodeId, portId, type: startAsType })
+            if (logTag) {
+                console.warn(`🚀 ${logTag} drag START:`, nodeId, portId)
+            }
+            const [canvasX, canvasY] = getCanvasCoordsFromSourceEvent(event?.sourceEvent as Event)
+            onPortDragStart(nodeId, portId, startAsType)
+            onPortDrag(canvasX, canvasY)
+        } catch (error) {
+            console.error('[drag-drop] onStart error', { error })
         }
-        const [canvasX, canvasY] = getCanvasCoordsFromSourceEvent(event?.sourceEvent)
-        onPortDragStart(nodeId, portId, startAsType)
-        onPortDrag(canvasX, canvasY)
     }
 
     function onDrag(event: d3.D3DragEvent<Element, unknown, unknown>) {
-        const [canvasX, canvasY] = getCanvasCoordsFromSourceEvent(event?.sourceEvent as Event)
-        if (logTag) {
-            console.warn(`🚀 ${logTag} DRAGGING to:`, canvasX, canvasY)
+        try {
+            const [canvasX, canvasY] = getCanvasCoordsFromSourceEvent(event?.sourceEvent as Event)
+            if (logTag) {
+                console.warn(`🚀 ${logTag} DRAGGING to:`, canvasX, canvasY)
+            }
+            onPortDrag(canvasX, canvasY)
+        } catch (error) {
+            console.error('[drag-drop] onDrag error', { error })
         }
-        onPortDrag(canvasX, canvasY)
     }
 
     function onEnd(event: d3.D3DragEvent<Element, unknown, unknown>) {
-        if (logTag) {
-            console.warn(`🚀 ${logTag} drag END`)
-        }
-        const svg = getSvgFromSourceEvent(event?.sourceEvent as Event)
-        const [canvasX, canvasY] = getCanvasCoordsFromSourceEvent(event?.sourceEvent as Event)
-        if (svg) {
-            const result = resolve(svg, canvasX, canvasY, nodes, getCapturedStart(), getHitTestPortRadius)
-            if (result.nodeId && result.portId) {
-                onPortDragEnd(result.nodeId, result.portId, canvasX, canvasY)
-            } else if (!requireTargetOnEnd) {
-                onPortDragEnd(undefined, undefined, canvasX, canvasY)
+        try {
+            if (logTag) {
+                console.warn(`🚀 ${logTag} drag END`)
             }
-        }
-        setCapturedStart(null)
-        if (logTag) {
-            console.warn('🧹 Cleared drag connection data')
+            const svg = getSvgFromSourceEvent(event?.sourceEvent as Event)
+            const [canvasX, canvasY] = getCanvasCoordsFromSourceEvent(event?.sourceEvent as Event)
+            if (svg) {
+                const start = getCapturedStart()
+                const result = resolve(svg, canvasX, canvasY, nodes, start, getHitTestPortRadius)
+                if (result.nodeId && result.portId) {
+                    onPortDragEnd(result.nodeId, result.portId, canvasX, canvasY)
+                } else if (!requireTargetOnEnd) {
+                    onPortDragEnd(undefined, undefined, canvasX, canvasY)
+                }
+            } else {
+                console.warn('[drag-drop] No SVG element found on drag end; ignoring drop')
+                if (!requireTargetOnEnd) {
+                    onPortDragEnd(undefined, undefined, undefined, undefined)
+                }
+            }
+        } catch (error) {
+            console.error('[drag-drop] onEnd error', { error })
+        } finally {
+            setCapturedStart(null)
+            if (logTag) {
+                console.warn('🧹 Cleared drag connection data')
+            }
         }
     }
 

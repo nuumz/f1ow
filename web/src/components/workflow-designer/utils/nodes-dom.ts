@@ -291,9 +291,19 @@ export function updateIconsAndLabels(
             dx: number,
             dy: number
         ) => void;
+        renderConfig?: {
+            showPorts?: boolean;
+            showLabels?: boolean;
+            useHighDetail?: boolean;
+            simplifiedRendering?: boolean;
+        };
     }
 ) {
-    const { designerMode, getConfigurableDimensions, NodeTypes, getNodeIcon, renderIconUse } = deps;
+    const { designerMode, getConfigurableDimensions, NodeTypes, getNodeIcon, renderIconUse, renderConfig } = deps;
+    
+    // Level-of-detail configuration
+    const showLabels = renderConfig?.showLabels ?? true;
+    const useHighDetail = renderConfig?.useHighDetail ?? true;
 
     nodeGroups
         .select<SVGTextElement>(".node-icon")
@@ -341,6 +351,7 @@ export function updateIconsAndLabels(
 
     nodeGroups
         .select<SVGTextElement>(".node-label")
+        .style("display", () => showLabels ? null : "none")
         .attr("x", (d: WorkflowNode) =>
             designerMode === "architecture"
                 ? getConfigurableDimensions(d).width / 2 + 18
@@ -351,24 +362,38 @@ export function updateIconsAndLabels(
         )
         .attr("text-anchor", () => (designerMode === "architecture" ? "start" : "middle"))
         .attr("dominant-baseline", "middle")
-        .attr("font-size", (d: WorkflowNode) => (getConfigurableDimensions(d).fontSize || 12) - 1)
+        .attr("font-size", (d: WorkflowNode) => {
+            const baseFontSize = getConfigurableDimensions(d).fontSize || 12;
+            return useHighDetail ? baseFontSize - 1 : Math.max(8, baseFontSize - 2);
+        })
         .attr("font-weight", "bold")
         .attr("fill", "#333")
         .text((d: WorkflowNode) => {
+            if (!showLabels) {
+                return "";
+            }
             const nodeTypeInfo = NodeTypes[d.type as keyof typeof NodeTypes];
             return nodeTypeInfo?.label || d.label || d.type;
         });
 
     nodeGroups
         .select<SVGTextElement>(".node-sublabel")
+        .style("display", () => (designerMode === "architecture" && showLabels) ? null : "none")
         .attr("x", (d: WorkflowNode) =>
             designerMode === "architecture" ? getConfigurableDimensions(d).width / 2 + 18 : 0
         )
         .attr("y", () => (designerMode === "architecture" ? 10 : 99999))
         .attr("text-anchor", () => (designerMode === "architecture" ? "start" : "middle"))
         .attr("dominant-baseline", "middle")
-        .attr("font-size", (d: WorkflowNode) => (getConfigurableDimensions(d).fontSize || 12) - 3)
+        .attr("font-size", (d: WorkflowNode) => {
+            const baseFontSize = getConfigurableDimensions(d).fontSize || 12;
+            return useHighDetail ? baseFontSize - 3 : Math.max(6, baseFontSize - 4);
+        })
         .attr("fill", "#6b7280")
-        .style("display", () => (designerMode === "architecture" ? null : "none"))
-        .text((d: WorkflowNode) => d.metadata?.version || d.id);
+        .text((d: WorkflowNode) => {
+            if (!showLabels || designerMode !== "architecture") {
+                return "";
+            }
+            return d.metadata?.version || d.id;
+        });
 }

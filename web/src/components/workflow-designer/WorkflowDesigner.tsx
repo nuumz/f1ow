@@ -33,10 +33,14 @@ import {
   useExecutionState,
   useSelectedNode,
   useWorkflowName,
+  // Advanced selector hooks
+  useConnectionMetrics,
+  useWorkflowComplexity,
 } from './contexts/WorkflowContext';
 import { useWorkflowOperations } from './hooks/useWorkflowOperations';
 import { useWorkflowCanvas } from './hooks/useWorkflowCanvas';
 import { useWorkflowEventHandlers } from './hooks/useWorkflowEventHandlers';
+import { usePerformanceInspector } from './hooks/usePerformanceInspector';
 
 // Import components
 import WorkflowCanvas from './components/WorkflowCanvas';
@@ -233,6 +237,16 @@ function WorkflowDesignerContent({
   const canvas = useWorkflowCanvas();
   const handlers = useWorkflowEventHandlers();
 
+  // Advanced performance optimization hooks
+  const workflowComplexity = useWorkflowComplexity();
+  const connectionMetrics = useConnectionMetrics();
+
+  // Performance monitoring
+  const { performanceSummary } = usePerformanceInspector('WorkflowDesigner', {
+    maxRenderTime: workflowComplexity.complexityScore === 'complex' ? 32 : 16, // Higher threshold for complex workflows
+    memoryWarningThreshold: 100 * 1024 * 1024, // 100MB for WorkflowDesigner
+  });
+
   // Simple ID generator utility for architecture nodes
   const generateId = useCallback((): string => {
     return Math.random().toString(36).substring(2, 11);
@@ -321,7 +335,7 @@ function WorkflowDesignerContent({
           targetPortId,
           portType,
           connectionStart,
-          designerMode: designerMode,
+          designerMode,
         });
       }
       if (!connectionStart || connectionStart.nodeId === targetNodeId) {
@@ -440,6 +454,7 @@ function WorkflowDesignerContent({
     },
     [handleAddArchitectureNode, operations, designerMode, nodes]
   );
+
 
   // File operations
   const [isLoading, setIsLoading] = useState(false);
@@ -651,8 +666,8 @@ function WorkflowDesignerContent({
       // Convert to WorkflowData format
       const workflow: WorkflowData = {
         name: workflowData.name,
-        nodes: nodes,
-        connections: connections,
+        nodes,
+        connections,
       };
       await onSave?.(workflow);
       showNotification('success', 'Workflow saved successfully!');
@@ -669,8 +684,8 @@ function WorkflowDesignerContent({
       setIsLoading(true);
       const workflow = {
         name: workflowName,
-        nodes: nodes,
-        connections: connections,
+        nodes,
+        connections,
       };
       await onExecute?.(workflow);
       await operations.executeWorkflow();
@@ -687,8 +702,8 @@ function WorkflowDesignerContent({
     try {
       const workflow = {
         name: workflowName,
-        nodes: nodes,
-        connections: connections,
+        nodes,
+        connections,
       };
       onExport?.(workflow);
       operations.exportWorkflow();
@@ -874,9 +889,17 @@ function WorkflowDesignerContent({
           <div className="workflow-designer-status">
             <div className="status-info">
               <span>Nodes: {nodes.length}</span>
-              <span>Connections: {connections.length}</span>
+              <span>Connections: {connectionMetrics.totalConnections}</span>
               <span>Selected: {selectedNodesSet.size}</span>
               <span>Zoom: {Math.round(canvasTransform.k * 100)}%</span>
+              {performanceSummary && process.env.NODE_ENV === 'development' && (
+                <span 
+                  className={`performance-indicator ${performanceSummary.isPerformant ? 'good' : 'warning'}`}
+                  title={`Avg Render: ${performanceSummary.avgRenderTime.toFixed(1)}ms | Memory: ${performanceSummary.memoryUsage ? `${(performanceSummary.memoryUsage / 1024 / 1024).toFixed(1)}MB` : 'N/A'}`}
+                >
+                  ⚡ {performanceSummary.avgRenderTime.toFixed(1)}ms
+                </span>
+              )}
               {designerMode === 'workflow' && executionState.status !== 'idle' && (
                 <span>Status: {executionState.status}</span>
               )}

@@ -6,7 +6,7 @@ import { createNodeElements, createNodeGroups } from '../utils/node-elements';
 import type { PortDatum } from '../utils/ports-hit-test';
 import type { WorkflowNode, Connection, NodeVariant, CanvasTransform } from '../types';
 import { getNodeTypeInfo } from '../types/nodes';
-import { 
+import {
   useWorkflowContext,
   useWorkflowNodes,
   useWorkflowConnections,
@@ -16,6 +16,7 @@ import {
   useConnectionState,
   useDesignerMode,
 } from '../contexts/WorkflowContext';
+import { useWorkflowVirtualization } from '../hooks/useVirtualization';
 import {
   getNodeColor,
   getPortColor,
@@ -201,13 +202,52 @@ function WorkflowCanvas({
   const connectionStateFromContext = useConnectionState();
   const designerModeFromContext = useDesignerMode();
 
+  // Virtualization for performance with large workflows
+  const viewport = useMemo(() => {
+    if (!canvasTransform && !canvasTransformFromContext) {
+      return { x: 0, y: 0, width: 1200, height: 800, scale: 1 };
+    }
+    const transform = canvasTransform || canvasTransformFromContext;
+    return {
+      x: -transform.x / transform.k,
+      y: -transform.y / transform.k,
+      width: 1200 / transform.k, // Approximate viewport width
+      height: 800 / transform.k, // Approximate viewport height
+      scale: transform.k,
+    };
+  }, [canvasTransform, canvasTransformFromContext]);
+
+  const virtualizedWorkflow = useWorkflowVirtualization(
+    workflowNodes,
+    workflowConnections,
+    canvasTransform || canvasTransformFromContext,
+    viewport,
+    {
+      virtualization: {
+        minNodesForVirtualization: 30, // Start virtualization at 30 nodes
+        bufferSize: 400, // Larger buffer for smooth scrolling
+      },
+      levelOfDetail: {
+        lowDetailThreshold: 0.4,
+        hidePortsThreshold: 0.25,
+        hideLabelsThreshold: 0.15,
+      },
+    }
+  );
+
+  // Use virtualized data when available
+  const effectiveNodes = nodes || virtualizedWorkflow.visibleNodes;
+  const effectiveConnections =
+    connections || virtualizedWorkflow.connectionOptimization.connections;
+
   // Create a minimal state object for components that still need it
   const workflowContextState = useMemo(() => {
-    // Use prop values if provided, otherwise use context values
-    const actualNodes = nodes || workflowNodes;
-    const actualConnections = connections || workflowConnections;
+    // Use virtualized data when available for better performance
+    const actualNodes = effectiveNodes;
+    const actualConnections = effectiveConnections;
     const actualCanvasTransform = canvasTransform || canvasTransformFromContext;
-    const actualSelectedNodes = selectedNodes || new Set(contextSelectedNodes.map((n: any) => n.id));
+    const actualSelectedNodes =
+      selectedNodes || new Set(contextSelectedNodes.map((n: any) => n.id));
 
     return {
       nodes: actualNodes,
@@ -217,15 +257,27 @@ function WorkflowCanvas({
       canvasTransform: actualCanvasTransform,
       draggingState: dragStateFromContext,
       connectionState: connectionStateFromContext,
+      // Add virtualization metadata
+      virtualization: {
+        active: virtualizedWorkflow.renderMetrics.virtualizationActive,
+        nodesRendered: virtualizedWorkflow.renderMetrics.nodesRendered,
+        totalNodes:
+          virtualizedWorkflow.renderMetrics.nodesRendered +
+          virtualizedWorkflow.renderMetrics.nodesSkipped,
+        renderConfig: virtualizedWorkflow.levelOfDetail.renderConfig,
+      },
     };
   }, [
-    nodes, workflowNodes,
-    connections, workflowConnections,
-    canvasTransform, canvasTransformFromContext,
-    selectedNodes, contextSelectedNodes,
+    effectiveNodes,
+    effectiveConnections,
+    canvasTransform,
+    canvasTransformFromContext,
+    selectedNodes,
+    contextSelectedNodes,
     connectionStateFromContext,
     dragStateFromContext,
     designerModeFromContext,
+    virtualizedWorkflow,
   ]);
 
   // Prefer prop override, fallback to context implementation
@@ -1128,23 +1180,7 @@ function WorkflowCanvas({
         try {
           // 1) Clear cached paths to avoid stale geometry on the first drag frame
           clearConnCache();
-          // 2) Initialize drag override with current position so getConnectionPath(..., true) is consistent
-          updateConnDragPos(d.id, { x: d.x, y: d.y });
-          // 3) Proactively refresh affected connection paths once using drag positions
-          const affected = nodeConnectionsMap.get(d.id) || [];
-          if (affected.length > 0) {
-            const connectionLayer = getCachedSelection('connectionLayer');
-            if (connectionLayer) {
-              affected.forEach((conn) => {
-                const group = connectionLayer.select(`[data-connection-id="${conn.id}"]`);
-                if (!group.empty()) {
-                  const pathEl = group.select('.connection-path');
-                  const newPath = getConnectionPath(conn, true);
-                  pathEl.attr('d', newPath);
-                }
-              });
-            }
-          }
+          // Note: Do not proactively refresh paths here; let RAF-batched updater handle it
         } catch {
           // keep silent in production; dev warnings are handled elsewhere
         }
@@ -1202,20 +1238,20 @@ function WorkflowCanvas({
           const [mouseX, mouseY] = d3.pointer(sourceEvent, svgElement);
           const transform = d3.zoomTransform(svgElement);
           const [currentCanvasX, currentCanvasY] = transform.invert([mouseX, mouseY]);
-          
+
           const deltaX = currentCanvasX - dragData.dragStartX;
           const deltaY = currentCanvasY - dragData.dragStartY;
-          
+
           // Update node position in data
           d.x = dragData.initialX + deltaX;
           d.y = dragData.initialY + deltaY;
-          
+
           // Update DOM transform to match final position
           nodeElement.attr('transform', `translate(${d.x}, ${d.y})`);
-          
+
           // Update node position in parent state
           onNodeDrag(d.id, d.x, d.y);
-          
+
           // Force immediate connection path updates for this node
           try {
             connectionUpdateQueueRef.current.add(d.id);
@@ -1316,7 +1352,7 @@ function WorkflowCanvas({
 
       const { nodeEnter, nodeGroups } = createNodeGroups<WorkflowNode>(
         mainNodeLayer as unknown as d3.Selection<SVGGElement, unknown, SVGGElement, unknown>,
-        nodes,
+        virtualizedWorkflow.levelOfDetail.nodes,
         {
           getId: (d) => d.id,
           getTransform: (d) => `translate(${d.x}, ${d.y})`,
@@ -1436,22 +1472,30 @@ function WorkflowCanvas({
         NodeTypes,
         getNodeIcon,
         renderIconUse,
+        renderConfig: virtualizedWorkflow.levelOfDetail.renderConfig,
       });
 
       // Legacy badge update removed - badge has been completely removed
 
-      // Render simple ports for both variants
+      // Render simple ports for both variants - with level-of-detail optimization
+      const showPorts = virtualizedWorkflow.levelOfDetail.renderConfig.showPorts;
+
       // Input ports - DISABLED drag/click interactions for connection creation
       const inputPortGroups = nodeGroups
         .select('g.input-ports')
         .selectAll('.input-port-group')
         .data(
-          (d: any) =>
-            d.inputs.map((input: any) => ({
+          (d: any) => {
+            // Apply level-of-detail: hide ports when zoomed out too far
+            if (!showPorts) {
+              return [];
+            }
+            return d.inputs.map((input: any) => ({
               ...input,
               nodeId: d.id,
               nodeData: d,
-            })),
+            }));
+          },
           (d: any) => d.id
         )
         .join('g')
@@ -1517,12 +1561,17 @@ function WorkflowCanvas({
         .select('g.output-ports')
         .selectAll('.output-port-group')
         .data(
-          (d: any) =>
-            d.outputs.map((output: any) => ({
+          (d: any) => {
+            // Apply level-of-detail: hide ports when zoomed out too far
+            if (!showPorts) {
+              return [];
+            }
+            return d.outputs.map((output: any) => ({
               ...output,
               nodeId: d.id,
               nodeData: d,
-            })),
+            }));
+          },
           (d: any) => d.id
         )
         .join('g')
@@ -1614,7 +1663,7 @@ function WorkflowCanvas({
         .select('g.side-ports')
         .selectAll('.side-port-group')
         .data((d: any) => {
-          if (!isArchitectureMode) {
+          if (!isArchitectureMode || !showPorts) {
             return [];
           }
           const dim = getConfigurableDimensions(d);
@@ -1725,7 +1774,8 @@ function WorkflowCanvas({
         .selectAll('.bottom-port-group')
         .data(
           (d: any) => {
-            if (!d.bottomPorts) {
+            // Apply level-of-detail: hide ports when zoomed out too far
+            if (!showPorts || !d.bottomPorts) {
               return [];
             }
             return d.bottomPorts.map((port: any) => ({
@@ -2235,7 +2285,8 @@ function WorkflowCanvas({
         svg,
         connections: connectionsToRender,
         onConnectionClick,
-        getConnectionPath: (c) => getConnectionPath(c),
+        // Approach B: when dragging, force use of drag positions to keep both writers in sync
+        getConnectionPath: (c) => getConnectionPath(c, isDragging),
         createFilledPolygonFromPath: createFilledPolygonFromPathCallback,
         getConnectionMarker,
         getConnectionGroupInfo: (id, list) =>
@@ -2256,6 +2307,7 @@ function WorkflowCanvas({
     getConnectionMarker,
     svgRef,
     zIndexManager,
+    isDragging,
   ]);
 
   // Bind root SVG events in a tiny effect to avoid stale closures

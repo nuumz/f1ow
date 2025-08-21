@@ -139,9 +139,9 @@ export function renderConnectionsLayer(opts: RenderConnectionsOptions) {
         })
 
     // Update hitbox geometry
-    merged
-        .select<SVGPathElement>('.connection-hitbox')
-        .attr('d', (d: Connection) => {
+    {
+        const hitboxSel = merged.select<SVGPathElement>('.connection-hitbox')
+        hitboxSel.attr('d', (d: Connection) => {
             const gi = getGI(d.id)
             // In architecture mode, increase hitbox thickness for the primary path of grouped connections
             let thickness = 8
@@ -152,7 +152,7 @@ export function renderConnectionsLayer(opts: RenderConnectionsOptions) {
             }
             return createFilledPolygonFromPath(getPath(d), thickness)
         })
-        .style('display', (d: Connection) => {
+        hitboxSel.style('display', (d: Connection) => {
             const gi = getGI(d.id)
             // In architecture mode, render only a single representative per group (index === 0)
             if (workflowMode === 'architecture') {
@@ -160,78 +160,79 @@ export function renderConnectionsLayer(opts: RenderConnectionsOptions) {
             }
             return 'block'
         })
+    }
 
     // Update visible path
-    merged
-        .select<SVGPathElement>('.connection-path')
-        .attr('d', (d: Connection) => getPath(d))
-        .attr('stroke', 'white')
-        .attr('stroke-width', (d: Connection) => {
-            const gi = getGI(d.id)
-            if (workflowMode === 'architecture' && gi.isMultiple && gi.index === 0) {
-                // Thicken primary path to visually represent the number of connections in the group
-                return 2 + Math.min(Math.max(gi.total - 1, 0), 4) // 2..6
-            }
-            return 2
-        })
-        .attr('marker-end', (d: Connection) => getConnectionMarker(d, 'default'))
-        .style('marker-end', (d: Connection) => getConnectionMarker(d, 'default'))
-        .style('display', (d: Connection) => {
-            const gi = getGI(d.id)
-            if (workflowMode === 'architecture') {
-                return gi.index === 0 ? 'block' : 'none'
-            }
-            return 'block'
-        })
-        .attr('class', (d: Connection) => {
-            const groupInfo = getGI(d.id)
-            let classes = 'connection-path'
-            if (groupInfo.isMultiple) {
-                // Allow CSS styling for grouped connections
-                classes += ' connection-multi'
-                if (groupInfo.index === 0) { classes += ' connection-multi-primary' }
-            }
-            return classes
-        })
+    {
+        const pathSel = merged.select<SVGPathElement>('.connection-path')
+        pathSel.attr('d', (d: Connection) => getPath(d))
+            .attr('stroke', 'white')
+            .attr('stroke-width', (d: Connection) => {
+                const gi = getGI(d.id)
+                if (workflowMode === 'architecture' && gi.isMultiple && gi.index === 0) {
+                    // Thicken primary path to visually represent the number of connections in the group
+                    return 2 + Math.min(Math.max(gi.total - 1, 0), 4) // 2..6
+                }
+                return 2
+            })
+            .attr('marker-end', (d: Connection) => getConnectionMarker(d, 'default'))
+            .style('marker-end', (d: Connection) => getConnectionMarker(d, 'default'))
+            .style('display', (d: Connection) => {
+                const gi = getGI(d.id)
+                if (workflowMode === 'architecture') {
+                    return gi.index === 0 ? 'block' : 'none'
+                }
+                return 'block'
+            })
+            .attr('class', (d: Connection) => {
+                const groupInfo = getGI(d.id)
+                let classes = 'connection-path'
+                if (groupInfo.isMultiple) {
+                    // Allow CSS styling for grouped connections
+                    classes += ' connection-multi'
+                    if (groupInfo.index === 0) { classes += ' connection-multi-primary' }
+                }
+                return classes
+            })
+    }
 
     // Update label with a single DOM measurement per item
-    merged
-        .select<SVGTextElement>('.connection-label')
-        .each(function (this: SVGTextElement, d: Connection) {
-            const labelSel = d3.select(this)
-            if (workflowMode !== 'architecture') {
-                labelSel.style('display', 'none').text('')
-                return
+    const labelSel = merged.select<SVGTextElement>('.connection-label')
+    labelSel.each(function (this: SVGTextElement, d: Connection) {
+        const label = d3.select(this)
+        if (workflowMode !== 'architecture') {
+            label.style('display', 'none').text('')
+            return
+        }
+        const gi = getGI(d.id)
+        const isPrimary = gi.index === 0
+        label.style('display', isPrimary ? 'block' : 'none')
+        if (!isPrimary) {
+            return
+        }
+        let x = 0
+        let y = 0
+        // Try path midpoint
+        const group = d3.select(this.parentNode as SVGGElement)
+        const pathEl = group.select<SVGPathElement>('.connection-path').node()
+        if (pathEl) {
+            try {
+                const len = pathEl.getTotalLength()
+                const pt = pathEl.getPointAtLength(len / 2)
+                x = pt.x
+                y = pt.y - 8
+            } catch {
+                // Fallback to node midpoint below
             }
-            const gi = getGI(d.id)
-            const isPrimary = gi.index === 0
-            labelSel.style('display', isPrimary ? 'block' : 'none')
-            if (!isPrimary) {
-                return
+        }
+        if (!x && !y) {
+            const s = nodeMap.get(d.sourceNodeId)
+            const t = nodeMap.get(d.targetNodeId)
+            if (s && t) {
+                x = (s.x + t.x) / 2
+                y = (s.y + t.y) / 2 - 8
             }
-            let x = 0
-            let y = 0
-            // Try path midpoint
-            const group = d3.select(this.parentNode as SVGGElement)
-            const pathEl = group.select<SVGPathElement>('.connection-path').node()
-            if (pathEl) {
-                try {
-                    const len = pathEl.getTotalLength()
-                    const pt = pathEl.getPointAtLength(len / 2)
-                    x = pt.x
-                    y = pt.y - 8
-                } catch {
-                    // Fallback to node midpoint below
-                }
-            }
-            if (!x && !y) {
-                const s = nodeMap.get(d.sourceNodeId)
-                const t = nodeMap.get(d.targetNodeId)
-                if (s && t) {
-                    x = (s.x + t.x) / 2
-                    y = (s.y + t.y) / 2 - 8
-                }
-            }
-            labelSel.attr('x', x).attr('y', y).text(`${gi.total} connections`)
-        })
+        }
+        label.attr('x', x).attr('y', y).text(`${gi.total} connections`)
+    })
 }

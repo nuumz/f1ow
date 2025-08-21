@@ -176,6 +176,9 @@ export type WorkflowAction =
   | { type: 'UPDATE_DRAG_POSITION'; payload: { x: number; y: number } }
   | { type: 'END_DRAGGING' }
 
+  // Batched operations for performance
+  | { type: 'BATCH_OPERATIONS'; payload: WorkflowAction[] }
+
   // Workflow state actions
   | { type: 'MARK_DIRTY' }
   | { type: 'MARK_CLEAN' }
@@ -679,6 +682,17 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
         },
       };
 
+    case 'BATCH_OPERATIONS':
+      // Process multiple actions in a single render cycle
+      return action.payload.reduce((currentState, batchAction) => {
+        // Prevent infinite recursion by not allowing nested batch operations
+        if (batchAction.type === 'BATCH_OPERATIONS') {
+          logger.warn('Nested batch operations are not allowed');
+          return currentState;
+        }
+        return workflowReducer(currentState, batchAction);
+      }, state);
+
     case 'MARK_DIRTY':
       return {
         ...state,
@@ -897,6 +911,9 @@ interface WorkflowContextType {
 
   // Designer mode management
   setDesignerMode: (mode: 'workflow' | 'architecture') => void;
+
+  // Batched operations for performance
+  batchOperations: (actions: WorkflowAction[]) => void;
 
   // Dragging management
   startDragging: (nodeId: string, startPosition: { x: number; y: number }) => void;
@@ -1124,6 +1141,21 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     [dispatch]
   );
 
+  // Batched operations function for performance optimization
+  const batchOperations = useCallback(
+    (actions: WorkflowAction[]) => {
+      if (actions.length === 0) {
+        return;
+      }
+      if (actions.length === 1) {
+        dispatch(actions[0]);
+      } else {
+        dispatch({ type: 'BATCH_OPERATIONS', payload: actions });
+      }
+    },
+    [dispatch]
+  );
+
   // Set up auto-save state callback
   useEffect(() => {
     const callback = (status: 'started' | 'completed' | 'failed', error?: string) => {
@@ -1294,6 +1326,7 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     getStorageStats,
     getAutoSaveStatus,
     setDesignerMode,
+    batchOperations,
     startDragging,
     updateDragPosition,
     endDragging,
@@ -1317,6 +1350,7 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     getStorageStats,
     getAutoSaveStatus,
     setDesignerMode,
+    batchOperations,
     startDragging,
     updateDragPosition,
     endDragging,
@@ -1431,6 +1465,110 @@ export function useSelectedNode(): WorkflowNode | null {
 export function useWorkflowName(): string {
   const { state } = useWorkflowContext();
   return useMemo(() => state.workflowName, [state.workflowName]);
+}
+
+// Advanced selector hooks for derived state
+// eslint-disable-next-line react-refresh/only-export-components
+export function useNodesByType(nodeType?: string): WorkflowNode[] {
+  const { state } = useWorkflowContext();
+  return useMemo(() => {
+    if (!nodeType) {
+      return state.nodes;
+    }
+    return state.nodes.filter(node => node.type === nodeType);
+  }, [state.nodes, nodeType]);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useConnectionMetrics() {
+  const { state } = useWorkflowContext();
+  return useMemo(() => {
+    const connections = state.connections;
+    const totalConnections = connections.length;
+    const validConnections = connections.filter(conn => conn.validated !== false).length;
+    const invalidConnections = totalConnections - validConnections;
+    
+    // Calculate node connection degrees
+    const connectionCounts = new Map<string, { incoming: number; outgoing: number }>();
+    connections.forEach(conn => {
+      const source = connectionCounts.get(conn.sourceNodeId) || { incoming: 0, outgoing: 0 };
+      const target = connectionCounts.get(conn.targetNodeId) || { incoming: 0, outgoing: 0 };
+      
+      connectionCounts.set(conn.sourceNodeId, { ...source, outgoing: source.outgoing + 1 });
+      connectionCounts.set(conn.targetNodeId, { ...target, incoming: target.incoming + 1 });
+    });
+
+    return {
+      totalConnections,
+      validConnections,
+      invalidConnections,
+      connectionCounts,
+      avgConnectionsPerNode: state.nodes.length > 0 ? totalConnections / state.nodes.length : 0,
+    };
+  }, [state.connections, state.nodes.length]);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useWorkflowComplexity() {
+  const { state } = useWorkflowContext();
+  return useMemo(() => {
+    const nodeCount = state.nodes.length;
+    const connectionCount = state.connections.length;
+    const uniqueNodeTypes = new Set(state.nodes.map(n => n.type)).size;
+    
+    // Calculate complexity metrics
+    const density = nodeCount > 1 ? connectionCount / (nodeCount * (nodeCount - 1) / 2) : 0;
+    const averageDegree = nodeCount > 0 ? (connectionCount * 2) / nodeCount : 0;
+    
+    let complexityScore = 'simple';
+    if (nodeCount > 50 || connectionCount > 100 || uniqueNodeTypes > 10) {
+      complexityScore = 'complex';
+    } else if (nodeCount > 20 || connectionCount > 40 || uniqueNodeTypes > 5) {
+      complexityScore = 'medium';
+    }
+
+    return {
+      nodeCount,
+      connectionCount,
+      uniqueNodeTypes,
+      density: Math.round(density * 100) / 100,
+      averageDegree: Math.round(averageDegree * 100) / 100,
+      complexityScore: complexityScore as 'simple' | 'medium' | 'complex',
+    };
+  }, [state.nodes, state.connections]);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useVisibleNodes(
+  viewport?: { x: number; y: number; width: number; height: number; scale: number },
+  bufferSize = 200
+): WorkflowNode[] {
+  const { state } = useWorkflowContext();
+  return useMemo(() => {
+    if (!viewport || state.nodes.length < 50) {
+      return state.nodes;
+    }
+
+    const buffer = bufferSize / viewport.scale;
+    const minX = viewport.x - buffer;
+    const maxX = viewport.x + viewport.width + buffer;
+    const minY = viewport.y - buffer;
+    const maxY = viewport.y + viewport.height + buffer;
+
+    return state.nodes.filter(node => {
+      return node.x >= minX && node.x <= maxX && node.y >= minY && node.y <= maxY;
+    });
+  }, [state.nodes, viewport, bufferSize]);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useNodeConnections(nodeId: string) {
+  const { state } = useWorkflowContext();
+  return useMemo(() => {
+    const incoming = state.connections.filter(conn => conn.targetNodeId === nodeId);
+    const outgoing = state.connections.filter(conn => conn.sourceNodeId === nodeId);
+    return { incoming, outgoing, total: incoming.length + outgoing.length };
+  }, [state.connections, nodeId]);
 }
 
 // eslint-disable-next-line react-refresh/only-export-components

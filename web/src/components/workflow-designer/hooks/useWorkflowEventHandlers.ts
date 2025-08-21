@@ -53,11 +53,36 @@ export function useWorkflowEventHandlers() {
     dispatch({ type: 'SET_DRAG_OVER', payload: false })
   }, [dispatch])
 
+  // In some browsers, dragleave may not fire when dropping outside the element.
+  // Ensure we always clear the drag-over state on drag end.
+  const handleCanvasDragEnd = useCallback(() => {
+    dispatch({ type: 'SET_DRAG_OVER', payload: false })
+  }, [dispatch])
+
   const handleCanvasDrop = useCallback((event: React.DragEvent) => {
+    // Prevent browser from opening dropped content
     event.preventDefault()
+    event.stopPropagation()
     dispatch({ type: 'SET_DRAG_OVER', payload: false })
 
-    const nodeType = event.dataTransfer.getData('application/node-type')
+    // Try multiple MIME types for maximum browser compatibility
+    let nodeType = event.dataTransfer.getData('application/node-type')
+    if (!nodeType) {
+      nodeType = event.dataTransfer.getData('text/node-type')
+    }
+    if (!nodeType) {
+      const textPlain = event.dataTransfer.getData('text/plain')
+      if (textPlain) {
+        try {
+          const parsed = JSON.parse(textPlain)
+          if (parsed && typeof parsed === 'object' && parsed.kind === 'node' && typeof parsed.type === 'string') {
+            nodeType = parsed.type
+          }
+        } catch {
+          // Ignore parse errors; fall through
+        }
+      }
+    }
     if (nodeType && svgRef.current) {
       const rect = svgRef.current.getBoundingClientRect()
       const clientX = event.clientX - rect.left
@@ -500,6 +525,7 @@ export function useWorkflowEventHandlers() {
     handleCanvasClick,
     handleCanvasDragOver,
     handleCanvasDragLeave,
+    handleCanvasDragEnd,
     handleCanvasDrop,
     handleCanvasClickInternal,
     handleCanvasMouseMove,

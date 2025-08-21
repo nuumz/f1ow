@@ -121,13 +121,24 @@ export function renderConnectionsLayer(opts: RenderConnectionsOptions) {
     // Update hitbox geometry
     merged
         .select<SVGPathElement>('.connection-hitbox')
-        .attr('d', (d: Connection) => createFilledPolygonFromPath(getConnectionPath(d), 8))
+        .attr('d', (d: Connection) => {
+            const gi = getConnectionGroupInfo(d.id, connections)
+            // In architecture mode, increase hitbox thickness for the primary path of grouped connections
+            let thickness = 8
+            if (workflowMode === 'architecture' && gi.isMultiple && gi.index === 0) {
+                // Scale with group size but clamp to avoid excessive thickness
+                const strokeWidth = 2 + Math.min(Math.max(gi.total - 1, 0), 4) // 2..6
+                thickness = 6 + (strokeWidth - 2) * 2 // 6..14
+            }
+            return createFilledPolygonFromPath(getConnectionPath(d), thickness)
+        })
         .style('display', (d: Connection) => {
-            const groupInfo = getConnectionGroupInfo(d.id, connections)
-            // Only collapse to primary connection in architecture mode; show all in workflow/debug
-            return workflowMode === 'architecture' && groupInfo.isMultiple && groupInfo.index > 0
-                ? 'none'
-                : 'block'
+            const gi = getConnectionGroupInfo(d.id, connections)
+            // In architecture mode, render only a single representative per group (index === 0)
+            if (workflowMode === 'architecture') {
+                return gi.index === 0 ? 'block' : 'none'
+            }
+            return 'block'
         })
 
     // Update visible path
@@ -135,15 +146,22 @@ export function renderConnectionsLayer(opts: RenderConnectionsOptions) {
         .select<SVGPathElement>('.connection-path')
         .attr('d', (d: Connection) => getConnectionPath(d))
         .attr('stroke', 'white')
-        .attr('stroke-width', 2)
+        .attr('stroke-width', (d: Connection) => {
+            const gi = getConnectionGroupInfo(d.id, connections)
+            if (workflowMode === 'architecture' && gi.isMultiple && gi.index === 0) {
+                // Thicken primary path to visually represent the number of connections in the group
+                return 2 + Math.min(Math.max(gi.total - 1, 0), 4) // 2..6
+            }
+            return 2
+        })
         .attr('marker-end', (d: Connection) => getConnectionMarker(d, 'default'))
         .style('marker-end', (d: Connection) => getConnectionMarker(d, 'default'))
         .style('display', (d: Connection) => {
-            const groupInfo = getConnectionGroupInfo(d.id, connections)
-            // Only collapse to primary connection in architecture mode; show all in workflow/debug
-            return workflowMode === 'architecture' && groupInfo.isMultiple && groupInfo.index > 0
-                ? 'none'
-                : 'block'
+            const gi = getConnectionGroupInfo(d.id, connections)
+            if (workflowMode === 'architecture') {
+                return gi.index === 0 ? 'block' : 'none'
+            }
+            return 'block'
         })
         .attr('class', (d: Connection) => {
             const groupInfo = getConnectionGroupInfo(d.id, connections)
@@ -162,7 +180,8 @@ export function renderConnectionsLayer(opts: RenderConnectionsOptions) {
         .style('display', (d: Connection) => {
             if (workflowMode !== 'architecture') { return 'none' }
             const gi = getConnectionGroupInfo(d.id, connections)
-            return gi.isMultiple && gi.index === 0 ? 'block' : 'none'
+            // Show label for the representative connection only (index === 0)
+            return gi.index === 0 ? 'block' : 'none'
         })
         .attr('x', function (this: SVGTextElement, d: Connection) {
             // In architecture mode, place label at the midpoint of the actual path geometry
@@ -207,14 +226,9 @@ export function renderConnectionsLayer(opts: RenderConnectionsOptions) {
             return (s.y + t.y) / 2 - 8
         })
         .text((d: Connection) => {
-            if (workflowMode !== 'architecture') {
-                return ''
-            }
+            if (workflowMode !== 'architecture') { return '' }
             const gi = getConnectionGroupInfo(d.id, connections)
-            // Show label only for primary connection in multi-connection groups
-            if (gi.isMultiple && gi.index === 0) {
-                return `${gi.total} connections`
-            }
-            return ''
+            // Show count on the representative only
+            return gi.index === 0 ? `${gi.total} connections` : ''
         })
 }

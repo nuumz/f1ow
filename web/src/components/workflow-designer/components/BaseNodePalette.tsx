@@ -100,7 +100,15 @@ export default function BaseNodePalette({
   }, [isDropdownOpen]);
 
   const handleDragStart = (e: React.DragEvent, type: string) => {
+    // Primary custom MIME for modern browsers
     e.dataTransfer.setData('application/node-type', type);
+    // Cross-browser fallbacks (Safari/WebKit requires a text type to enable drops)
+    try {
+      e.dataTransfer.setData('text/node-type', type);
+      e.dataTransfer.setData('text/plain', JSON.stringify({ kind: 'node', type }));
+    } catch {
+      // Best-effort: ignore if browser disallows multiple types
+    }
     e.dataTransfer.effectAllowed = 'copy';
 
     // Add visual feedback

@@ -114,6 +114,7 @@ export {
 type PortSide = 'top' | 'bottom' | 'left' | 'right' | 'unknown'
 // Shared alias for architecture virtual side-ports
 type SidePortId = '__side-left' | '__side-right' | '__side-top' | '__side-bottom'
+type PortType = 'input' | 'output' | 'bottom'
 function buildNodeBox(node: WorkflowNode) {
   const dims = getShapeAwareDimensions(node)
   const width = dims.width || 200
@@ -721,7 +722,7 @@ function generateArchitectureModeConnectionPath(
   const sourceDims = getModeAwareDimensions(sourceNode, 'architecture')
   const targetDims = getModeAwareDimensions(targetNode, 'architecture')
 
-  const computeArchPortPos = (node: WorkflowNode, portId: string, portType: 'bottom' | 'input' | 'output', dims: { width: number; height: number }): PortPosition => {
+  const computeArchPortPos = (node: WorkflowNode, portId: string, portType: PortType, dims: { width: number; height: number }): PortPosition => {
     if (isVirtualSidePortId(portId)) { return getVirtualSidePortPositionForMode(node, portId, 'architecture') }
     if (portType === 'bottom') {
       const ports = node.bottomPorts || []
@@ -919,6 +920,141 @@ export function getConnectionGroupInfo(
     total: groupInfo.total,
     isMultiple: groupInfo.isMultiple
   }
+}
+
+/**
+ * New grouping for multi-connection paths by side and port-group
+ * - Group by side: __side-left, __side-right, __side-top, __side-bottom (per endpoint)
+ * - Group by port-group: 'output-port-group' | 'input-port-group' (per endpoint)
+ */
+export type PortGroupClass = 'output-port-group' | 'input-port-group'
+export type SideGroupId = '__side-left' | '__side-right' | '__side-top' | '__side-bottom'
+
+function toSideGroupId(side: 'left' | 'right' | 'top' | 'bottom' | 'unknown'): SideGroupId {
+  if (side === 'left') { return '__side-left' }
+  if (side === 'right') { return '__side-right' }
+  if (side === 'top') { return '__side-top' }
+  // fallback unknown->bottom for stability
+  return '__side-bottom'
+}
+
+function resolvePortTypeForEnd(
+  node: WorkflowNode,
+  portId: string,
+  isSourceEnd: boolean
+): PortType {
+  if (isBottomPort(node, portId)) { return 'bottom' }
+  const t = getPortType(node, portId)
+  if (t === 'input' || t === 'output') { return t }
+  // Default: source tends to be output, target tends to be input
+  return isSourceEnd ? 'output' : 'input'
+}
+
+function getModeAwarePortPosition(
+  node: WorkflowNode,
+  portId: string,
+  portType: PortType,
+  modeId: DesignerMode
+): PortPosition { // NOSONAR: structured branching for clarity
+  if (modeId === 'architecture') {
+    if (isVirtualSidePortId(portId)) {
+      return getVirtualSidePortPositionForMode(node, portId as SidePortId, 'architecture')
+    }
+    // Mirror computeArchPortPos minimal logic
+    const dims = getModeAwareDimensions(node, 'architecture')
+    if (portType === 'bottom') {
+      const ports = node.bottomPorts || []
+      const idx = Math.max(0, ports.findIndex(p => p.id === portId))
+      const count = ports.length
+      const usableWidth = Math.min(dims.width * 0.8, dims.width - 70)
+      if (count === 2) {
+        const spacing = usableWidth / 3; const positions = [-spacing, spacing]
+        return { x: node.x + (positions[idx] || 0), y: node.y + dims.height / 2 }
+      }
+      if (count === 3) {
+        const half = usableWidth / 2; const positions = [-half, 0, half]
+        return { x: node.x + (positions[idx] || 0), y: node.y + dims.height / 2 }
+      }
+      if (count >= 4) {
+        const spacing = usableWidth / (count - 1)
+        const relX = -usableWidth / 2 + spacing * idx
+        return { x: node.x + relX, y: node.y + dims.height / 2 }
+      }
+      return { x: node.x, y: node.y + dims.height / 2 }
+    }
+    const ports = portType === 'input' ? node.inputs : node.outputs
+    const idx = Math.max(0, ports.findIndex(p => p.id === portId))
+    const count = ports.length || 1
+    const spacing = dims.height / (count + 1)
+    const y = -dims.height / 2 + spacing * (idx + 1)
+    const x = portType === 'input' ? -dims.width / 2 : dims.width / 2
+    return { x: node.x + x, y: node.y + y }
+  }
+  // workflow/default
+  const variant: NodeVariant = 'standard'
+  if (isVirtualSidePortId(portId)) {
+    return getVirtualSidePortPosition(node, portId)
+  }
+  const t: PortType = portType === 'bottom' ? 'bottom' : portType
+  return calculatePortPositionCore(node, portId, t, variant)
+}
+
+export function groupConnectionsBySideAndPort(
+  connections: Array<{
+    id: string
+    sourceNodeId: string
+    targetNodeId: string
+    sourcePortId: string
+    targetPortId: string
+  }>,
+  nodes: WorkflowNode[],
+  modeId: DesignerMode = 'architecture'
+): Map<string, {
+  key: string
+  sourceSide: SideGroupId
+  targetSide: SideGroupId
+  sourceGroup: PortGroupClass
+  targetGroup: PortGroupClass
+  items: Array<{ id: string; sourceNodeId: string; targetNodeId: string; sourcePortId: string; targetPortId: string }>
+}> {
+  const nodeMap = new Map(nodes.map(n => [n.id, n]))
+  type GroupBucket = {
+    key: string
+    sourceSide: SideGroupId
+    targetSide: SideGroupId
+    sourceGroup: PortGroupClass
+    targetGroup: PortGroupClass
+    items: Array<{ id: string; sourceNodeId: string; targetNodeId: string; sourcePortId: string; targetPortId: string }>
+  }
+  const result = new Map<string, GroupBucket>()
+
+  for (const c of connections) {
+    const sNode = nodeMap.get(c.sourceNodeId)
+    const tNode = nodeMap.get(c.targetNodeId)
+    if (!sNode || !tNode) { continue }
+
+    const sType = resolvePortTypeForEnd(sNode, c.sourcePortId, true)
+    const tType = resolvePortTypeForEnd(tNode, c.targetPortId, false)
+    const sPos = getModeAwarePortPosition(sNode, c.sourcePortId, sType, modeId)
+    const tPos = getModeAwarePortPosition(tNode, c.targetPortId, tType, modeId)
+
+    const sSide = toSideGroupId(detectPortSideModeAware(sNode, c.sourcePortId, sPos, modeId || 'workflow'))
+    const tSide = toSideGroupId(detectPortSideModeAware(tNode, c.targetPortId, tPos, modeId || 'workflow'))
+
+    const sGroup: PortGroupClass = (sType === 'input') ? 'input-port-group' : 'output-port-group'
+    const tGroup: PortGroupClass = (tType === 'output') ? 'output-port-group' : 'input-port-group'
+
+    // Include node identities in the grouping key to avoid merging unrelated node pairs
+    const key = `${c.sourceNodeId}|${sSide}:${sGroup}->${c.targetNodeId}|${tSide}:${tGroup}`
+    let bucket = result.get(key)
+    if (!bucket) {
+      bucket = { key, sourceSide: sSide, targetSide: tSide, sourceGroup: sGroup, targetGroup: tGroup, items: [] }
+      result.set(key, bucket)
+    }
+    bucket.items.push({ id: c.id, sourceNodeId: c.sourceNodeId, targetNodeId: c.targetNodeId, sourcePortId: c.sourcePortId, targetPortId: c.targetPortId })
+  }
+
+  return result
 }
 
 /**

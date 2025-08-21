@@ -32,6 +32,39 @@ import {
   setAutoSaveCallback,
 } from '../utils/workflow-storage';
 
+// Lightweight logger: info/warn deferred in development to avoid React DevTools stack noise; error logs immediately
+const logger = {
+  info: (...args: unknown[]) => {
+    if (process.env.NODE_ENV !== 'development') {
+      return;
+    }
+    setTimeout(() => {
+      try {
+        // Use warn channel to satisfy ESLint no-console policy (warn/error only)
+        console.warn('[info]', ...(args as []));
+      } catch {
+        /* noop */
+      }
+    }, 0);
+  },
+  warn: (...args: unknown[]) => {
+    if (process.env.NODE_ENV !== 'development') {
+      return;
+    }
+    setTimeout(() => {
+      try {
+        console.warn(...(args as []));
+      } catch {
+        /* noop */
+      }
+    }, 0);
+  },
+  error: (...args: unknown[]) => {
+    // true errors should surface immediately
+    console.error(...(args as []));
+  },
+} as const;
+
 // Workflow state interface (extends centralized types)
 export interface WorkflowState {
   // Core data
@@ -216,9 +249,9 @@ const saveConnectionsToStorage = (workflowName: string, connections: Connection[
       version: '1.0',
     };
     localStorage.setItem(key, JSON.stringify(connectionData));
-    console.warn('Connections saved to storage:', connections.length, 'connections');
+    logger.info('Connections saved to storage:', connections.length, 'connections');
   } catch (error) {
-    console.warn('Failed to save connections to localStorage:', error);
+    logger.error('Failed to save connections to localStorage:', error);
   }
 };
 
@@ -228,7 +261,7 @@ const loadConnectionsFromStorage = (workflowName: string): Connection[] => {
     const saved = localStorage.getItem(key);
     if (saved) {
       const connectionData = JSON.parse(saved);
-      console.warn(
+      logger.info(
         'Connections loaded from storage:',
         connectionData.connections.length,
         'connections'
@@ -236,7 +269,7 @@ const loadConnectionsFromStorage = (workflowName: string): Connection[] => {
       return connectionData.connections || [];
     }
   } catch (error) {
-    console.warn('Failed to load connections from localStorage:', error);
+    logger.error('Failed to load connections from localStorage:', error);
   }
   return [];
 };
@@ -272,7 +305,7 @@ const validateConnections = (
   return connections.filter((conn) => {
     // Node existence fast check
     if (!nodeIds.has(conn.sourceNodeId) || !nodeIds.has(conn.targetNodeId)) {
-      console.warn('Invalid connection - missing node:', conn);
+      logger.warn('Invalid connection - missing node:', conn);
       return false;
     }
 
@@ -293,7 +326,7 @@ const validateConnections = (
       (allowVirtualSidePorts && isVirtualSidePort(conn.targetPortId));
 
     if (!sourcePortExists || !targetPortExists) {
-      console.warn('Invalid connection - missing port:', {
+      logger.warn('Invalid connection - missing port:', {
         connection: conn,
         sourcePortExists,
         targetPortExists,
@@ -321,8 +354,11 @@ const markStateAsDirty = (state: WorkflowState): WorkflowState => ({
 // Reducer function
 // This reducer aggregates many action types by design for a central state machine.
 // Refactoring into multiple reducers would add indirection without clear benefit.
-function workflowReducer(state: WorkflowState, action: WorkflowAction): WorkflowState { // NOSONAR
-  switch (action.type) { // NOSONAR
+function workflowReducer(state: WorkflowState, action: WorkflowAction): WorkflowState {
+  // NOSONAR
+  switch (
+    action.type // NOSONAR
+  ) {
     case 'SET_WORKFLOW_NAME':
       return markStateAsDirty({ ...state, workflowName: action.payload });
 
@@ -380,7 +416,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
         saveConnectionsToStorage(state.workflowName, newConnections);
       }
 
-      console.warn('Connection added:', action.payload.id);
+      logger.info('Connection added:', action.payload.id);
       return newState;
     }
 
@@ -403,7 +439,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
         saveConnectionsToStorage(state.workflowName, newConnections);
       }
 
-      console.warn('Connection deleted:', action.payload);
+      logger.info('Connection deleted:', action.payload);
       return newState;
     }
 
@@ -415,7 +451,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
         saveConnectionsToStorage(state.workflowName, action.payload);
       }
 
-      console.warn('Connections set:', action.payload.length, 'connections');
+      logger.info('Connections set:', action.payload.length, 'connections');
       return newState;
     }
 
@@ -430,7 +466,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
         saveConnectionsToStorage(state.workflowName, newConnections);
       }
 
-      console.warn('Connection updated:', action.payload.connectionId);
+      logger.info('Connection updated:', action.payload.connectionId);
       return newState;
     }
 
@@ -443,7 +479,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
       const invalidCount = state.connections.length - validConnections.length;
 
       if (invalidCount > 0) {
-        console.warn(`⚠️ Removed ${invalidCount} invalid connections`);
+        logger.warn(`⚠️ Removed ${invalidCount} invalid connections`);
         const newState = markStateAsDirty({ ...state, connections: validConnections });
 
         // Auto-save to storage if enabled
@@ -469,7 +505,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
 
     case 'LOAD_CONNECTIONS_FROM_STORAGE': {
       const validConnections = validateConnections(action.payload, state.nodes, state.designerMode);
-      console.warn('Loaded connections from storage:', validConnections.length, 'connections');
+      logger.info('Loaded connections from storage:', validConnections.length, 'connections');
       return { ...state, connections: validConnections, isDirty: false };
     }
 
@@ -518,7 +554,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
       return { ...state, canvasTransform: action.payload };
 
     case 'START_CONNECTION': {
-      console.warn('START_CONNECTION reducer:', action.payload);
+      logger.info('START_CONNECTION reducer:', action.payload);
       const newConnectionState = {
         ...state,
         connectionState: {
@@ -528,7 +564,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
           connectionPreview: null,
         },
       };
-      console.warn('New connection state:', newConnectionState.connectionState);
+      logger.info('New connection state:', newConnectionState.connectionState);
       return newConnectionState;
     }
 
@@ -542,7 +578,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
       };
 
     case 'CLEAR_CONNECTION_STATE': {
-      console.warn('CLEAR_CONNECTION_STATE reducer called');
+      logger.info('CLEAR_CONNECTION_STATE reducer called');
       const newState = {
         ...state,
         connectionState: {
@@ -691,7 +727,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
 
       const success = saveDraftWorkflow(draftData, { bumpVersion: true });
       if (success) {
-        console.warn('Draft saved successfully:', draftId, 'with mode:', state.designerMode);
+        logger.info('Draft saved successfully:', draftId, 'with mode:', state.designerMode);
         return {
           ...state,
           lastSaved: Date.now(),
@@ -706,7 +742,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
 
     case 'LOAD_DRAFT': {
       const { draft } = action.payload;
-      console.warn('Loading draft:', draft.name, 'with mode:', draft.designerMode);
+      logger.info('Loading draft:', draft.name, 'with mode:', draft.designerMode);
       return {
         ...state,
         workflowName: draft.name,
@@ -747,7 +783,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
 
       // Perform auto-save without triggering re-render
       autoSaveDraftWorkflow(draftData);
-      console.warn('Auto-save completed silently (no re-render)');
+      logger.info('Auto-save completed silently (no re-render)');
 
       // Return state unchanged to prevent re-render
       return {
@@ -785,7 +821,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
     }
 
     case 'AUTO_SAVE_FAILED': {
-      console.error('❌ Auto-save failed:', action.payload.error);
+      logger.error('❌ Auto-save failed:', action.payload.error);
       return {
         ...state,
         autoSaveState: {
@@ -799,7 +835,7 @@ function workflowReducer(state: WorkflowState, action: WorkflowAction): Workflow
     case 'DELETE_DRAFT': {
       const success = deleteDraftWorkflow(action.payload);
       if (success) {
-        console.warn('Draft deleted successfully:', action.payload);
+        logger.info('Draft deleted successfully:', action.payload);
       }
       return state;
     }
@@ -1013,7 +1049,7 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
   );
 
   const autoSaveDraft = useCallback(() => {
-    console.warn('Auto-save dispatch triggered');
+    logger.info('Auto-save dispatch triggered');
     dispatch({ type: 'AUTO_SAVE_DRAFT' });
   }, [dispatch]);
 
@@ -1149,7 +1185,7 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     if (state.isDirty && state.nodes.length > 0) {
       // Skip auto-save during drag operations to prevent port flickering
       if (state.connectionState.isConnecting) {
-        console.warn('Skipping auto-save during drag operation to prevent flickering');
+        logger.info('Skipping auto-save during drag operation to prevent flickering');
         return;
       }
 
@@ -1174,7 +1210,7 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     if (!state.connectionState.isConnecting && state.isDirty && state.nodes.length > 0) {
       // If we just finished a drag operation and need to save
       const dragEndAutoSaveTimer = setTimeout(() => {
-        console.warn('Silent auto-save triggered after drag completion (no re-render)');
+        logger.info('Silent auto-save triggered after drag completion (no re-render)');
 
         // Perform auto-save directly without dispatch to avoid re-render
         const draftId = `auto-save-${state.workflowName}`;

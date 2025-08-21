@@ -54,6 +54,7 @@ import {
 } from '../utils/d3-manager';
 import { resolveDragEndTarget, createPortDragCallbacks } from '../utils/drag-drop-helpers';
 import { renderConnectionsLayer } from '../utils/connection-dom';
+import { groupConnectionsBySideAndPort } from '../utils/connection-utils';
 import {
   attachNodeBackgroundEvents,
   applyNodeVisualState,
@@ -2016,14 +2017,74 @@ function WorkflowCanvas({
     }
     try {
       const svg = d3.select(svgRef.current);
+      // Precompute group info from the full connection list (architecture mode)
+      const buildGroupIndexMapFromFullList = (): Map<string, { index: number; total: number }> => {
+        const nodesList = Array.from(nodeMap.values());
+        const buckets = groupConnectionsBySideAndPort(connections, nodesList, 'architecture');
+        const map = new Map<string, { index: number; total: number }>();
+        for (const bucket of buckets.values()) {
+          const total = bucket.items.length;
+          for (let i = 0; i < bucket.items.length; i += 1) {
+            const item = bucket.items[i];
+            map.set(item.id, { index: i, total });
+          }
+        }
+        return map;
+      };
+
+      // In architecture mode, render only a single representative connection per group
+      const resolveConnectionsToRender = (): Connection[] => {
+        if (workflowContextState.designerMode !== 'architecture') {
+          return connections;
+        }
+        const nodesList = Array.from(nodeMap.values());
+        const buckets = groupConnectionsBySideAndPort(connections, nodesList, 'architecture');
+        const byId = new Map(connections.map((c) => [c.id, c] as const));
+        const reps: Connection[] = [];
+        for (const bucket of buckets.values()) {
+          if (bucket.items.length > 0) {
+            const first = bucket.items[0]; // index 0 -> primary
+            const conn = byId.get(first.id);
+            if (conn) {
+              reps.push(conn);
+            }
+          }
+        }
+        return reps;
+      };
+
+      const archGroupMap =
+        workflowContextState.designerMode === 'architecture'
+          ? buildGroupIndexMapFromFullList()
+          : null;
+
+      const getGroupInfoForMode = (
+        id: string,
+        list: Connection[],
+        mode: DesignerMode
+      ): { index: number; total: number; isMultiple: boolean } => {
+        const resolvedMode = mode || 'workflow';
+        if (resolvedMode === 'architecture' && archGroupMap) {
+          const info = archGroupMap.get(id);
+          if (info) {
+            return { index: info.index, total: info.total, isMultiple: info.total > 1 };
+          }
+          return { index: 0, total: 1, isMultiple: false };
+        }
+        return getConnectionGroupInfo(id, list);
+      };
+
+      const connectionsToRender = resolveConnectionsToRender();
+
       renderConnectionsLayer({
         svg,
-        connections,
+        connections: connectionsToRender,
         onConnectionClick,
         getConnectionPath: (c) => getConnectionPath(c),
         createFilledPolygonFromPath: createFilledPolygonFromPathCallback,
         getConnectionMarker,
-        getConnectionGroupInfo: (id, list) => getConnectionGroupInfo(id, list),
+        getConnectionGroupInfo: (id, list) =>
+          getGroupInfoForMode(id, list, workflowContextState.designerMode as DesignerMode),
         workflowMode: workflowContextState.designerMode as DesignerMode,
         nodeMap,
       });

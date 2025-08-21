@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import {
   Save,
   Play,
@@ -41,6 +41,9 @@ import { suggestNextNodeType } from './utils/node-suggestions';
 // Import types
 import type { WorkflowNode, Connection } from './types';
 
+// Debug flag for drag/drop logs (off by default to avoid noisy console)
+const DEBUG_DND = false;
+
 // Pure helpers (file-level) to avoid adding branches inside the component function
 function allowArchitectureConnectionHelper(
   connectionStart: { nodeId: string; portId: string; type: 'input' | 'output' },
@@ -48,36 +51,40 @@ function allowArchitectureConnectionHelper(
   targetNodeId: string,
   targetPortId: string
 ): boolean {
-  if (process.env.NODE_ENV === 'development') {
-    console.warn('Architecture mode: SKIPPING duplicate check, allowing multiple connections');
-  }
-
   if (connectionStart.type === 'output' && portType === 'input') {
-    console.warn('Architecture mode: Allowing output -> input connection', {
-      sourceNodeId: connectionStart.nodeId,
-      sourcePortId: connectionStart.portId,
-      targetNodeId,
-      targetPortId,
-    });
+    if (process.env.NODE_ENV === 'development' && DEBUG_DND) {
+      console.warn('Architecture mode: Allowing output -> input connection', {
+        sourceNodeId: connectionStart.nodeId,
+        sourcePortId: connectionStart.portId,
+        targetNodeId,
+        targetPortId,
+      });
+    }
     return true;
   }
   if (connectionStart.type === 'input' && portType === 'output') {
-    console.warn('Architecture mode: Allowing input -> output connection (reverse)', {
-      sourceNodeId: connectionStart.nodeId,
-      sourcePortId: connectionStart.portId,
-      targetNodeId,
-      targetPortId,
-    });
+    if (process.env.NODE_ENV === 'development' && DEBUG_DND) {
+      console.warn('Architecture mode: Allowing input -> output connection (reverse)', {
+        sourceNodeId: connectionStart.nodeId,
+        sourcePortId: connectionStart.portId,
+        targetNodeId,
+        targetPortId,
+      });
+    }
     return true;
   }
   if (!portType) {
-    console.warn('Architecture mode: Allowing connection (no portType specified)');
+    if (process.env.NODE_ENV === 'development' && DEBUG_DND) {
+      console.warn('Architecture mode: Allowing connection (no portType specified)');
+    }
     return true;
   }
-  console.warn('Architecture mode: Invalid connection direction', {
-    connectionStartType: connectionStart.type,
-    targetPortType: portType,
-  });
+  if (process.env.NODE_ENV === 'development' && DEBUG_DND) {
+    console.warn('Architecture mode: Invalid connection direction', {
+      connectionStartType: connectionStart.type,
+      targetPortType: portType,
+    });
+  }
   return false;
 }
 
@@ -261,11 +268,31 @@ function WorkflowDesignerContent({
     [dispatch, generateId]
   );
 
+  // Cache for canDrop decisions during a single drag session to avoid recomputation/log spam
+  const dropDecisionCacheRef = useRef<Map<string, boolean>>(new Map());
+  const loggedDecisionKeysRef = useRef<Set<string>>(new Set());
+
+  // Reset caches when connection gesture ends or restarts
+  useEffect(() => {
+    dropDecisionCacheRef.current.clear();
+    loggedDecisionKeysRef.current.clear();
+  }, [
+    state.connectionState.isConnecting,
+    state.connectionState.connectionStart?.nodeId,
+    state.connectionState.connectionStart?.portId,
+    state.connectionState.connectionStart?.type,
+  ]);
+
   // Memoized canvas handlers extracted to reduce render body complexity
+
   const canDropOnPort = useCallback(
     (targetNodeId: string, targetPortId: string, portType?: 'input' | 'output') => {
-      const { connectionStart } = state.connectionState;
-      if (process.env.NODE_ENV === 'development') {
+      const { connectionStart, isConnecting } = state.connectionState;
+      // Fast path: when not in connecting gesture, never allow drop and don't log
+      if (!isConnecting) {
+        return false;
+      }
+      if (process.env.NODE_ENV === 'development' && DEBUG_DND) {
         console.warn('canDropOnPort called:', {
           targetNodeId,
           targetPortId,
@@ -275,7 +302,7 @@ function WorkflowDesignerContent({
         });
       }
       if (!connectionStart || connectionStart.nodeId === targetNodeId) {
-        if (process.env.NODE_ENV === 'development') {
+        if (process.env.NODE_ENV === 'development' && DEBUG_DND) {
           console.warn('canDropOnPort: No connectionStart or same node', {
             hasConnectionStart: !!connectionStart,
             sameNode: connectionStart?.nodeId === targetNodeId,
@@ -285,12 +312,28 @@ function WorkflowDesignerContent({
       }
 
       if (state.designerMode === 'architecture') {
-        return allowArchitectureConnectionHelper(
+        // Use per-session cache; architecture rule depends only on direction, not on connections list
+        const cacheKey = `${connectionStart.nodeId}|${connectionStart.portId}|${connectionStart.type}|${targetNodeId}|${targetPortId}|${portType ?? 'any'}|arch`;
+        const cached = dropDecisionCacheRef.current.get(cacheKey);
+        if (cached !== undefined) {
+          return cached;
+        }
+        const result = allowArchitectureConnectionHelper(
           connectionStart,
           portType,
           targetNodeId,
           targetPortId
         );
+        dropDecisionCacheRef.current.set(cacheKey, result);
+        if (
+          process.env.NODE_ENV === 'development' &&
+          DEBUG_DND &&
+          !loggedDecisionKeysRef.current.has(cacheKey)
+        ) {
+          console.warn('Architecture canDrop decision (cached)', { cacheKey, result });
+          loggedDecisionKeysRef.current.add(cacheKey);
+        }
+        return result;
       }
 
       const exactDuplicateExists = hasExactDuplicateWorkflowHelper(
@@ -300,13 +343,13 @@ function WorkflowDesignerContent({
         targetPortId
       );
       if (exactDuplicateExists) {
-        if (process.env.NODE_ENV === 'development') {
+        if (process.env.NODE_ENV === 'development' && DEBUG_DND) {
           console.warn('canDropOnPort: Exact duplicate exists (workflow mode)');
         }
         return false;
       }
 
-      if (process.env.NODE_ENV === 'development') {
+      if (process.env.NODE_ENV === 'development' && DEBUG_DND) {
         console.warn('canDropOnPort: Entering workflow mode logic');
       }
       if (connectionStart.type === 'output') {
@@ -328,13 +371,15 @@ function WorkflowDesignerContent({
         connectionStart.nodeId !== targetNodeId &&
         connectionStart.type === 'output'
       );
-      console.warn('canDropOnNode called:', {
-        targetNodeId,
-        sourceNodeId: connectionStart?.nodeId,
-        sourceType: connectionStart?.type,
-        isConnecting,
-        canDrop,
-      });
+      if (process.env.NODE_ENV === 'development' && DEBUG_DND) {
+        console.warn('canDropOnNode called:', {
+          targetNodeId,
+          sourceNodeId: connectionStart?.nodeId,
+          sourceType: connectionStart?.type,
+          isConnecting,
+          canDrop,
+        });
+      }
       return canDrop;
     },
     [state.connectionState]
@@ -370,7 +415,7 @@ function WorkflowDesignerContent({
         handleAddArchitectureNode(nextType, newNodePosition);
       }
     },
-  [handleAddArchitectureNode, operations, state.designerMode, state.nodes]
+    [handleAddArchitectureNode, operations, state.designerMode, state.nodes]
   );
 
   // File operations
@@ -395,7 +440,7 @@ function WorkflowDesignerContent({
     if (state.designerMode !== 'architecture') {
       return null;
     }
-    
+
     return (
       <div className="architecture-dropdown-container">
         <button
@@ -527,7 +572,9 @@ function WorkflowDesignerContent({
       <div className="node-editor-container">
         <NodeEditor
           node={selected as WorkflowNode}
-          onUpdate={(config: Record<string, unknown>) => operations.updateNode(selected.id, { config })}
+          onUpdate={(config: Record<string, unknown>) =>
+            operations.updateNode(selected.id, { config })
+          }
           onDelete={() => operations.deleteNode(selected.id)}
           onDuplicate={() => {
             const pos = { x: selected.x + 40, y: selected.y + 40 };
@@ -874,7 +921,7 @@ function WorkflowDesignerContent({
       )}
 
       {/* Header */}
-  <HeaderSection />
+      <HeaderSection />
 
       {/* Main Content */}
       <div className="workflow-designer-content">
@@ -902,6 +949,7 @@ function WorkflowDesignerContent({
           }}
           onDragOver={handlers.handleCanvasDragOver}
           onDragLeave={handlers.handleCanvasDragLeave}
+          onDragEnd={handlers.handleCanvasDragEnd}
           onDrop={handlers.handleCanvasDrop}
         >
           <svg
@@ -974,7 +1022,7 @@ function WorkflowDesignerContent({
       </div>
 
       {/* Status Bar */}
-  <FooterSection />
+      <FooterSection />
 
       {/* Draft Manager */}
       <DraftManager isOpen={showDraftManager} onClose={() => setShowDraftManager(false)} />

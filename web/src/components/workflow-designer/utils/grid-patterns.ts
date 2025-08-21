@@ -202,27 +202,43 @@ export function renderDualGridRects(
     patternId: string,
     majorPatternId: string
 ) {
-    gridLayer
-        .append('rect')
-        .attr('class', 'grid-pattern-rect base')
-        .attr('x', bounds.minX)
-        .attr('y', bounds.minY)
-        .attr('width', bounds.width)
-        .attr('height', bounds.height)
-        .attr('fill', `url(#${patternId})`)
-        .style('pointer-events', 'none')
-        .style('will-change', 'transform')
+    // Helper to set attribute only if changed
+    const setAttrIfChanged = (sel: d3.Selection<SVGElement, unknown, null, undefined>, name: string, value: string) => {
+        const current = sel.attr(name)
+        if (current !== value) {
+            sel.attr(name, value)
+        }
+    }
 
-    gridLayer
-        .append('rect')
-        .attr('class', 'grid-pattern-rect major')
-        .attr('x', bounds.minX)
-        .attr('y', bounds.minY)
-        .attr('width', bounds.width)
-        .attr('height', bounds.height)
-        .attr('fill', `url(#${majorPatternId})`)
-        .style('pointer-events', 'none')
-        .style('will-change', 'transform')
+    // Base rect: reuse or create
+    let baseRect = gridLayer.select<SVGRectElement>('rect.grid-pattern-rect.base')
+    if (baseRect.empty()) {
+        baseRect = gridLayer
+            .append('rect')
+            .attr('class', 'grid-pattern-rect base')
+            .style('pointer-events', 'none')
+            .style('will-change', 'transform')
+    }
+    setAttrIfChanged(baseRect as unknown as d3.Selection<SVGElement, unknown, null, undefined>, 'x', String(bounds.minX))
+    setAttrIfChanged(baseRect as unknown as d3.Selection<SVGElement, unknown, null, undefined>, 'y', String(bounds.minY))
+    setAttrIfChanged(baseRect as unknown as d3.Selection<SVGElement, unknown, null, undefined>, 'width', String(bounds.width))
+    setAttrIfChanged(baseRect as unknown as d3.Selection<SVGElement, unknown, null, undefined>, 'height', String(bounds.height))
+    setAttrIfChanged(baseRect as unknown as d3.Selection<SVGElement, unknown, null, undefined>, 'fill', `url(#${patternId})`)
+
+    // Major rect: reuse or create
+    let majorRect = gridLayer.select<SVGRectElement>('rect.grid-pattern-rect.major')
+    if (majorRect.empty()) {
+        majorRect = gridLayer
+            .append('rect')
+            .attr('class', 'grid-pattern-rect major')
+            .style('pointer-events', 'none')
+            .style('will-change', 'transform')
+    }
+    setAttrIfChanged(majorRect as unknown as d3.Selection<SVGElement, unknown, null, undefined>, 'x', String(bounds.minX))
+    setAttrIfChanged(majorRect as unknown as d3.Selection<SVGElement, unknown, null, undefined>, 'y', String(bounds.minY))
+    setAttrIfChanged(majorRect as unknown as d3.Selection<SVGElement, unknown, null, undefined>, 'width', String(bounds.width))
+    setAttrIfChanged(majorRect as unknown as d3.Selection<SVGElement, unknown, null, undefined>, 'height', String(bounds.height))
+    setAttrIfChanged(majorRect as unknown as d3.Selection<SVGElement, unknown, null, undefined>, 'fill', `url(#${majorPatternId})`)
 }
 
 // High-performance pattern-based grid creation with enhanced caching and performance monitoring
@@ -326,9 +342,6 @@ export function createGrid(
     const baseSize = GRID_CONSTANTS.BASE_GRID_SIZE
     const { patternId, majorPatternId } = ensureDualGridPatterns(defs, transform.k, baseSize)
 
-    // PERFORMANCE: Selective clearing - only remove grid elements, preserve other content
-    gridLayer.selectAll('.grid-pattern-rect').remove()
-
     // Enhanced bounds calculation with intelligent padding using GridUtils
     const padding = GridUtils.calculateIntelligentPadding(transform.k)
     const bounds = getVisibleCanvasBounds(transform, viewportWidth, viewportHeight, padding)
@@ -339,7 +352,25 @@ export function createGrid(
         return
     }
 
-    // Render layered rects via utility
+    // If existing grid matches pattern and bounds unchanged within tolerance, skip any updates
+    const TOL = 0.5
+    const samePattern = existing && existing.pattern === `${patternId},${majorPatternId}`
+    const sameBounds = existing &&
+        Math.abs(existing.bounds.minX - bounds.minX) <= TOL &&
+        Math.abs(existing.bounds.minY - bounds.minY) <= TOL &&
+        Math.abs(existing.bounds.width - bounds.width) <= TOL &&
+        Math.abs(existing.bounds.height - bounds.height) <= TOL
+    if (samePattern && sameBounds) {
+        if (gridPerformanceRef.current && gridPerformanceRef.current.recordCacheHit) {
+            gridPerformanceRef.current.recordCacheHit()
+        }
+        existing.lastRenderTime = performance.now()
+        existing.viewport = { width: viewportWidth, height: viewportHeight }
+        gridLayer.attr('data-grid-size', `${Math.round(viewportWidth)}x${Math.round(viewportHeight)}`)
+        return
+    }
+
+    // Render or update layered rects (idempotent)
     renderDualGridRects(gridLayer, bounds, patternId, majorPatternId)
 
     // Enhanced cache with all necessary data and performance tracking

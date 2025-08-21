@@ -4,17 +4,17 @@
  * Following SOLID principles with clear separation of concerns
  */
 
- 
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import * as d3 from 'd3'
 import { generateOrthogonalRoundedPath } from '../utils/connection-utils'
-import type { 
-  ModeRenderingStrategy, 
-  ModeDefinition, 
-  ConnectionRenderData, 
-  PortRenderData, 
-  CanvasRenderData, 
+import type {
+  ModeRenderingStrategy,
+  ModeDefinition,
+  ConnectionRenderData,
+  PortRenderData,
+  CanvasRenderData,
   RenderData,
   ModeTheme,
   Point2D
@@ -26,33 +26,39 @@ import type {
  * Provides common functionality and structure for all rendering strategies
  */
 abstract class BaseRenderingStrategy implements ModeRenderingStrategy {
+  // Cross-instance cache: remember last grid key per grid-layer DOM element
+  private static gridLayerKeyCache = new WeakMap<Element, string>()
   protected isActive = false
   protected performanceMetrics = {
     renderTime: 0,
     lastRender: Date.now()
   }
+  // Cache key to avoid redundant grid pattern re-creation per strategy instance
+  protected lastGridKey: string | null = null
+  // Coalesce multiple grid renders within a frame
+  private gridRaf: number | null = null
 
-  constructor(public readonly mode: ModeDefinition) {}
+  constructor(public readonly mode: ModeDefinition) { }
 
   // Template method - defines the algorithm structure
   renderConnection(connection: ConnectionRenderData): SVGElement {
     const startTime = performance.now()
-    
+
     const element = this.createConnectionElement(connection)
     this.applyConnectionStyling(element, connection)
     this.addConnectionInteractivity(element, connection)
-    
+
     this.performanceMetrics.renderTime = performance.now() - startTime
     return element
   }
 
   renderPort(port: PortRenderData): SVGElement {
     const startTime = performance.now()
-    
+
     const element = this.createPortElement(port)
     this.applyPortStyling(element, port)
     this.addPortInteractivity(element, port)
-    
+
     this.performanceMetrics.renderTime += performance.now() - startTime
     return element
   }
@@ -78,7 +84,7 @@ abstract class BaseRenderingStrategy implements ModeRenderingStrategy {
   // Template method implementations
   protected addConnectionInteractivity(element: SVGElement, connection: ConnectionRenderData): void {
     const d3Element = d3.select(element)
-    
+
     d3Element
       .style('cursor', 'pointer')
       .on('mouseenter', () => this.onConnectionHover(element, connection, true))
@@ -88,7 +94,7 @@ abstract class BaseRenderingStrategy implements ModeRenderingStrategy {
 
   protected addPortInteractivity(element: SVGElement, port: PortRenderData): void {
     const d3Element = d3.select(element)
-    
+
     d3Element
       .style('cursor', 'pointer')
       .on('mouseenter', () => this.onPortHover(element, port, true))
@@ -98,8 +104,8 @@ abstract class BaseRenderingStrategy implements ModeRenderingStrategy {
 
   protected applyCanvasBackground(_canvas: CanvasRenderData): void {
     const container = d3.select('.canvas-container')
-    const background = this.mode.canvasStyle.backgroundType === 'gradient' 
-      ? this.mode.canvasStyle.backgroundValue 
+    const background = this.mode.canvasStyle.backgroundType === 'gradient'
+      ? this.mode.canvasStyle.backgroundValue
       : this.mode.theme.background
 
     container.style('background', background)
@@ -107,10 +113,43 @@ abstract class BaseRenderingStrategy implements ModeRenderingStrategy {
 
   protected renderGridPattern(canvas: CanvasRenderData): void {
     const { gridStyle } = this.mode.canvasStyle
-    if (!gridStyle.enabled) {return}
+    if (!gridStyle.enabled) { return }
 
-    // Grid rendering logic will be implemented by specific strategies
-    this.createGridPattern(canvas, gridStyle)
+    // Simple, stable fingerprint for current grid configuration
+    const gridKey = [
+      this.mode.id,
+      gridStyle.size,
+      gridStyle.color,
+      gridStyle.opacity
+    ].join('|')
+
+    // If grid already applied with same key and background rect exists, skip heavy work
+    const svg = d3.select('.workflow-canvas')
+    const gridLayer = svg.select('.grid-layer')
+    const hasBg = !gridLayer.select('rect.grid-bg').empty()
+    const domGridKey = gridLayer.attr('data-grid-key')
+    const layerNode = gridLayer.node() as Element | null
+    const cachedKey = layerNode ? BaseRenderingStrategy.gridLayerKeyCache.get(layerNode) : undefined
+    if ((this.lastGridKey === gridKey || domGridKey === gridKey || cachedKey === gridKey) && hasBg) {
+      return
+    }
+
+    // Coalesce within the same frame
+    if (this.gridRaf !== null) {
+      cancelAnimationFrame(this.gridRaf)
+      this.gridRaf = null
+    }
+    this.gridRaf = requestAnimationFrame(() => {
+      // Grid rendering logic will be implemented by specific strategies
+      this.createGridPattern(canvas, gridStyle)
+      // Persist key both in memory and on DOM to survive strategy re-instantiation
+      gridLayer.attr('data-grid-key', gridKey)
+      if (layerNode) {
+        BaseRenderingStrategy.gridLayerKeyCache.set(layerNode, gridKey)
+      }
+      this.lastGridKey = gridKey
+      this.gridRaf = null
+    })
   }
 
   protected applyOverlayEffects(canvas: CanvasRenderData): void {
@@ -163,12 +202,12 @@ abstract class BaseRenderingStrategy implements ModeRenderingStrategy {
 
   protected onConnectionClick(_element: SVGElement, connection: ConnectionRenderData): void {
     // Connection click handling - can be overridden by specific strategies
-    console.log('Connection clicked:', connection.id)
+    console.warn('Connection clicked:', connection.id)
   }
 
   protected onPortClick(_element: SVGElement, port: PortRenderData): void {
     // Port click handling - can be overridden by specific strategies
-    console.log('Port clicked:', port.id)
+    console.warn('Port clicked:', port.id)
   }
 
   // Abstract methods for specific implementations
@@ -181,25 +220,29 @@ abstract class BaseRenderingStrategy implements ModeRenderingStrategy {
   // Lifecycle methods
   onModeActivated(): void {
     this.isActive = true
-    console.log(`${this.mode.name} mode activated`)
+    this.lastGridKey = null
+    console.warn(`${this.mode.name} mode activated`)
   }
 
   onModeDeactivated(): void {
     this.isActive = false
     this.cleanup()
-    console.log(`${this.mode.name} mode deactivated`)
+    this.lastGridKey = null
+    console.warn(`${this.mode.name} mode deactivated`)
   }
 
   onThemeChanged(_theme: ModeTheme): void {
     // Theme change handling - can be overridden
-    console.log(`Theme changed for ${this.mode.name}`)
+    // Reset grid cache so new theme colors can be applied on next render
+    this.lastGridKey = null
+    console.warn(`Theme changed for ${this.mode.name}`)
   }
 
   shouldRerender(oldData: RenderData, newData: RenderData): boolean {
     // Simple change detection - can be optimized per strategy
     return oldData.timestamp !== newData.timestamp ||
-           oldData.connections.length !== newData.connections.length ||
-           oldData.ports.length !== newData.ports.length
+      oldData.connections.length !== newData.connections.length ||
+      oldData.ports.length !== newData.ports.length
   }
 
   cleanup(): void {
@@ -279,7 +322,7 @@ export class WorkflowRenderingStrategy extends BaseRenderingStrategy {
       .attr('markerUnits', 'userSpaceOnUse')
 
     defaultMarker.append('polygon')
-      .attr('points', `0,0 ${this.mode.connectionStyle.markerSize-2},${this.mode.connectionStyle.markerSize/2} 0,${this.mode.connectionStyle.markerSize}`)
+      .attr('points', `0,0 ${this.mode.connectionStyle.markerSize - 2},${this.mode.connectionStyle.markerSize / 2} 0,${this.mode.connectionStyle.markerSize}`)
       .attr('fill', this.mode.theme.primary)
       .attr('stroke', 'none')
 
@@ -294,7 +337,7 @@ export class WorkflowRenderingStrategy extends BaseRenderingStrategy {
       .attr('markerUnits', 'userSpaceOnUse')
 
     selectedMarker.append('polygon')
-      .attr('points', `0,0 ${this.mode.connectionStyle.markerSize},${(this.mode.connectionStyle.markerSize+2)/2} 0,${this.mode.connectionStyle.markerSize+2}`)
+      .attr('points', `0,0 ${this.mode.connectionStyle.markerSize},${(this.mode.connectionStyle.markerSize + 2) / 2} 0,${this.mode.connectionStyle.markerSize + 2}`)
       .attr('fill', this.mode.theme.success)
       .attr('stroke', 'none')
       .attr('filter', `drop-shadow(0 0 4px ${this.mode.theme.success})`)
@@ -346,22 +389,34 @@ export class WorkflowRenderingStrategy extends BaseRenderingStrategy {
       defs = svg.append<SVGDefsElement>('defs')
     }
 
-    const pattern = defs.append('pattern')
-      .attr('id', 'workflow-grid')
-      .attr('patternUnits', 'userSpaceOnUse')
+    // Reuse pattern if exists; else create
+    let pattern = defs.select<SVGPatternElement>('#workflow-grid')
+    if (pattern.empty()) {
+      pattern = defs.append('pattern')
+        .attr('id', 'workflow-grid')
+        .attr('patternUnits', 'userSpaceOnUse')
+    }
+    pattern
       .attr('width', gridStyle.size)
       .attr('height', gridStyle.size)
 
-    pattern.append('circle')
+    // Ensure single circle child
+    const circle = pattern.select<SVGCircleElement>('circle.grid-dot')
+    const circleSel = circle.empty() ? pattern.append('circle').attr('class', 'grid-dot') : circle
+    circleSel
       .attr('cx', gridStyle.size / 2)
       .attr('cy', gridStyle.size / 2)
       .attr('r', 1)
       .attr('fill', gridStyle.color)
       .attr('opacity', gridStyle.opacity)
 
-    // Apply grid to canvas background
-    svg.select('.grid-layer').selectAll('*').remove()
-    svg.select('.grid-layer').append('rect')
+    // Apply grid to canvas background without clearing layer
+    const gridLayer = svg.select('.grid-layer')
+    let bg = gridLayer.select<SVGRectElement>('rect.grid-bg')
+    if (bg.empty()) {
+      bg = gridLayer.append('rect').attr('class', 'grid-bg')
+    }
+    bg
       .attr('width', '100%')
       .attr('height', '100%')
       .attr('fill', 'url(#workflow-grid)')
@@ -376,7 +431,7 @@ export class WorkflowRenderingStrategy extends BaseRenderingStrategy {
     const { sourcePoint, targetPoint } = connection
     const dx = targetPoint.x - sourcePoint.x
     const dy = targetPoint.y - sourcePoint.y
-    
+
     // Create smooth curved path
     const controlOffset = Math.max(Math.abs(dx) / 2, 80)
     const cp1x = sourcePoint.x + controlOffset
@@ -456,7 +511,7 @@ export class ArchitectureRenderingStrategy extends BaseRenderingStrategy {
       .attr('markerUnits', 'userSpaceOnUse')
 
     defaultMarker.append('polygon')
-      .attr('points', `${this.mode.connectionStyle.markerSize/2},0 ${this.mode.connectionStyle.markerSize-2},${this.mode.connectionStyle.markerSize/2} ${this.mode.connectionStyle.markerSize/2},${this.mode.connectionStyle.markerSize} 0,${this.mode.connectionStyle.markerSize/2}`)
+      .attr('points', `${this.mode.connectionStyle.markerSize / 2},0 ${this.mode.connectionStyle.markerSize - 2},${this.mode.connectionStyle.markerSize / 2} ${this.mode.connectionStyle.markerSize / 2},${this.mode.connectionStyle.markerSize} 0,${this.mode.connectionStyle.markerSize / 2}`)
       .attr('fill', this.mode.theme.primary)
       .attr('stroke', this.mode.theme.primary)
       .attr('stroke-width', 1)
@@ -472,7 +527,7 @@ export class ArchitectureRenderingStrategy extends BaseRenderingStrategy {
       .attr('markerUnits', 'userSpaceOnUse')
 
     selectedMarker.append('polygon')
-      .attr('points', `${(this.mode.connectionStyle.markerSize+4)/2},0 ${this.mode.connectionStyle.markerSize+2},${(this.mode.connectionStyle.markerSize+4)/2} ${(this.mode.connectionStyle.markerSize+4)/2},${this.mode.connectionStyle.markerSize+4} 0,${(this.mode.connectionStyle.markerSize+4)/2}`)
+      .attr('points', `${(this.mode.connectionStyle.markerSize + 4) / 2},0 ${this.mode.connectionStyle.markerSize + 2},${(this.mode.connectionStyle.markerSize + 4) / 2} ${(this.mode.connectionStyle.markerSize + 4) / 2},${this.mode.connectionStyle.markerSize + 4} 0,${(this.mode.connectionStyle.markerSize + 4) / 2}`)
       .attr('fill', this.mode.theme.error)
       .attr('stroke', this.mode.theme.error)
       .attr('stroke-width', 2)
@@ -539,14 +594,21 @@ export class ArchitectureRenderingStrategy extends BaseRenderingStrategy {
       defs = svg.append<SVGDefsElement>('defs')
     }
 
-    const pattern = defs.append('pattern')
-      .attr('id', 'architecture-grid')
-      .attr('patternUnits', 'userSpaceOnUse')
+    // Reuse or create pattern
+    let pattern = defs.select<SVGPatternElement>('#architecture-grid')
+    if (pattern.empty()) {
+      pattern = defs.append('pattern')
+        .attr('id', 'architecture-grid')
+        .attr('patternUnits', 'userSpaceOnUse')
+    }
+    pattern
       .attr('width', gridStyle.size)
       .attr('height', gridStyle.size)
 
-    // Create blueprint-style grid
-    pattern.append('rect')
+    // Ensure single rect child
+    const rect = pattern.select<SVGRectElement>('rect.grid-box')
+    const rectSel = rect.empty() ? pattern.append('rect').attr('class', 'grid-box') : rect
+    rectSel
       .attr('width', gridStyle.size)
       .attr('height', gridStyle.size)
       .attr('fill', 'none')
@@ -555,9 +617,13 @@ export class ArchitectureRenderingStrategy extends BaseRenderingStrategy {
       .attr('stroke-dasharray', '2,2')
       .attr('opacity', gridStyle.opacity)
 
-    // Apply grid
-    svg.select('.grid-layer').selectAll('*').remove()
-    svg.select('.grid-layer').append('rect')
+    // Apply grid without clearing layer
+    const gridLayer = svg.select('.grid-layer')
+    let bg = gridLayer.select<SVGRectElement>('rect.grid-bg')
+    if (bg.empty()) {
+      bg = gridLayer.append('rect').attr('class', 'grid-bg')
+    }
+    bg
       .attr('width', '100%')
       .attr('height', '100%')
       .attr('fill', 'url(#architecture-grid)')
@@ -596,9 +662,9 @@ export class ArchitectureRenderingStrategy extends BaseRenderingStrategy {
   }
 
   private calculateArchitecturalPath(connection: ConnectionRenderData): string {
-  const { sourcePoint, targetPoint } = connection
-  // Future: could pass node boxes if available via metadata
-  return generateOrthogonalRoundedPath(sourcePoint, targetPoint, 18, { strategy: 'auto', allowDoubleBend: false })
+    const { sourcePoint, targetPoint } = connection
+    // Future: could pass node boxes if available via metadata
+    return generateOrthogonalRoundedPath(sourcePoint, targetPoint, 18, { strategy: 'auto', allowDoubleBend: false })
   }
 }
 
@@ -612,7 +678,7 @@ export class DebugRenderingStrategy extends BaseRenderingStrategy {
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
     path.setAttribute('class', 'debug-connection')
     path.setAttribute('d', this.calculateDebugPath(connection))
-    
+
     // Add debug data attribute
     path.setAttribute('data-debug-id', connection.id)
     this.debugInfo.set(connection.id, {
@@ -620,14 +686,14 @@ export class DebugRenderingStrategy extends BaseRenderingStrategy {
       dataType: connection.dataType,
       metadata: connection.metadata
     })
-    
+
     return path
   }
 
   protected createPortElement(port: PortRenderData): SVGElement {
     const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon')
     polygon.setAttribute('class', 'debug-port')
-    
+
     // Create hexagon shape
     const size = this.mode.portStyle.size / 2
     const points = []
@@ -638,7 +704,7 @@ export class DebugRenderingStrategy extends BaseRenderingStrategy {
       points.push(`${x},${y}`)
     }
     polygon.setAttribute('points', points.join(' '))
-    
+
     // Add debug data
     polygon.setAttribute('data-debug-id', port.id)
     this.debugInfo.set(port.id, {
@@ -647,7 +713,7 @@ export class DebugRenderingStrategy extends BaseRenderingStrategy {
       connected: port.connected,
       metadata: port.metadata
     })
-    
+
     return polygon
   }
 
@@ -776,31 +842,44 @@ export class DebugRenderingStrategy extends BaseRenderingStrategy {
       defs = svg.append<SVGDefsElement>('defs')
     }
 
-    const pattern = defs.append('pattern')
-      .attr('id', 'debug-grid')
-      .attr('patternUnits', 'userSpaceOnUse')
+    // Reuse or create pattern
+    let pattern = defs.select<SVGPatternElement>('#debug-grid')
+    if (pattern.empty()) {
+      pattern = defs.append('pattern')
+        .attr('id', 'debug-grid')
+        .attr('patternUnits', 'userSpaceOnUse')
+    }
+    pattern
       .attr('width', gridStyle.size)
       .attr('height', gridStyle.size)
 
-    // Create technical grid pattern
-    pattern.append('path')
-      .attr('d', `M0,${gridStyle.size/2} L${gridStyle.size},${gridStyle.size/2} M${gridStyle.size/2},0 L${gridStyle.size/2},${gridStyle.size}`)
+    // Ensure single path child
+    const path = pattern.select<SVGPathElement>('path.grid-cross')
+    const pathSel = path.empty() ? pattern.append('path').attr('class', 'grid-cross') : path
+    pathSel
+      .attr('d', `M0,${gridStyle.size / 2} L${gridStyle.size},${gridStyle.size / 2} M${gridStyle.size / 2},0 L${gridStyle.size / 2},${gridStyle.size}`)
       .attr('stroke', gridStyle.color)
       .attr('stroke-width', 0.5)
       .attr('stroke-dasharray', '1,1')
       .attr('opacity', gridStyle.opacity)
 
-    // Add center dot
-    pattern.append('circle')
+    // Ensure single center dot
+    const dot = pattern.select<SVGCircleElement>('circle.grid-center')
+    const dotSel = dot.empty() ? pattern.append('circle').attr('class', 'grid-center') : dot
+    dotSel
       .attr('cx', gridStyle.size / 2)
       .attr('cy', gridStyle.size / 2)
       .attr('r', 0.5)
       .attr('fill', gridStyle.color)
       .attr('opacity', gridStyle.opacity * 1.5)
 
-    // Apply grid
-    svg.select('.grid-layer').selectAll('*').remove()
-    svg.select('.grid-layer').append('rect')
+    // Apply grid without clearing layer
+    const gridLayer = svg.select('.grid-layer')
+    let bg = gridLayer.select<SVGRectElement>('rect.grid-bg')
+    if (bg.empty()) {
+      bg = gridLayer.append('rect').attr('class', 'grid-bg')
+    }
+    bg
       .attr('width', '100%')
       .attr('height', '100%')
       .attr('fill', 'url(#debug-grid)')
@@ -808,7 +887,7 @@ export class DebugRenderingStrategy extends BaseRenderingStrategy {
 
   protected createOverlayEffect(_canvas: CanvasRenderData, effect: any): void {
     const svg = d3.select('.workflow-canvas')
-    
+
     if (effect.type === 'scanlines') {
       // Create animated scanlines effect
       let defs = svg.select<SVGDefsElement>('defs')
@@ -862,28 +941,28 @@ export class DebugRenderingStrategy extends BaseRenderingStrategy {
 
   private calculateDebugPath(connection: ConnectionRenderData): string {
     const { sourcePoint, targetPoint } = connection
-    
+
     // Create technical, segmented path
     const segments = 3
     const points: Point2D[] = [sourcePoint]
-    
+
     for (let i = 1; i < segments; i++) {
       const t = i / segments
       const x = sourcePoint.x + (targetPoint.x - sourcePoint.x) * t
       const y = sourcePoint.y + (targetPoint.y - sourcePoint.y) * t + Math.sin(t * Math.PI * 2) * 5
       points.push({ x, y })
     }
-    
+
     points.push(targetPoint)
-    
-    return points.map((point, index) => 
+
+    return points.map((point, index) =>
       index === 0 ? `M ${point.x} ${point.y}` : `L ${point.x} ${point.y}`
     ).join(' ')
   }
 
   private addDebugLabel(element: SVGElement, connection: ConnectionRenderData): void {
     const parent = element.parentElement
-    if (!parent) {return}
+    if (!parent) { return }
 
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text')
     text.setAttribute('class', 'debug-label')
@@ -891,20 +970,20 @@ export class DebugRenderingStrategy extends BaseRenderingStrategy {
     text.setAttribute('y', ((connection.sourcePoint.y + connection.targetPoint.y) / 2 - 5).toString())
     text.setAttribute('text-anchor', 'middle')
     text.textContent = `${connection.dataType}:${connection.id.substring(0, 8)}`
-    
+
     parent.appendChild(text)
   }
 
   private addPortDebugInfo(element: SVGElement, port: PortRenderData): void {
     const parent = element.parentElement
-    if (!parent) {return}
+    if (!parent) { return }
 
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text')
     text.setAttribute('class', 'debug-label')
     text.setAttribute('x', (port.position.x + 15).toString())
     text.setAttribute('y', (port.position.y + 3).toString())
     text.textContent = `${port.type}:${port.dataType}`
-    
+
     parent.appendChild(text)
   }
 

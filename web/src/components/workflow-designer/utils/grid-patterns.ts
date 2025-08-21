@@ -39,6 +39,20 @@ export interface GridPerformanceMonitor {
         status: 'good' | 'warning' | 'poor' | 'excellent'
         summary: string
     }
+    // Optional cache APIs (provided by performance-monitor singleton used by WorkflowCanvas)
+    recordCacheHit?(): void
+    recordCacheMiss?(): void
+    isCacheExpired?(cache: { lastRenderTime: number; transform: { x: number; y: number; k: number }; viewport: { width: number; height: number } } | null): boolean
+    generateCacheKey?(
+        transform: { x: number; y: number; k: number },
+        viewport: { width: number; height: number },
+        tolerance?: { position: number; zoom: number; viewport: number }
+    ): string
+    validateCacheConsistency?(
+        cache: { lastRenderTime: number; transform: { x: number; y: number; k: number }; viewport: { width: number; height: number } },
+        currentTransform: { x: number; y: number; k: number },
+        currentViewport: { width: number; height: number }
+    ): boolean
 }
 
 export interface DebugLogger {
@@ -259,6 +273,55 @@ export function createGrid(
         defs = svgSelection.insert<SVGDefsElement>('defs', ':first-child')
     }
 
+    // Compute cache key with tolerance and attempt cache short-circuit
+    const perf = gridPerformanceRef.current
+    const cacheKey = perf && perf.generateCacheKey
+        ? perf.generateCacheKey(
+            transform,
+            { width: viewportWidth, height: viewportHeight }
+        )
+        : JSON.stringify({
+            k: transform.k,
+            x: Math.round(transform.x),
+            y: Math.round(transform.y),
+            vw: Math.round(viewportWidth),
+            vh: Math.round(viewportHeight),
+        })
+
+    const existing = gridCacheRef.current
+    if (existing && existing.transform === cacheKey) {
+        // Validate cache freshness and viewport stability
+        const cacheInfo = {
+            lastRenderTime: existing.lastRenderTime,
+            transform, // not used by validateCacheConsistency currently
+            viewport: { width: existing.viewport.width, height: existing.viewport.height },
+        }
+        const cacheFresh = perf && perf.isCacheExpired ? !perf.isCacheExpired(cacheInfo) : true
+        const viewportStable = perf && perf.validateCacheConsistency
+            ? perf.validateCacheConsistency(
+                cacheInfo,
+                transform,
+                { width: viewportWidth, height: viewportHeight }
+            )
+            : true
+
+        if (cacheFresh && viewportStable) {
+            // Cache hit: skip re-rendering grid rectangles
+            if (perf && perf.recordCacheHit) {
+                perf.recordCacheHit()
+            }
+            // Keep cache fresh
+            existing.lastRenderTime = performance.now()
+            existing.viewport = { width: viewportWidth, height: viewportHeight }
+            // Keep a lightweight attribute update for debugging/inspection
+            gridLayer.attr(
+                'data-grid-size',
+                `${Math.round(viewportWidth)}x${Math.round(viewportHeight)}`
+            )
+            return
+        }
+    }
+
     // Ensure patterns exist (base + major) via utility
     const baseSize = GRID_CONSTANTS.BASE_GRID_SIZE
     const { patternId, majorPatternId } = ensureDualGridPatterns(defs, transform.k, baseSize)
@@ -281,6 +344,10 @@ export function createGrid(
 
     // Enhanced cache with all necessary data and performance tracking
     const renderTime = performance.now() - startTime
+    // Count as cache miss since we had to re-render
+    if (gridPerformanceRef.current && gridPerformanceRef.current.recordCacheMiss) {
+        gridPerformanceRef.current.recordCacheMiss()
+    }
     gridPerformanceRef.current?.recordRender(renderTime)
 
     // Store current viewport size for debugging/inspection
@@ -291,13 +358,6 @@ export function createGrid(
 
     // Update grid cache
     const now = performance.now()
-    const cacheKey = JSON.stringify({
-        k: transform.k,
-        x: Math.round(transform.x),
-        y: Math.round(transform.y),
-        vw: Math.round(viewportWidth),
-        vh: Math.round(viewportHeight),
-    })
     gridCacheRef.current = {
         transform: cacheKey,
         pattern: `${patternId},${majorPatternId}`,

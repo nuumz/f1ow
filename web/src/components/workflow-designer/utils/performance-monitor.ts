@@ -98,7 +98,7 @@ export class GridPerformanceMonitor {
             status = 'excellent';
         } else if (avgRenderTime < 10 && cacheHitRate > this.GOOD_CACHE_HIT_RATE) {
             status = 'good';
-        } else if (avgRenderTime < this.PERFORMANCE_THRESHOLD || cacheHitRate > 50) {
+        } else if (avgRenderTime >= this.PERFORMANCE_THRESHOLD || cacheHitRate < 50) {
             status = 'warning';
         } else {
             status = 'poor';

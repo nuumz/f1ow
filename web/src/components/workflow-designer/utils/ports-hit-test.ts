@@ -35,7 +35,7 @@ export function findNearestPortTarget(
     canvasY: number,
     _getDiamondRadius: (portData: PortDatum) => number
 ): PortTarget {
-    // Fixed tolerance for port hit test as requested
+    // Fixed tolerance for port hit test - increased for better UX
     const PORT_TOLERANCE = 15;
     let targetNodeId: string | undefined
     let targetPortId: string | undefined
@@ -44,6 +44,13 @@ export function findNearestPortTarget(
     // Only consider input ports and side ports as valid drop targets
     const allInputPorts = svgSelection.selectAll<SVGCircleElement, PortDatum>('.input-port-circle')
     const allSidePorts = svgSelection.selectAll<SVGRectElement, PortDatum>('.side-port-rect')
+
+    console.warn('[ports-hit-test] findNearestPortTarget:', {
+        canvasX,
+        canvasY,
+        inputPortsCount: allInputPorts.size(),
+        sidePortsCount: allSidePorts.size()
+    })
 
     // Helper to get node group position from ancestor transform
     // Read the node group's translate(x,y) for absolute location in canvas space
@@ -77,6 +84,18 @@ export function findNearestPortTarget(
         const portCanvasX = nodeSvgX + cx
         const portCanvasY = nodeSvgY + cy
         const distance = Math.hypot(canvasX - portCanvasX, canvasY - portCanvasY)
+
+        if (distance <= PORT_TOLERANCE * 2) {  // Log even near misses
+            console.warn('[ports-hit-test] Circle port check:', {
+                portId: portData.id,
+                portCanvasX,
+                portCanvasY,
+                distance,
+                tolerance: PORT_TOLERANCE,
+                isHit: distance <= PORT_TOLERANCE
+            })
+        }
+
         if (distance <= PORT_TOLERANCE && distance < minDistance) {
             const nodeId = d3
                 .select(element.closest('g[data-node-id]') as SVGElement)
@@ -102,6 +121,18 @@ export function findNearestPortTarget(
         const portCanvasX = nodeSvgX + x + w / 2
         const portCanvasY = nodeSvgY + y + h / 2
         const distance = Math.hypot(canvasX - portCanvasX, canvasY - portCanvasY)
+
+        if (distance <= PORT_TOLERANCE * 2) {  // Log even near misses
+            console.warn('[ports-hit-test] Side port check:', {
+                portId: portData.id,
+                portCanvasX,
+                portCanvasY,
+                distance,
+                tolerance: PORT_TOLERANCE,
+                isHit: distance <= PORT_TOLERANCE
+            })
+        }
+
         if (distance <= PORT_TOLERANCE && distance < minDistance) {
             minDistance = distance
             targetNodeId = d3

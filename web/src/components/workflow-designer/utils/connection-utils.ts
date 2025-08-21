@@ -1035,17 +1035,49 @@ export function groupConnectionsBySideAndPort(
 
     const sType = resolvePortTypeForEnd(sNode, c.sourcePortId, true)
     const tType = resolvePortTypeForEnd(tNode, c.targetPortId, false)
-    const sPos = getModeAwarePortPosition(sNode, c.sourcePortId, sType, modeId)
-    const tPos = getModeAwarePortPosition(tNode, c.targetPortId, tType, modeId)
 
-    const sSide = toSideGroupId(detectPortSideModeAware(sNode, c.sourcePortId, sPos, modeId || 'workflow'))
-    const tSide = toSideGroupId(detectPortSideModeAware(tNode, c.targetPortId, tPos, modeId || 'workflow'))
+    // Compute sides in a way that mirrors the architecture path generator
+    let sSide: SideGroupId
+    let tSide: SideGroupId
+    if (modeId === 'architecture') {
+      // Source side based on actual source port position in architecture sizing
+      const sPosArch = getModeAwarePortPosition(sNode, c.sourcePortId, sType, 'architecture')
+      sSide = toSideGroupId(detectPortSideModeAware(sNode, c.sourcePortId, sPosArch, 'architecture'))
+
+      // Target side follows the same chooseTargetSide logic as path generation
+      const isSourceBottom = isBottomPort(sNode, c.sourcePortId) || c.sourcePortId === '__side-bottom'
+      const chooseTargetSideForGroup = (): SidePortId => {
+        if (isSourceBottom) {
+          const SNAP_THRESHOLD = FIXED_LEAD_LENGTH * 2
+          const tBox = buildNodeBoxModeAware(tNode, 'architecture')
+          const useBottom = (tBox.y - sPosArch.y) < SNAP_THRESHOLD
+          return useBottom ? '__side-bottom' : '__side-top'
+        }
+        if (isVirtualSidePortId(c.targetPortId)) {
+          const tp = c.targetPortId
+          return (tp === '__side-left' || tp === '__side-right' || tp === '__side-top' || tp === '__side-bottom')
+            ? tp
+            : chooseAutoTargetSide(sPosArch, tNode)
+        }
+        return chooseAutoTargetSide(sPosArch, tNode)
+      }
+      tSide = chooseTargetSideForGroup() as SideGroupId
+    } else {
+      // Workflow/other modes: fallback to port-edge side detection
+      const sPos = getModeAwarePortPosition(sNode, c.sourcePortId, sType, modeId)
+      const tPos = getModeAwarePortPosition(tNode, c.targetPortId, tType, modeId)
+      sSide = toSideGroupId(detectPortSideModeAware(sNode, c.sourcePortId, sPos, modeId || 'workflow'))
+      tSide = toSideGroupId(detectPortSideModeAware(tNode, c.targetPortId, tPos, modeId || 'workflow'))
+    }
 
     const sGroup: PortGroupClass = (sType === 'input') ? 'input-port-group' : 'output-port-group'
     const tGroup: PortGroupClass = (tType === 'output') ? 'output-port-group' : 'input-port-group'
 
-    // Include node identities in the grouping key to avoid merging unrelated node pairs
-    const key = `${c.sourceNodeId}|${sSide}:${sGroup}->${c.targetNodeId}|${tSide}:${tGroup}`
+    // Architecture grouping key is route-based: same visual route => same key
+    const key = (modeId === 'architecture')
+      ? `${c.sourceNodeId}|${sSide}->${c.targetNodeId}|${tSide}`
+      // Other modes: keep existing detailed key
+      : `${c.sourceNodeId}|${sSide}:${sGroup}->${c.targetNodeId}|${tSide}:${tGroup}`
     let bucket = result.get(key)
     if (!bucket) {
       bucket = { key, sourceSide: sSide, targetSide: tSide, sourceGroup: sGroup, targetGroup: tGroup, items: [] }

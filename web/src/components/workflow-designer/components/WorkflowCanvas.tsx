@@ -52,7 +52,7 @@ import {
   createRafScheduler,
   createZIndexManager,
 } from '../utils/d3-manager';
-import { resolveDragEndTarget, createPortDragCallbacks } from '../utils/drag-drop-helpers';
+import { createPortDragCallbacks, resolveDragEndTarget } from '../utils/drag-drop-helpers';
 import { renderConnectionsLayer } from '../utils/connection-dom';
 import { groupConnectionsBySideAndPort } from '../utils/connection-utils';
 import {
@@ -1050,7 +1050,6 @@ function WorkflowCanvas({
             dragConnectionDataRef.current = v as any;
           },
           getHitTestPortRadius,
-          resolve: resolveDragEndTarget,
           ...opts,
         });
 

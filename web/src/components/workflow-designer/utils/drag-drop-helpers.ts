@@ -39,6 +39,19 @@ export function isPointInsideNodeBounds(
     const shape = getNodeShape(node.type)
     const relX = canvasX - nodeSvgX
     const relY = canvasY - nodeSvgY
+    
+    console.warn('[drag-drop] isPointInsideNodeBounds:', {
+        nodeId: node.id,
+        nodeSvgX,
+        nodeSvgY,
+        canvasX,
+        canvasY,
+        relX,
+        relY,
+        dims,
+        shape
+    })
+    
     if (shape === 'circle') {
         const radius = Math.min(dims.width, dims.height) / 2
         const dist = Math.sqrt(relX ** 2 + relY ** 2)
@@ -64,11 +77,19 @@ export function findBackgroundDropTarget(
     nodes: WorkflowNode[],
     capturedStart: { nodeId: string; portId: string; type: 'input' | 'output' } | null
 ): string | undefined {
-    const allNodes = svgSelection.selectAll<SVGGElement, unknown>('g[data-node-id]')
+    // Select only actual node groups (class="node"), not port groups
+    const allNodes = svgSelection.selectAll<SVGGElement, unknown>('g.node[data-node-id]')
     let minDist = Infinity
     let targetNodeId: string | undefined
     // Note: canvasX/canvasY are in the SVG viewport coordinate space
     // We'll use element.getCTM() to convert this point into the element's local space.
+    
+    console.warn('[drag-drop] findBackgroundDropTarget:', {
+        canvasX,
+        canvasY,
+        nodeGroupsCount: allNodes.size(),
+        capturedStart
+    })
 
     allNodes.each(function () {
         const nodeGroup = d3.select(this)
@@ -77,26 +98,39 @@ export function findBackgroundDropTarget(
             return
         }
         if (capturedStart && nodeId === capturedStart.nodeId) {
+            console.warn('[drag-drop] Skipping source node:', nodeId)
             return
         }
         const nodeData = nodes.find((n) => n.id === nodeId)
         if (!nodeData) {
+            console.warn('[drag-drop] Node data not found for:', nodeId)
             return
         }
         const bgEl = nodeGroup.select<SVGGeometryElement>('.node-background').node()
         // Use path .node-background as the real droppable area (strict)
         const isInside = pointInsideNodeBackground(bgEl, nodeGroup.attr('transform'), nodeData, canvasX, canvasY)
+        
+        console.warn('[drag-drop] Background check for node:', {
+            nodeId,
+            nodeX: nodeData.x,
+            nodeY: nodeData.y,
+            isInside,
+            hasBackground: !!bgEl
+        })
 
         if (isInside) {
             // Use distance from node center (approximate) to pick closest valid node
             const within = isPointInsideNodeBounds(nodeData, nodeGroup.attr('transform'), canvasX, canvasY)
             const dist = within.distance
+            console.warn('[drag-drop] Node is inside, distance:', dist)
             if (dist < minDist) {
                 minDist = dist
                 targetNodeId = nodeId
             }
         }
     })
+    
+    console.warn('[drag-drop] Background drop result:', targetNodeId)
     return targetNodeId
 }
 
@@ -111,24 +145,19 @@ function pointInsideNodeBackground(
     canvasX: number,
     canvasY: number
 ): boolean {
-    if (bgEl && typeof (bgEl as unknown as SVGGeometryElement).isPointInFill === 'function') {
-        try {
-            const elemCtm = bgEl.getCTM?.()
-            if (elemCtm && typeof elemCtm.inverse === 'function') {
-                const local = new DOMPoint(canvasX, canvasY).matrixTransform(elemCtm.inverse())
-                const pt: DOMPointInit = { x: local.x, y: local.y }
-                const geom = bgEl as unknown as SVGGeometryElement & { isPointInStroke?: (pt: DOMPointInit) => boolean }
-                const inFill = geom.isPointInFill(pt)
-                const inStroke = typeof geom.isPointInStroke === 'function' ? geom.isPointInStroke(pt) : false
-                return !!(inFill || inStroke)
-            }
-        } catch (error) {
-            console.warn('[drag-drop] pointInsideNodeBackground failed, fallback to bounds', error)
-            // ignore and fallback below
-        }
-    }
-    // Fallback: use shape-aware bounds math if precise geometry APIs aren't available
+    // Always use fallback bounds math as it's more reliable for our use case
+    // SVG geometry API has issues with coordinate transformation in our setup
     const approx = isPointInsideNodeBounds(nodeData, nodeTransform, canvasX, canvasY)
+    console.warn('[drag-drop] Using bounds check:', { 
+        nodeId: nodeData.id,
+        nodeX: nodeData.x, 
+        nodeY: nodeData.y,
+        canvasX,
+        canvasY,
+        within: approx.within,
+        distance: approx.distance,
+        hasBackground: !!bgEl
+    })
     return approx.within
 }
 
@@ -154,6 +183,13 @@ export function resolveDragEndTarget(
     radiusAccessor: (pd: PortDatum) => number
 ): { nodeId?: string; portId?: string } {
     try {
+        console.warn('[drag-drop] resolveDragEndTarget called:', {
+            canvasX,
+            canvasY,
+            nodesCount: nodes.length,
+            capturedStart
+        })
+        
         const svgSelection = d3.select<SVGSVGElement, unknown>(svgElement)
         const portHit = findNearestPortTarget(
             svgSelection as unknown as d3.Selection<SVGSVGElement, unknown, null, undefined>,
@@ -161,9 +197,13 @@ export function resolveDragEndTarget(
             canvasY,
             radiusAccessor
         )
+        
+        console.warn('[drag-drop] Port hit result:', portHit)
+        
         if (portHit) {
             return { nodeId: portHit.nodeId, portId: portHit.portId }
         }
+        
         const bgNodeId = findBackgroundDropTarget(
             svgSelection as unknown as d3.Selection<SVGSVGElement, unknown, d3.BaseType, unknown>,
             canvasX,
@@ -171,10 +211,17 @@ export function resolveDragEndTarget(
             nodes,
             capturedStart
         )
+        
+        console.warn('[drag-drop] Background drop target:', bgNodeId)
+        
         if (bgNodeId) {
             const targetNode = nodes.find((n) => n.id === bgNodeId)
-            return { nodeId: bgNodeId, portId: targetNode ? chooseBestInputPort(targetNode) : undefined }
+            const bestPort = targetNode ? chooseBestInputPort(targetNode) : undefined
+            console.warn('[drag-drop] Best input port:', bestPort)
+            return { nodeId: bgNodeId, portId: bestPort }
         }
+        
+        console.warn('[drag-drop] No target found')
         return {}
     } catch (error) {
         console.error('[drag-drop] resolveDragEndTarget error', { error })
@@ -247,14 +294,6 @@ export function createPortDragCallbacks(params: {
     getCapturedStart: () => { nodeId: string; portId: string; type: 'input' | 'output' } | null
     setCapturedStart: (v: { nodeId: string; portId: string; type: 'input' | 'output' } | null) => void
     getHitTestPortRadius: (pd: PortDatum) => number
-    resolve: (
-        svg: SVGSVGElement,
-        canvasX: number,
-        canvasY: number,
-        nodes: WorkflowNode[],
-        capturedStart: { nodeId: string; portId: string; type: 'input' | 'output' } | null,
-        radiusAccessor: (pd: PortDatum) => number
-    ) => { nodeId?: string; portId?: string }
     logTag?: string
     requireTargetOnEnd?: boolean
 }) {
@@ -267,7 +306,6 @@ export function createPortDragCallbacks(params: {
         getCapturedStart,
         setCapturedStart,
         getHitTestPortRadius,
-        resolve,
         logTag,
         requireTargetOnEnd,
     } = params
@@ -316,7 +354,7 @@ export function createPortDragCallbacks(params: {
             const [canvasX, canvasY] = getCanvasCoordsFromSourceEvent(event?.sourceEvent as Event)
             if (svg) {
                 const start = getCapturedStart()
-                const result = resolve(svg, canvasX, canvasY, nodes, start, getHitTestPortRadius)
+                const result = resolveDragEndTarget(svg, canvasX, canvasY, nodes, start, getHitTestPortRadius)
                 if (result.nodeId && result.portId) {
                     onPortDragEnd(result.nodeId, result.portId, canvasX, canvasY)
                 } else if (!requireTargetOnEnd) {

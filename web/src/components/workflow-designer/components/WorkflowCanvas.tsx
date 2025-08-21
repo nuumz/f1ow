@@ -436,6 +436,7 @@ function WorkflowCanvas({
   const {
     getConnectionPath: getConnectionPathFromHook,
     updateDragPosition: updateConnDragPos,
+    clearDragPosition,
     clearAllDragPositions,
     clearCache: clearConnCache,
   } = useConnectionPaths(nodes, nodeVariant, workflowContextState.designerMode as DesignerMode);
@@ -1078,6 +1079,31 @@ function WorkflowCanvas({
         const nodeElement = d3.select(this);
         nodeElement.classed('dragging', true);
         draggedElementRef.current = nodeElement;
+
+        // Ensure connection system starts from a clean state and uses drag overrides immediately
+        try {
+          // 1) Clear cached paths to avoid stale geometry on the first drag frame
+          clearConnCache();
+          // 2) Initialize drag override with current position so getConnectionPath(..., true) is consistent
+          updateConnDragPos(d.id, { x: d.x, y: d.y });
+          // 3) Proactively refresh affected connection paths once using drag positions
+          const affected = nodeConnectionsMap.get(d.id) || [];
+          if (affected.length > 0) {
+            const connectionLayer = getCachedSelection('connectionLayer');
+            if (connectionLayer) {
+              affected.forEach((conn) => {
+                const group = connectionLayer.select(`[data-connection-id="${conn.id}"]`);
+                if (!group.empty()) {
+                  const pathEl = group.select('.connection-path');
+                  const newPath = getConnectionPath(conn, true);
+                  pathEl.attr('d', newPath);
+                }
+              });
+            }
+          }
+        } catch {
+          // keep silent in production; dev warnings are handled elsewhere
+        }
       }
 
       function dragged(this: any, event: any, d: WorkflowNode) {
@@ -1160,6 +1186,36 @@ function WorkflowCanvas({
 
         // Reorganize z-index immediately after drag ends to restore proper order
         zIndexManager.organizeNodeZIndexImmediate(); // immediate layering
+
+        // Ensure connection paths are recalculated without re-committing node position
+        try {
+          // 1) Clear drag override for this node in the connection path system
+          clearDragPosition(d.id);
+
+          // 2) Clear cached paths to force fresh computation using committed positions
+          clearConnCache();
+
+          // 3) Immediately update affected connection paths in the DOM (non-drag positions)
+          const affected = nodeConnectionsMap.get(d.id) || [];
+          if (affected.length > 0) {
+            const connectionLayer = getCachedSelection('connectionLayer');
+            if (connectionLayer) {
+              affected.forEach((conn) => {
+                const group = connectionLayer.select(`[data-connection-id="${conn.id}"]`);
+                if (!group.empty()) {
+                  const pathEl = group.select('.connection-path');
+                  const newPath = getConnectionPath(conn, false);
+                  pathEl.attr('d', newPath);
+                }
+              });
+            }
+          }
+        } catch (e) {
+          // Keep failures silent but visible in dev
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('dragEnded finalize error', e);
+          }
+        }
 
         // If no significant drag occurred, treat as click
         if (!hasDragged && event.sourceEvent && dragDuration < 500) {

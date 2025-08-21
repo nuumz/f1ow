@@ -825,7 +825,8 @@ function generateArchitectureModeConnectionPath(
 
   // Horizontal U-shapes for close proximity
   const maybeRightU = (): string | null => {
-    if (startSide !== 'right') { return null }
+    // Only apply this optimization when we actually terminate on the right side
+    if (startSide !== 'right' || targetSidePortId !== '__side-right') { return null }
     const forcedRightPos = cachedSidePort(targetNode, '__side-right')
     const isCloseHorizontally = (targetNode.x - sourcePos.x) < FIXED_LEAD_LENGTH
     if (!isCloseHorizontally) { return null }
@@ -849,7 +850,8 @@ function generateArchitectureModeConnectionPath(
   const rightU = maybeRightU(); if (rightU) { return rightU }
 
   const maybeLeftU = (): string | null => {
-    if (startSide !== 'left') { return null }
+    // Only apply this optimization when we actually terminate on the left side
+    if (startSide !== 'left' || targetSidePortId !== '__side-left') { return null }
     const forcedLeftPos = cachedSidePort(targetNode, '__side-left')
     const isCloseHorizontally = (sourcePos.x - targetNode.x) < FIXED_LEAD_LENGTH
     if (!isCloseHorizontally) { return null }

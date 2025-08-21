@@ -927,7 +927,6 @@ function WorkflowCanvas({
     try {
       // Copy refs at the start of the effect for cleanup
       const currentSvgRef = svgRef.current;
-      const allNodeElements = allNodeElementsRef.current;
 
       const svg = d3.select(currentSvgRef);
       // Initialize or reuse defs (do not clear to preserve markers between renders)
@@ -1967,8 +1966,7 @@ function WorkflowCanvas({
           dragStateCleanupRef.current = null;
         }
 
-        // Force remove all dragging classes before cleanup
-        svg.selectAll('.node.dragging').classed('dragging', false);
+        // Note: keep dragging class for selective removal below
 
         // Only reset dragging state if component is actually unmounting
         // Check if we're in middle of a drag operation - if so, preserve state
@@ -1984,15 +1982,41 @@ function WorkflowCanvas({
         // Selective cleanup: preserve canvas structure (defs, canvas-root, zoom/pan)
         if (currentSvgRef) {
           const svgSel = d3.select(currentSvgRef);
-          // Clear only node-layer contents for nodes-focused effect
-          svgSel.select('g.node-layer').selectAll('*').remove();
-          // Do NOT clear connection-layer or previews here; other effects own those updates
+
+          // Find currently dragging nodes and collect their ids
+          const draggingSel = svgSel
+            .select('g.node-layer')
+            .selectAll<SVGGElement, any>('.node.dragging');
+          const draggingIds = new Set<string>();
+          draggingSel.each(function (this: SVGGElement, d: any) {
+            const id = (d && d.id) || this.getAttribute('data-node-id');
+            if (id) {
+              draggingIds.add(String(id));
+            }
+          });
+
+          // Remove only the currently dragging nodes to avoid full layer churn
+          draggingSel.remove();
+
+          // Also remove any connections associated with those nodes from the connection layer
+          if (draggingIds.size > 0) {
+            const connSel = svgSel
+              .select('g.connection-layer')
+              .selectAll<SVGGElement, any>('.connection');
+            connSel
+              .filter(
+                (c: any) =>
+                  !!c && (draggingIds.has(c.sourceNodeId) || draggingIds.has(c.targetNodeId))
+              )
+              .remove();
+          }
+
           // Note: Keep <defs> and <g.canvas-root> to avoid losing markers and zoom/pan state
         }
         // Clear connection path cache managed by hook
         clearConnCache();
         gridCacheRef.current = null;
-        allNodeElements?.clear();
+        // Do not clear allNodeElements here; entries are pruned via onExit and preserved across merges
       };
     } catch (error) {
       console.error('Error in main D3 rendering effect:', error);

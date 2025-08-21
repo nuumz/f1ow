@@ -1,6 +1,47 @@
 import * as d3 from 'd3'
 import type { WorkflowNode, NodePort } from '../types'
 
+// Dev-only: track last known state per node layer to detect external clears between renders
+const __nodeLayerStateDev = new WeakMap<SVGGElement, { lastKeys?: string[]; lastCount: number }>()
+
+/**
+ * Lightweight helpers to avoid redundant DOM churn by only applying changes
+ * when values actually differ.
+ */
+export function setAttrIfChanged<E extends d3.BaseType, D = unknown>(
+    selection: d3.Selection<E, D, d3.BaseType, unknown>,
+    name: string,
+    value: string | number | null | undefined | ((d: D, i: number, el: E) => string | number | null | undefined)
+) {
+    selection.each(function (this: E, d: D, i: number) {
+        const el = this as unknown as Element
+        const valueFn = typeof value === 'function' ? (value as (d: D, i: number, el: E) => string | number | null | undefined) : null
+        const nextVal = valueFn ? valueFn(d, i, this) : value
+        const nextStr = nextVal === null || nextVal === undefined ? null : String(nextVal)
+        const curr = el.getAttribute(name)
+        if (curr !== nextStr) {
+            if (nextStr === null) { el.removeAttribute(name) } else { el.setAttribute(name, nextStr) }
+        }
+    })
+}
+
+export function setStyleIfChanged<E extends d3.BaseType, D = unknown>(
+    selection: d3.Selection<E, D, d3.BaseType, unknown>,
+    name: string,
+    value: string | number | null | undefined | ((d: D, i: number, el: E) => string | number | null | undefined)
+) {
+    selection.each(function (this: E, d: D, i: number) {
+        const el = this as unknown as HTMLElement
+        const valueFn = typeof value === 'function' ? (value as (d: D, i: number, el: E) => string | number | null | undefined) : null
+        const nextVal = valueFn ? valueFn(d, i, this) : value
+        const nextStr = nextVal === null || nextVal === undefined ? '' : String(nextVal)
+        const curr = el.style.getPropertyValue(name)
+        if (curr !== nextStr) {
+            el.style.setProperty(name, nextStr)
+        }
+    })
+}
+
 /**
  * Core function to generate the base DOM structure for a node.
  * Appends the standard children and baseline styles, leaving data-driven
@@ -202,6 +243,8 @@ export type CreateNodeGroupsOptions<Datum> = {
     onExit?: (d: Datum, element: SVGGElement) => void
     onEnterEach?: (d: Datum, element: SVGGElement) => void
     dragBehavior?: d3.DragBehavior<SVGGElement, Datum, unknown>
+    /** Optional per-node update hook called for merged selections. */
+    onUpdateEach?: (d: Datum, element: SVGGElement) => void
 }
 
 /**
@@ -221,13 +264,16 @@ export function createNodeGroups<Datum>(
         onExit,
         onEnterEach,
         dragBehavior,
+        onUpdateEach,
     } = options
 
+    let usedIndexFallback = false
     const safeGetId = (d: Datum, i: number): string => {
         if (getId) { return getId(d) }
         const rec = d as unknown as Record<string, unknown>
         const idVal = rec?.['id']
-        if (typeof idVal === 'string') { return idVal }
+        if (typeof idVal === 'string' && idVal.length > 0) { return idVal }
+        usedIndexFallback = true
         return String(i)
     }
 
@@ -240,6 +286,35 @@ export function createNodeGroups<Datum>(
     }
 
     const keyAccessor = (d: Datum, i: number): string => (key ? key(d) : safeGetId(d, i))
+
+    // Dev-only detection for duplicate/unstable keys, which cause full re-creates
+    const keys = data.map((d, i) => (key ? key(d) : safeGetId(d, i)))
+    if (process.env.NODE_ENV !== 'production') {
+        const set = new Set<string>()
+        let hasDup = false
+        for (const k of keys) {
+            if (set.has(k)) { hasDup = true; break }
+            set.add(k)
+        }
+        if (hasDup) {
+            console.warn('[createNodeGroups] Duplicate keys detected. Nodes may be removed/recreated unexpectedly. Provide a unique key/getId.')
+        }
+        if (usedIndexFallback) {
+            console.warn('[createNodeGroups] Missing d.id (string). Falling back to index key — nodes will be recreated when order changes. Pass getId or ensure d.id.')
+        }
+
+        // Detect if the layer has been cleared externally between renders (common root cause)
+        const layerEl = layer.node() as SVGGElement | null
+        if (layerEl) {
+            const existingCount = layer.selectAll<SVGGElement, unknown>('.node').size()
+            const prevState = __nodeLayerStateDev.get(layerEl)
+            if (prevState && prevState.lastCount > 0 && existingCount === 0 && data.length > 0) {
+                console.warn('[createNodeGroups] Detected node-layer cleared between renders. Ensure the layer is stable and not re-created/emptied by other code.')
+            }
+            // Track state
+            __nodeLayerStateDev.set(layerEl, { lastKeys: keys, lastCount: existingCount })
+        }
+    }
 
     const nodeSelection: d3.Selection<SVGGElement, Datum, SVGGElement, unknown> = layer
         .selectAll<SVGGElement, Datum>('.node')
@@ -269,5 +344,56 @@ export function createNodeGroups<Datum>(
 
     const nodeGroups = nodeEnter.merge(nodeSelection)
 
+    // Update attributes/styles only when changed to avoid redundant layout work
+    setAttrIfChanged<SVGGElement, Datum>(nodeGroups, 'transform', (d: Datum) => safeGetTransform(d))
+    setAttrIfChanged<SVGGElement, Datum>(nodeGroups, 'data-node-id', (d: Datum, i: number) => safeGetId(d, i))
+    setStyleIfChanged<SVGGElement, Datum>(nodeGroups, 'cursor', cursor)
+
+    if (onUpdateEach) {
+        nodeGroups.each(function (this: SVGGElement, d: Datum) {
+            onUpdateEach(d, this)
+        })
+    }
+
     return { nodeSelection, nodeEnter, nodeGroups }
+}
+
+/**
+ * Update only the attributes of the existing architecture-outline rect within nodes.
+ * This never creates new rects; it mutates the current one in-place and only
+ * applies diffs where values actually changed.
+ */
+export type ArchOutlineAttrs = Partial<{
+    x: number
+    y: number
+    width: number
+    height: number
+    rx: number
+    ry: number
+    stroke: string
+    strokeWidth: number
+    strokeDasharray: string
+    opacity: number
+}>
+
+export function updateArchOutlineAttributes<D = unknown>(
+    nodeGroups: d3.Selection<SVGGElement, D, SVGGElement, unknown>,
+    attrs: ArchOutlineAttrs | ((d: D, i: number, el: SVGGElement) => ArchOutlineAttrs)
+) {
+    nodeGroups.each(function (this: SVGGElement, d: D, i: number) {
+        const g = d3.select<SVGGElement, D>(this)
+        const rect = g.select<SVGRectElement>('rect.node-arch-outline')
+        if (rect.empty()) { return }
+        const a = typeof attrs === 'function' ? (attrs as (d: D, i: number, el: SVGGElement) => ArchOutlineAttrs)(d, i, this) : attrs
+        if (a.x !== undefined) { setAttrIfChanged<SVGRectElement, D>(rect, 'x', String(a.x)) }
+        if (a.y !== undefined) { setAttrIfChanged<SVGRectElement, D>(rect, 'y', String(a.y)) }
+        if (a.width !== undefined) { setAttrIfChanged<SVGRectElement, D>(rect, 'width', String(a.width)) }
+        if (a.height !== undefined) { setAttrIfChanged<SVGRectElement, D>(rect, 'height', String(a.height)) }
+        if (a.rx !== undefined) { setAttrIfChanged<SVGRectElement, D>(rect, 'rx', String(a.rx)) }
+        if (a.ry !== undefined) { setAttrIfChanged<SVGRectElement, D>(rect, 'ry', String(a.ry)) }
+        if (a.stroke !== undefined) { setAttrIfChanged<SVGRectElement, D>(rect, 'stroke', a.stroke) }
+        if (a.strokeWidth !== undefined) { setAttrIfChanged<SVGRectElement, D>(rect, 'stroke-width', String(a.strokeWidth)) }
+        if (a.strokeDasharray !== undefined) { setAttrIfChanged<SVGRectElement, D>(rect, 'stroke-dasharray', a.strokeDasharray) }
+        if (a.opacity !== undefined) { setAttrIfChanged<SVGRectElement, D>(rect, 'opacity', String(a.opacity)) }
+    })
 }

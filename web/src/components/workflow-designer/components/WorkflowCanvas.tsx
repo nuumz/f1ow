@@ -1151,6 +1151,40 @@ function WorkflowCanvas({
         const dragDuration = Date.now() - (dragData.dragStartTime || 0);
         const nodeElement = d3.select(this);
 
+        // Calculate final position if dragged
+        if (hasDragged && dragData.initialX !== undefined && dragData.initialY !== undefined) {
+          const svgElement = svgRef.current!;
+          const sourceEvent = event.sourceEvent || event;
+          const [mouseX, mouseY] = d3.pointer(sourceEvent, svgElement);
+          const transform = d3.zoomTransform(svgElement);
+          const [currentCanvasX, currentCanvasY] = transform.invert([mouseX, mouseY]);
+          
+          const deltaX = currentCanvasX - dragData.dragStartX;
+          const deltaY = currentCanvasY - dragData.dragStartY;
+          
+          // Update node position in data
+          d.x = dragData.initialX + deltaX;
+          d.y = dragData.initialY + deltaY;
+          
+          // Update DOM transform to match final position
+          nodeElement.attr('transform', `translate(${d.x}, ${d.y})`);
+          
+          // Update node position in parent state
+          onNodeDrag(d.id, d.x, d.y);
+          
+          // Force immediate connection path updates for this node
+          try {
+            connectionUpdateQueueRef.current.add(d.id);
+            if (!batchedConnectionUpdateRef.current) {
+              batchedConnectionUpdateRef.current = requestAnimationFrame(
+                processBatchedConnectionUpdatesCallback
+              );
+            }
+          } catch {
+            // ignore
+          }
+        }
+
         // Clean up drag state
         delete dragData.dragStartX;
         delete dragData.dragStartY;

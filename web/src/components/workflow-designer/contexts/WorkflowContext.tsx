@@ -1242,62 +1242,109 @@ export function WorkflowProvider({ children, initialWorkflow }: WorkflowProvider
     state.architectureMode,
   ]);
 
-  const contextValue: WorkflowContextType = useMemo(
-    () => ({
-      state,
-      svgRef,
-      containerRef,
-      dispatch,
-      isNodeSelected,
-      getSelectedNodesList,
-      canDropOnPort,
-      canDropOnNode,
-      validateConnections,
-      saveConnectionsToStorage,
-      loadConnectionsFromStorage: loadConnectionsFromStorageHandler,
-      toggleAutoSave,
-      saveDraft,
-      loadDraft,
-      autoSaveDraft,
-      deleteDraft,
-      listDrafts,
-      getStorageStats,
-      getAutoSaveStatus,
-      setDesignerMode,
-      startDragging,
-      updateDragPosition,
-      endDragging,
-      isDragging,
-      getDraggedNodeId,
-    }),
-    [
-      state,
-      svgRef,
-      containerRef,
-      dispatch,
-      isNodeSelected,
-      getSelectedNodesList,
-      canDropOnPort,
-      canDropOnNode,
-      validateConnections,
-      saveConnectionsToStorage,
-      loadConnectionsFromStorageHandler,
-      toggleAutoSave,
-      saveDraft,
-      loadDraft,
-      autoSaveDraft,
-      deleteDraft,
-      listDrafts,
-      getStorageStats,
-      getAutoSaveStatus,
-      setDesignerMode,
-      startDragging,
-      updateDragPosition,
-      endDragging,
-      isDragging,
-      getDraggedNodeId,
-    ]
-  );
+  // Split context value into separate memoized objects to reduce re-renders
+  const coreDataValue = useMemo(() => ({
+    workflowName: state.workflowName,
+    nodes: state.nodes,
+    connections: state.connections,
+    designerMode: state.designerMode,
+    architectureMode: state.architectureMode,
+    isDirty: state.isDirty,
+    lastSaved: state.lastSaved,
+  }), [
+    state.workflowName,
+    state.nodes,
+    state.connections,
+    state.designerMode,
+    state.architectureMode,
+    state.isDirty,
+    state.lastSaved,
+  ]);
+
+  const selectionValue = useMemo(() => ({
+    selectedNodes: state.selectedNodes,
+    selectedNode: state.selectedNode,
+  }), [state.selectedNodes, state.selectedNode]);
+
+  const canvasValue = useMemo(() => ({
+    canvasTransform: state.canvasTransform,
+    draggingState: state.draggingState,
+  }), [state.canvasTransform, state.draggingState]);
+
+  const connectionValue = useMemo(() => ({
+    connectionState: state.connectionState,
+  }), [state.connectionState]);
+
+  // Stable function references (only recreated when dependencies change)
+  const stableFunctions = useMemo(() => ({
+    dispatch,
+    isNodeSelected,
+    getSelectedNodesList,
+    canDropOnPort,
+    canDropOnNode,
+    validateConnections,
+    saveConnectionsToStorage,
+    loadConnectionsFromStorage: loadConnectionsFromStorageHandler,
+    toggleAutoSave,
+    saveDraft,
+    loadDraft,
+    autoSaveDraft,
+    deleteDraft,
+    listDrafts,
+    getStorageStats,
+    getAutoSaveStatus,
+    setDesignerMode,
+    startDragging,
+    updateDragPosition,
+    endDragging,
+    isDragging,
+    getDraggedNodeId,
+  }), [
+    dispatch,
+    isNodeSelected,
+    getSelectedNodesList,
+    canDropOnPort,
+    canDropOnNode,
+    validateConnections,
+    saveConnectionsToStorage,
+    loadConnectionsFromStorageHandler,
+    toggleAutoSave,
+    saveDraft,
+    loadDraft,
+    autoSaveDraft,
+    deleteDraft,
+    listDrafts,
+    getStorageStats,
+    getAutoSaveStatus,
+    setDesignerMode,
+    startDragging,
+    updateDragPosition,
+    endDragging,
+    isDragging,
+    getDraggedNodeId,
+  ]);
+
+  // Main context value with separated concerns
+  const contextValue: WorkflowContextType = useMemo(() => ({
+    // Combine all state slices
+    state: {
+      ...coreDataValue,
+      ...selectionValue,
+      ...canvasValue,
+      ...connectionValue,
+      executionState: state.executionState,
+      uiState: state.uiState,
+      autoSaveState: state.autoSaveState,
+      currentDraftId: state.currentDraftId,
+    },
+    
+    // Stable refs
+    svgRef,
+    containerRef,
+    
+    // Stable functions
+    ...stableFunctions,
+  }), [coreDataValue, selectionValue, canvasValue, connectionValue, state.executionState, state.uiState, state.autoSaveState, state.currentDraftId, stableFunctions]);
 
   return <WorkflowContext.Provider value={contextValue}>{children}</WorkflowContext.Provider>;
 }
@@ -1310,6 +1357,118 @@ export function useWorkflowContext() {
     throw new Error('useWorkflowContext must be used within a WorkflowProvider');
   }
   return context;
+}
+
+// Performance-optimized selector hooks to reduce re-renders
+// eslint-disable-next-line react-refresh/only-export-components
+export function useWorkflowNodes(): WorkflowNode[] {
+  const { state } = useWorkflowContext();
+  return useMemo(() => state.nodes, [state.nodes]);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useWorkflowConnections(): Connection[] {
+  const { state } = useWorkflowContext();
+  return useMemo(() => state.connections, [state.connections]);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useSelectedNodes(): WorkflowNode[] {
+  const { state } = useWorkflowContext();
+  return useMemo(() => {
+    if (state.selectedNodes.size === 0) {
+      return [];
+    }
+    return state.nodes.filter(node => state.selectedNodes.has(node.id));
+  }, [state.nodes, state.selectedNodes]);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useSelectedNodesSet(): Set<string> {
+  const { state } = useWorkflowContext();
+  return useMemo(() => state.selectedNodes, [state.selectedNodes]);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useNodeById(nodeId: string): WorkflowNode | null {
+  const { state } = useWorkflowContext();
+  return useMemo(() => {
+    return state.nodes.find(node => node.id === nodeId) || null;
+  }, [state.nodes, nodeId]);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useDesignerMode(): 'workflow' | 'architecture' {
+  const { state } = useWorkflowContext();
+  return useMemo(() => state.designerMode, [state.designerMode]);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useArchitectureMode(): 'context' | 'api-flow' | 'service-mesh' | 'domain-driven' {
+  const { state } = useWorkflowContext();
+  return useMemo(() => state.architectureMode, [state.architectureMode]);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useUIState() {
+  const { state } = useWorkflowContext();
+  return useMemo(() => state.uiState, [state.uiState]);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useExecutionState() {
+  const { state } = useWorkflowContext();
+  return useMemo(() => state.executionState, [state.executionState]);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useSelectedNode(): WorkflowNode | null {
+  const { state } = useWorkflowContext();
+  return useMemo(() => state.selectedNode, [state.selectedNode]);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useWorkflowName(): string {
+  const { state } = useWorkflowContext();
+  return useMemo(() => state.workflowName, [state.workflowName]);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useDragState() {
+  const { state } = useWorkflowContext();
+  return useMemo(() => ({
+    isDragging: state.draggingState.isDragging,
+    draggedNodeId: state.draggingState.draggedNodeId,
+    dragStartPosition: state.draggingState.dragStartPosition,
+    currentPosition: state.draggingState.currentPosition,
+  }), [
+    state.draggingState.isDragging,
+    state.draggingState.draggedNodeId,
+    state.draggingState.dragStartPosition,
+    state.draggingState.currentPosition,
+  ]);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useCanvasTransform(): CanvasTransform {
+  const { state } = useWorkflowContext();
+  return useMemo(() => state.canvasTransform, [state.canvasTransform]);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useConnectionState() {
+  const { state } = useWorkflowContext();
+  return useMemo(() => ({
+    isConnecting: state.connectionState.isConnecting,
+    connectionStart: state.connectionState.connectionStart,
+    connectionPreview: state.connectionState.connectionPreview,
+    selectedConnection: state.connectionState.selectedConnection,
+  }), [
+    state.connectionState.isConnecting,
+    state.connectionState.connectionStart,
+    state.connectionState.connectionPreview,
+    state.connectionState.selectedConnection,
+  ]);
 }
 
 // (Types relocated to WorkflowContextExports.ts to satisfy Fast Refresh constraints)

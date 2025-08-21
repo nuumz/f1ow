@@ -20,7 +20,20 @@ import {
 import './WorkflowDesigner.scss';
 
 // Import provider and hooks
-import { WorkflowProvider, useWorkflowContext } from './contexts/WorkflowContext';
+import { 
+  WorkflowProvider, 
+  useWorkflowContext,
+  useWorkflowNodes,
+  useWorkflowConnections,
+  useSelectedNodesSet,
+  useCanvasTransform,
+  useConnectionState,
+  useDesignerMode,
+  useUIState,
+  useExecutionState,
+  useSelectedNode,
+  useWorkflowName,
+} from './contexts/WorkflowContext';
 import { useWorkflowOperations } from './hooks/useWorkflowOperations';
 import { useWorkflowCanvas } from './hooks/useWorkflowCanvas';
 import { useWorkflowEventHandlers } from './hooks/useWorkflowEventHandlers';
@@ -205,7 +218,17 @@ function WorkflowDesignerContent({
   showStatusBar = true,
   readOnly = false,
 }: WorkflowDesignerContentProps) {
-  const { state, svgRef, containerRef, dispatch } = useWorkflowContext();
+  const { svgRef, containerRef, dispatch, setDesignerMode } = useWorkflowContext();
+  const nodes = useWorkflowNodes();
+  const connections = useWorkflowConnections();
+  const selectedNodesSet = useSelectedNodesSet();
+  const selectedNode = useSelectedNode();
+  const canvasTransform = useCanvasTransform();
+  const connectionState = useConnectionState();
+  const designerMode = useDesignerMode();
+  const uiState = useUIState();
+  const executionState = useExecutionState();
+  const workflowName = useWorkflowName();
   const operations = useWorkflowOperations();
   const canvas = useWorkflowCanvas();
   const handlers = useWorkflowEventHandlers();
@@ -277,17 +300,17 @@ function WorkflowDesignerContent({
     dropDecisionCacheRef.current.clear();
     loggedDecisionKeysRef.current.clear();
   }, [
-    state.connectionState.isConnecting,
-    state.connectionState.connectionStart?.nodeId,
-    state.connectionState.connectionStart?.portId,
-    state.connectionState.connectionStart?.type,
+    connectionState.isConnecting,
+    connectionState.connectionStart?.nodeId,
+    connectionState.connectionStart?.portId,
+    connectionState.connectionStart?.type,
   ]);
 
   // Memoized canvas handlers extracted to reduce render body complexity
 
   const canDropOnPort = useCallback(
     (targetNodeId: string, targetPortId: string, portType?: 'input' | 'output') => {
-      const { connectionStart, isConnecting } = state.connectionState;
+      const { connectionStart, isConnecting } = connectionState;
       // Fast path: when not in connecting gesture, never allow drop and don't log
       if (!isConnecting) {
         return false;
@@ -298,7 +321,7 @@ function WorkflowDesignerContent({
           targetPortId,
           portType,
           connectionStart,
-          designerMode: state.designerMode,
+          designerMode: designerMode,
         });
       }
       if (!connectionStart || connectionStart.nodeId === targetNodeId) {
@@ -311,7 +334,7 @@ function WorkflowDesignerContent({
         return false;
       }
 
-      if (state.designerMode === 'architecture') {
+      if (designerMode === 'architecture') {
         // Use per-session cache; architecture rule depends only on direction, not on connections list
         const cacheKey = `${connectionStart.nodeId}|${connectionStart.portId}|${connectionStart.type}|${targetNodeId}|${targetPortId}|${portType ?? 'any'}|arch`;
         const cached = dropDecisionCacheRef.current.get(cacheKey);
@@ -337,7 +360,7 @@ function WorkflowDesignerContent({
       }
 
       const exactDuplicateExists = hasExactDuplicateWorkflowHelper(
-        state.connections,
+        connections,
         connectionStart,
         targetNodeId,
         targetPortId
@@ -353,19 +376,19 @@ function WorkflowDesignerContent({
         console.warn('canDropOnPort: Entering workflow mode logic');
       }
       if (connectionStart.type === 'output') {
-        const targetPortAlreadyConnected = state.connections.find(
+        const targetPortAlreadyConnected = connections.find(
           (conn) => conn.targetNodeId === targetNodeId && conn.targetPortId === targetPortId
         );
         return !targetPortAlreadyConnected;
       }
       return true;
     },
-    [state.connectionState, state.designerMode, state.connections]
+    [connectionState, designerMode, connections]
   );
 
   const canDropOnNode = useCallback(
     (targetNodeId: string) => {
-      const { connectionStart, isConnecting } = state.connectionState;
+      const { connectionStart, isConnecting } = connectionState;
       const canDrop = !!(
         connectionStart &&
         connectionStart.nodeId !== targetNodeId &&
@@ -382,14 +405,14 @@ function WorkflowDesignerContent({
       }
       return canDrop;
     },
-    [state.connectionState]
+    [connectionState]
   );
 
   const handlePlusClick = useCallback(
     (nodeId: string, portId: string) => {
       console.warn('Plus button clicked:', { nodeId, portId });
-      if (state.designerMode === 'workflow') {
-        const sourceNode = state.nodes.find((n) => n.id === nodeId);
+      if (designerMode === 'workflow') {
+        const sourceNode = nodes.find((n) => n.id === nodeId);
         if (!sourceNode) {
           return;
         }
@@ -397,13 +420,13 @@ function WorkflowDesignerContent({
           x: sourceNode.x + (Math.random() - 0.5) * 100,
           y: sourceNode.y + 150,
         };
-        const nextType = suggestNextNodeType(sourceNode.type, state.designerMode);
+        const nextType = suggestNextNodeType(sourceNode.type, designerMode);
         const newNode = operations.addNode(nextType, newNodePosition);
         if (newNode && newNode.inputs.length > 0) {
           operations.createConnection(nodeId, portId, newNode.id, newNode.inputs[0].id);
         }
       } else {
-        const sourceNode = state.nodes.find((n) => n.id === nodeId);
+        const sourceNode = nodes.find((n) => n.id === nodeId);
         if (!sourceNode) {
           return;
         }
@@ -411,11 +434,11 @@ function WorkflowDesignerContent({
           x: sourceNode.x + (Math.random() - 0.5) * 100,
           y: sourceNode.y + 150,
         };
-        const nextType = suggestNextNodeType('microservice', state.designerMode);
+        const nextType = suggestNextNodeType('microservice', designerMode as 'workflow' | 'architecture');
         handleAddArchitectureNode(nextType, newNodePosition);
       }
     },
-    [handleAddArchitectureNode, operations, state.designerMode, state.nodes]
+    [handleAddArchitectureNode, operations, designerMode, nodes]
   );
 
   // File operations
@@ -431,13 +454,13 @@ function WorkflowDesignerContent({
 
   // Mode switching handler
   const handleModeSwitch = useCallback(() => {
-    const newMode = state.designerMode === 'workflow' ? 'architecture' : 'workflow';
-    dispatch({ type: 'SET_DESIGNER_MODE', payload: newMode });
-  }, [state.designerMode, dispatch]);
+    const newMode = designerMode === 'workflow' ? 'architecture' : 'workflow';
+    setDesignerMode(newMode);
+  }, [designerMode, setDesignerMode]);
 
   // Architecture dropdown component to reduce complexity
   const ArchitectureDropdown: React.FC = () => {
-    if (state.designerMode !== 'architecture') {
+    if (designerMode !== 'architecture') {
       return null;
     }
 
@@ -554,20 +577,20 @@ function WorkflowDesignerContent({
     if (!showNodePalette) {
       return null;
     }
-    if (state.designerMode === 'architecture') {
+    if (designerMode === 'architecture') {
       return <ArchitectureNodePalette onAddNode={handleAddArchitectureNode} />;
     }
     return <WorkflowNodePalette onAddNode={operations.addNode} />;
-  }, [handleAddArchitectureNode, operations, showNodePalette, state.designerMode]);
+  }, [handleAddArchitectureNode, operations, showNodePalette, designerMode]);
 
   const renderNodeEditorSection = useCallback(() => {
-    if (state.designerMode !== 'workflow') {
+    if (designerMode !== 'workflow') {
       return null;
     }
-    if (!state.uiState.showNodeEditor || !state.selectedNode) {
+    if (!uiState.showNodeEditor || !selectedNode) {
       return null;
     }
-    const selected = state.selectedNode;
+    const selected = selectedNode;
     return (
       <div className="node-editor-container">
         <NodeEditor
@@ -583,7 +606,7 @@ function WorkflowDesignerContent({
         />
       </div>
     );
-  }, [operations, state.designerMode, state.selectedNode, state.uiState.showNodeEditor]);
+  }, [operations, designerMode, selectedNode, uiState.showNodeEditor]);
   const [notification, setNotification] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -604,7 +627,7 @@ function WorkflowDesignerContent({
           const result = await operations.importWorkflow(file);
           showNotification('success', 'Workflow imported successfully!');
           onImport?.({
-            name: state.workflowName,
+            name: workflowName,
             nodes: result.nodes,
             connections: result.connections,
           });
@@ -618,7 +641,7 @@ function WorkflowDesignerContent({
       // Reset file input
       event.target.value = '';
     },
-    [operations, onImport, showNotification, state.workflowName]
+    [operations, onImport, showNotification, workflowName]
   );
 
   const handleSave = useCallback(async () => {
@@ -628,8 +651,8 @@ function WorkflowDesignerContent({
       // Convert to WorkflowData format
       const workflow: WorkflowData = {
         name: workflowData.name,
-        nodes: state.nodes,
-        connections: state.connections,
+        nodes: nodes,
+        connections: connections,
       };
       await onSave?.(workflow);
       showNotification('success', 'Workflow saved successfully!');
@@ -639,15 +662,15 @@ function WorkflowDesignerContent({
     } finally {
       setIsLoading(false);
     }
-  }, [operations, onSave, showNotification, state.nodes, state.connections]);
+  }, [operations, onSave, showNotification, nodes, connections]);
 
   const handleExecute = useCallback(async () => {
     try {
       setIsLoading(true);
       const workflow = {
-        name: state.workflowName,
-        nodes: state.nodes,
-        connections: state.connections,
+        name: workflowName,
+        nodes: nodes,
+        connections: connections,
       };
       await onExecute?.(workflow);
       await operations.executeWorkflow();
@@ -658,14 +681,14 @@ function WorkflowDesignerContent({
     } finally {
       setIsLoading(false);
     }
-  }, [operations, onExecute, state, showNotification]);
+  }, [operations, onExecute, nodes, connections, workflowName, showNotification]);
 
   const handleExport = useCallback(() => {
     try {
       const workflow = {
-        name: state.workflowName,
-        nodes: state.nodes,
-        connections: state.connections,
+        name: workflowName,
+        nodes: nodes,
+        connections: connections,
       };
       onExport?.(workflow);
       operations.exportWorkflow();
@@ -674,7 +697,7 @@ function WorkflowDesignerContent({
       console.error('Export failed:', error);
       showNotification('error', 'Failed to export workflow');
     }
-  }, [operations, onExport, state, showNotification]);
+  }, [operations, onExport, nodes, connections, workflowName, showNotification]);
 
   // Keyboard event setup
   useEffect(() => {
@@ -712,7 +735,7 @@ function WorkflowDesignerContent({
           {isEditingName ? (
             <input
               type="text"
-              value={state.workflowName}
+              value={workflowName}
               onChange={(e) => operations.setWorkflowName(e.target.value)}
               onBlur={() => setIsEditingName(false)}
               onKeyDown={(e) => {
@@ -745,10 +768,10 @@ function WorkflowDesignerContent({
             >
               <div>
                 <span className="workflow-name-label">
-                  {state.workflowName || 'Unnamed Workflow'}
+                  {workflowName || 'Unnamed Workflow'}
                 </span>
-                <span className={`workflow-mode-badge ${state.designerMode}`}>
-                  {state.designerMode === 'workflow' ? 'Workflow' : 'Architecture'}
+                <span className={`workflow-mode-badge ${designerMode}`}>
+                  {designerMode === 'workflow' ? 'Workflow' : 'Architecture'}
                 </span>
               </div>
             </div>
@@ -759,15 +782,15 @@ function WorkflowDesignerContent({
           {/* Mode Switch Button */}
           <button
             onClick={handleModeSwitch}
-            className={`action-button mode-switch-button ${state.designerMode === 'architecture' ? 'active' : ''}`}
+            className={`action-button mode-switch-button ${designerMode === 'architecture' ? 'active' : ''}`}
             title={
-              state.designerMode === 'workflow'
+              designerMode === 'workflow'
                 ? 'Switch to Architecture Mode'
                 : 'Switch to Workflow Mode'
             }
           >
             <Layers size={16} />
-            {state.designerMode === 'workflow' ? 'Architecture' : 'Workflow'}
+            {designerMode === 'workflow' ? 'Architecture' : 'Workflow'}
           </button>
 
           {/* Architecture Dropdown - Only show in architecture mode */}
@@ -785,19 +808,19 @@ function WorkflowDesignerContent({
                 {isLoading ? 'Saving...' : 'Save'}
               </button>
 
-              {state.designerMode === 'workflow' && (
+              {designerMode === 'workflow' && (
                 <button
                   onClick={handleExecute}
                   className="action-button execute-button"
                   title="Execute Workflow"
                   disabled={
-                    state.executionState.status === 'running' ||
+                    executionState.status === 'running' ||
                     isLoading ||
-                    state.nodes.length === 0
+                    nodes.length === 0
                   }
                 >
                   <Play size={16} />
-                  {state.executionState.status === 'running' ? 'Running...' : 'Execute'}
+                  {executionState.status === 'running' ? 'Running...' : 'Execute'}
                 </button>
               )}
             </>
@@ -807,7 +830,7 @@ function WorkflowDesignerContent({
             onClick={handleExport}
             className="action-button export-button"
             title="Export Workflow"
-            disabled={isLoading || state.nodes.length === 0}
+            disabled={isLoading || nodes.length === 0}
           >
             <Download size={16} />
             Export
@@ -850,12 +873,12 @@ function WorkflowDesignerContent({
         {showStatusBar && (
           <div className="workflow-designer-status">
             <div className="status-info">
-              <span>Nodes: {state.nodes.length}</span>
-              <span>Connections: {state.connections.length}</span>
-              <span>Selected: {state.selectedNodes.size}</span>
-              <span>Zoom: {Math.round(state.canvasTransform.k * 100)}%</span>
-              {state.designerMode === 'workflow' && state.executionState.status !== 'idle' && (
-                <span>Status: {state.executionState.status}</span>
+              <span>Nodes: {nodes.length}</span>
+              <span>Connections: {connections.length}</span>
+              <span>Selected: {selectedNodesSet.size}</span>
+              <span>Zoom: {Math.round(canvasTransform.k * 100)}%</span>
+              {designerMode === 'workflow' && executionState.status !== 'idle' && (
+                <span>Status: {executionState.status}</span>
               )}
             </div>
 
@@ -863,22 +886,22 @@ function WorkflowDesignerContent({
               <AutoSaveStatus showFullStatus={false} />
             </div>
 
-            {state.designerMode === 'workflow' && (
+            {designerMode === 'workflow' && (
               <div className="execution-status">
                 <span
-                  className={`execution-status__indicator execution-status__indicator--${state.executionState.status}`}
+                  className={`execution-status__indicator execution-status__indicator--${executionState.status}`}
                 >
-                  {state.executionState.status.toUpperCase()}
+                  {executionState.status.toUpperCase()}
                 </span>
-                {state.executionState.currentNode && (
-                  <span>Current: {state.executionState.currentNode}</span>
+                {executionState.currentNode && (
+                  <span>Current: {executionState.currentNode}</span>
                 )}
-                {state.executionState.status === 'completed' &&
-                  state.executionState.endTime &&
-                  state.executionState.startTime &&
+                {executionState.status === 'completed' &&
+                  executionState.endTime &&
+                  executionState.startTime &&
                   (() => {
                     const duration = Math.round(
-                      (state.executionState.endTime - state.executionState.startTime) / 1000
+                      (executionState.endTime - executionState.startTime) / 1000
                     );
                     return <span>Duration: {duration}s</span>;
                   })()}
@@ -888,13 +911,13 @@ function WorkflowDesignerContent({
         )}
 
         {/* Execution Logs (if running) - Only show in workflow mode */}
-        {state.designerMode === 'workflow' &&
-          state.executionState.status === 'running' &&
-          state.executionState.logs.length > 0 && (
+        {designerMode === 'workflow' &&
+          executionState.status === 'running' &&
+          executionState.logs.length > 0 && (
             <div className="execution-logs">
               <h3>Execution Logs</h3>
               <div className="logs-container">
-                {state.executionState.logs.slice(-10).map((log) => (
+                {executionState.logs.slice(-10).map((log) => (
                   <div
                     key={`${log.nodeId}-${log.timestamp}-${log.level}`}
                     className={`log-entry ${log.level}`}
@@ -931,7 +954,7 @@ function WorkflowDesignerContent({
         {/* Canvas Container - Shared for both modes */}
         <div
           ref={containerRef}
-          className={`canvas-container ${state.uiState.isDragOver ? 'drag-over' : ''} ${state.designerMode === 'architecture' ? 'architecture-mode' : 'workflow-mode'}`}
+          className={`canvas-container ${uiState.isDragOver ? 'drag-over' : ''} ${designerMode === 'architecture' ? 'architecture-mode' : 'workflow-mode'}`}
           role="button"
           tabIndex={0}
           aria-label="Workflow canvas"
@@ -954,23 +977,23 @@ function WorkflowDesignerContent({
         >
           <svg
             ref={svgRef}
-            className={`workflow-canvas ${state.designerMode}-canvas ${state.connectionState.isConnecting ? 'connecting' : ''}`}
+            className={`workflow-canvas ${designerMode}-canvas ${connectionState.isConnecting ? 'connecting' : ''}`}
             width="100%"
             height="100%"
           >
             <WorkflowCanvas
               svgRef={svgRef}
-              nodes={state.nodes}
-              connections={state.connections}
-              showGrid={state.uiState.showGrid}
-              canvasTransform={state.canvasTransform}
-              nodeVariant={state.uiState.nodeVariant}
-              selectedNodes={state.selectedNodes}
-              selectedConnection={state.connectionState.selectedConnection}
-              isNodeSelected={(nodeId: string) => state.selectedNodes.has(nodeId)}
-              isConnecting={state.connectionState.isConnecting}
-              connectionStart={state.connectionState.connectionStart}
-              connectionPreview={state.connectionState.connectionPreview}
+              nodes={nodes}
+              connections={connections}
+              showGrid={uiState.showGrid}
+              canvasTransform={canvasTransform}
+              nodeVariant={uiState.nodeVariant}
+              selectedNodes={selectedNodesSet}
+              selectedConnection={connectionState.selectedConnection}
+              isNodeSelected={(nodeId: string) => selectedNodesSet.has(nodeId)}
+              isConnecting={connectionState.isConnecting}
+              connectionStart={connectionState.connectionStart}
+              connectionPreview={connectionState.connectionPreview}
               onNodeClick={handlers.handleNodeClick}
               onNodeDoubleClick={handlers.handleNodeDoubleClick}
               onNodeDrag={handlers.handleNodeDrag}
@@ -992,22 +1015,22 @@ function WorkflowDesignerContent({
 
           {/* Canvas Toolbar */}
           <CanvasToolbar
-            zoomLevel={state.canvasTransform.k || 1}
-            showGrid={state.uiState.showGrid}
+            zoomLevel={canvasTransform.k || 1}
+            showGrid={uiState.showGrid}
             onToggleGrid={operations.toggleGrid}
             onZoomIn={canvas.zoomIn}
             onZoomOut={canvas.zoomOut}
-            onFitToScreen={() => canvas.fitToScreen(state.nodes)}
-            onResetPosition={() => canvas.resetCanvasPosition(state.nodes)}
-            {...(state.designerMode === 'workflow' && {
+            onFitToScreen={() => canvas.fitToScreen(nodes)}
+            onResetPosition={() => canvas.resetCanvasPosition(nodes)}
+            {...(designerMode === 'workflow' && {
               executionStatus:
-                state.executionState.status === 'paused' ? 'idle' : state.executionState.status,
+                executionState.status === 'paused' ? 'idle' : executionState.status,
             })}
-            selectedNodeCount={state.selectedNodes.size}
+            selectedNodeCount={selectedNodesSet.size}
             onDeleteSelected={
-              state.selectedNodes.size > 0
+              selectedNodesSet.size > 0
                 ? () => {
-                    Array.from(state.selectedNodes).forEach((nodeId) => {
+                    Array.from(selectedNodesSet).forEach((nodeId) => {
                       operations.deleteNode(nodeId);
                     });
                     operations.clearSelection();

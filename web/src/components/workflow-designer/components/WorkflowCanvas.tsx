@@ -6,7 +6,16 @@ import { createNodeElements, createNodeGroups } from '../utils/node-elements';
 import type { PortDatum } from '../utils/ports-hit-test';
 import type { WorkflowNode, Connection, NodeVariant, CanvasTransform } from '../types';
 import { getNodeTypeInfo } from '../types/nodes';
-import { useWorkflowContext } from '../contexts/WorkflowContext';
+import { 
+  useWorkflowContext,
+  useWorkflowNodes,
+  useWorkflowConnections,
+  useSelectedNodes,
+  useDragState,
+  useCanvasTransform,
+  useConnectionState,
+  useDesignerMode,
+} from '../contexts/WorkflowContext';
 import {
   getNodeColor,
   getPortColor,
@@ -171,9 +180,8 @@ function WorkflowCanvas({
     isConnectingRef.current = isConnecting;
     connectionStartRef.current = connectionStart;
   }, [isConnecting, connectionStart]);
-  // Wire workflow context utilities and state used throughout
+  // Use optimized selector hooks instead of full context
   const {
-    state: workflowContextState,
     isDragging: isContextDragging,
     getDraggedNodeId,
     startDragging,
@@ -183,6 +191,42 @@ function WorkflowCanvas({
     // canDropOnNode: canDropOnNodeFromContext,
     dispatch,
   } = useWorkflowContext();
+
+  // Use specific selector hooks for performance
+  const workflowNodes = useWorkflowNodes();
+  const workflowConnections = useWorkflowConnections();
+  const contextSelectedNodes = useSelectedNodes();
+  const dragStateFromContext = useDragState();
+  const canvasTransformFromContext = useCanvasTransform();
+  const connectionStateFromContext = useConnectionState();
+  const designerModeFromContext = useDesignerMode();
+
+  // Create a minimal state object for components that still need it
+  const workflowContextState = useMemo(() => {
+    // Use prop values if provided, otherwise use context values
+    const actualNodes = nodes || workflowNodes;
+    const actualConnections = connections || workflowConnections;
+    const actualCanvasTransform = canvasTransform || canvasTransformFromContext;
+    const actualSelectedNodes = selectedNodes || new Set(contextSelectedNodes.map((n: any) => n.id));
+
+    return {
+      nodes: actualNodes,
+      connections: actualConnections,
+      selectedNodes: actualSelectedNodes,
+      designerMode: designerModeFromContext,
+      canvasTransform: actualCanvasTransform,
+      draggingState: dragStateFromContext,
+      connectionState: connectionStateFromContext,
+    };
+  }, [
+    nodes, workflowNodes,
+    connections, workflowConnections,
+    canvasTransform, canvasTransformFromContext,
+    selectedNodes, contextSelectedNodes,
+    connectionStateFromContext,
+    dragStateFromContext,
+    designerModeFromContext,
+  ]);
 
   // Prefer prop override, fallback to context implementation
   const canDropOnPort = canDropOnPortProp ?? canDropOnPortFromContext;

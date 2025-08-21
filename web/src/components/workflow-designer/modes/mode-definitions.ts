@@ -14,7 +14,7 @@ export const WORKFLOW_MODE: ModeDefinition = {
   name: 'Workflow Execution',
   description: 'Optimized for workflow execution and data flow visualization',
   category: 'execution',
-  
+
   theme: {
     primary: '#2563eb',       // Bright blue
     secondary: '#3b82f6',     // Medium blue  
@@ -26,7 +26,7 @@ export const WORKFLOW_MODE: ModeDefinition = {
     error: '#ef4444',         // Red
     gradients: {
       primary: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)',
-      secondary: 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)', 
+      secondary: 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)',
       background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)'
     },
     shadows: {
@@ -37,7 +37,7 @@ export const WORKFLOW_MODE: ModeDefinition = {
       port: '0 2px 6px rgba(37, 99, 235, 0.2)'
     }
   },
-  
+
   connectionStyle: {
     strokeWidth: 2.5,
     strokeDashArray: undefined, // Solid lines
@@ -60,7 +60,7 @@ export const WORKFLOW_MODE: ModeDefinition = {
     },
     transitionDuration: 200
   },
-  
+
   portStyle: {
     shape: 'circle',
     size: 8,
@@ -95,7 +95,7 @@ export const WORKFLOW_MODE: ModeDefinition = {
       position: 'tooltip'
     }
   },
-  
+
   canvasStyle: {
     backgroundType: 'gradient',
     backgroundValue: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
@@ -121,7 +121,7 @@ export const WORKFLOW_MODE: ModeDefinition = {
       easingFunction: 'cubic-bezier(0.4, 0.0, 0.2, 1)'
     }
   },
-  
+
   interactions: {
     doubleClickAction: 'edit',
     dragBehavior: {
@@ -146,7 +146,7 @@ export const WORKFLOW_MODE: ModeDefinition = {
       { key: 'Space', modifiers: [], action: 'pause', description: 'Pause execution' }
     ]
   },
-  
+
   metadata: {
     version: '1.0.0',
     author: 'f1ow Team',
@@ -172,7 +172,7 @@ export const ARCHITECTURE_MODE: ModeDefinition = {
   name: 'System Architecture',
   description: 'Focused on system design and architectural visualization',
   category: 'design',
-  
+
   theme: {
     primary: '#8b5cf6',       // Purple
     secondary: '#a78bfa',     // Light purple
@@ -195,11 +195,11 @@ export const ARCHITECTURE_MODE: ModeDefinition = {
       port: '0 3px 10px rgba(139, 92, 246, 0.35)'
     }
   },
-  
+
   connectionStyle: {
     strokeWidth: 3,
     strokeDashArray: '12,6',  // Architectural dashed lines
-    opacity: 0.85,
+    opacity: 1,
     animationType: 'pulse',
     markerType: 'diamond',
     markerSize: 14,
@@ -218,7 +218,7 @@ export const ARCHITECTURE_MODE: ModeDefinition = {
     },
     transitionDuration: 300
   },
-  
+
   portStyle: {
     shape: 'square',
     size: 10,
@@ -253,7 +253,7 @@ export const ARCHITECTURE_MODE: ModeDefinition = {
       position: 'outside'
     }
   },
-  
+
   canvasStyle: {
     backgroundType: 'gradient',
     backgroundValue: 'linear-gradient(135deg, #1e1b2e 0%, #2d1b57 100%)',
@@ -286,7 +286,7 @@ export const ARCHITECTURE_MODE: ModeDefinition = {
       easingFunction: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)'
     }
   },
-  
+
   interactions: {
     doubleClickAction: 'properties',
     dragBehavior: {
@@ -311,7 +311,7 @@ export const ARCHITECTURE_MODE: ModeDefinition = {
       { key: 'G', modifiers: ['ctrl'], action: 'group', description: 'Group selection' }
     ]
   },
-  
+
   metadata: {
     version: '1.0.0',
     author: 'f1ow Team',
@@ -337,7 +337,7 @@ export const DEBUG_MODE: ModeDefinition = {
   name: 'Debug Analysis',
   description: 'Technical analysis mode with detailed diagnostic information',
   category: 'analysis',
-  
+
   theme: {
     primary: '#00ff88',       // Bright green
     secondary: '#00cc66',     // Medium green
@@ -360,7 +360,7 @@ export const DEBUG_MODE: ModeDefinition = {
       port: '0 2px 8px rgba(0, 255, 136, 0.5)'
     }
   },
-  
+
   connectionStyle: {
     strokeWidth: 2,
     strokeDashArray: '6,3,2,3', // Complex technical pattern
@@ -383,7 +383,7 @@ export const DEBUG_MODE: ModeDefinition = {
     },
     transitionDuration: 100
   },
-  
+
   portStyle: {
     shape: 'hexagon',
     size: 12,
@@ -418,7 +418,7 @@ export const DEBUG_MODE: ModeDefinition = {
       position: 'inside'
     }
   },
-  
+
   canvasStyle: {
     backgroundType: 'solid',
     backgroundValue: '#0d1117',
@@ -457,7 +457,7 @@ export const DEBUG_MODE: ModeDefinition = {
       easingFunction: 'linear'
     }
   },
-  
+
   interactions: {
     doubleClickAction: 'expand',
     dragBehavior: {
@@ -482,7 +482,7 @@ export const DEBUG_MODE: ModeDefinition = {
       { key: 'L', modifiers: ['ctrl'], action: 'logs', description: 'Show logs' }
     ]
   },
-  
+
   metadata: {
     version: '1.0.0',
     author: 'f1ow Team',

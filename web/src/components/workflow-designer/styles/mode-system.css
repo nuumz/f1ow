@@ -192,7 +192,6 @@
   stroke: var(--mode-primary);
   stroke-width: 3px;
   stroke-dasharray: 12,6; /* Architectural dashed lines */
-  opacity: 0.85;
   fill: none;
   transition: all var(--mode-transition-normal) var(--mode-easing-bounce);
   filter: drop-shadow(0 2px 6px rgba(139, 92, 246, 0.2));

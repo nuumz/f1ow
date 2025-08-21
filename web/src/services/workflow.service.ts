@@ -1,13 +1,46 @@
 import { api } from './api'
 
+export interface WorkflowNode {
+  id: string
+  type: string
+  position: {
+    x: number
+    y: number
+  }
+  config?: Record<string, unknown>
+  data?: Record<string, unknown>
+}
+
+export interface WorkflowEdge {
+  id: string
+  source: string
+  target: string
+  sourceHandle?: string
+  targetHandle?: string
+}
+
 export interface Workflow {
   id?: string
   name: string
   description?: string
   definition: {
-    nodes: any[]
-    edges: any[]
+    nodes: WorkflowNode[]
+    edges: WorkflowEdge[]
   }
+}
+
+export interface WorkflowExecutionInput {
+  [key: string]: unknown
+}
+
+export interface WorkflowExecutionResult {
+  id: string
+  executionId?: string
+  status: 'running' | 'completed' | 'failed'
+  result?: Record<string, unknown>
+  error?: string
+  startTime: string
+  endTime?: string
 }
 
 export const WorkflowService = {
@@ -35,7 +68,7 @@ export const WorkflowService = {
     await api.delete(`/workflows/${id}`)
   },
 
-  async execute(id: string, input: any): Promise<any> {
+  async execute(id: string, input: WorkflowExecutionInput): Promise<WorkflowExecutionResult> {
     const response = await api.post(`/workflows/${id}/execute`, input)
     return response.data
   },

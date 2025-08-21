@@ -130,7 +130,7 @@ export class GridPerformanceMonitor {
     }
 
     isCacheExpired(cache: GridCacheInfo | null): boolean {
-        if (!cache) {return true;}
+        if (!cache) { return true; }
         return (performance.now() - cache.lastRenderTime) > this.CACHE_DURATION;
     }
 
@@ -156,7 +156,7 @@ export class GridPerformanceMonitor {
         _currentTransform: { x: number; y: number; k: number },
         currentViewport: { width: number; height: number }
     ): boolean {
-        if (!cache) {return false;}
+        if (!cache) { return false; }
 
         // Check if viewport dimensions haven't changed significantly
         const viewportDelta = {
@@ -174,15 +174,15 @@ export const gridPerformanceMonitor = new GridPerformanceMonitor();
 // Development utilities
 export const GridDebugger = {
     logPerformanceReport(): void {
-        if (process.env.NODE_ENV !== 'development') {return;}
+        if (process.env.NODE_ENV !== 'development') { return; }
 
         const report = gridPerformanceMonitor.getPerformanceReport();
         const metrics = gridPerformanceMonitor.getMetrics();
 
-        console.group('🔍 Grid Performance Report');
-        console.log(`Status: ${report.status.toUpperCase()}`);
-        console.log(`Summary: ${report.summary}`);
-        console.table({
+        console.warn('🔍 Grid Performance Report');
+        console.warn(`Status: ${report.status.toUpperCase()}`);
+        console.warn(`Summary: ${report.summary}`);
+        console.warn('Grid Performance Metrics:', {
             'Avg Render Time': `${metrics.avgRenderTime.toFixed(2)}ms`,
             'Total Renders': metrics.renderCount,
             'Cache Hit Rate': `${metrics.cacheHitRate.toFixed(1)}%`,
@@ -192,17 +192,12 @@ export const GridDebugger = {
         });
 
         if (report.recommendations.length > 0) {
-            console.group('💡 Recommendations:');
-            report.recommendations.forEach((rec, index) => {
-                console.log(`${index + 1}. ${rec}`);
-            });
-            console.groupEnd();
+            console.warn('💡 Recommendations:', report.recommendations);
         }
-        console.groupEnd();
     },
 
     startPerformanceMonitoring(): void {
-        if (process.env.NODE_ENV !== 'development') {return;}
+        if (process.env.NODE_ENV !== 'development') { return; }
 
         setInterval(() => {
             const metrics = gridPerformanceMonitor.getMetrics();

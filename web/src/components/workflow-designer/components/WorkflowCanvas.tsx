@@ -2016,19 +2016,23 @@ function WorkflowCanvas({
     }
     try {
       const svg = d3.select(svgRef.current);
-      // Precompute group info from the full connection list (architecture mode)
-      const buildGroupIndexMapFromFullList = (): Map<string, { index: number; total: number }> => {
+      // Precompute grouping once for architecture mode
+      const buildArchGrouping = () => {
         const nodesList = Array.from(nodeMap.values());
         const buckets = groupConnectionsBySideAndPort(connections, nodesList, 'architecture');
-        const map = new Map<string, { index: number; total: number }>();
+        const indexMap = new Map<string, { index: number; total: number }>();
+        const primaryIds: string[] = [];
         for (const bucket of buckets.values()) {
           const total = bucket.items.length;
-          for (let i = 0; i < bucket.items.length; i += 1) {
+          for (let i = 0; i < total; i += 1) {
             const item = bucket.items[i];
-            map.set(item.id, { index: i, total });
+            indexMap.set(item.id, { index: i, total });
+          }
+          if (total > 0) {
+            primaryIds.push(bucket.items[0].id);
           }
         }
-        return map;
+        return { indexMap, primaryIds };
       };
 
       // In architecture mode, render only a single representative connection per group
@@ -2036,26 +2040,20 @@ function WorkflowCanvas({
         if (workflowContextState.designerMode !== 'architecture') {
           return connections;
         }
-        const nodesList = Array.from(nodeMap.values());
-        const buckets = groupConnectionsBySideAndPort(connections, nodesList, 'architecture');
+        const { primaryIds } = buildArchGrouping();
         const byId = new Map(connections.map((c) => [c.id, c] as const));
         const reps: Connection[] = [];
-        for (const bucket of buckets.values()) {
-          if (bucket.items.length > 0) {
-            const first = bucket.items[0]; // index 0 -> primary
-            const conn = byId.get(first.id);
-            if (conn) {
-              reps.push(conn);
-            }
+        for (const id of primaryIds) {
+          const conn = byId.get(id);
+          if (conn) {
+            reps.push(conn);
           }
         }
         return reps;
       };
 
       const archGroupMap =
-        workflowContextState.designerMode === 'architecture'
-          ? buildGroupIndexMapFromFullList()
-          : null;
+        workflowContextState.designerMode === 'architecture' ? buildArchGrouping().indexMap : null;
 
       const getGroupInfoForMode = (
         id: string,
